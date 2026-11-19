@@ -35,6 +35,13 @@ mkdir -p "$home/stage"
 sed -e "s|@HOME@|$home|g" -e "s|@SKILLS@|$home/skills|g" config/pi.json.in > "$home/pi.json"
 jq -e '.compaction.reserveTokens == 39322' "$home/pi.json" >/dev/null && ok "pi manifest compaction pinned" || no "pi manifest compaction"
 
+# 5b. extension manifest shape + prompt templates for every active command
+jq -e '(.packages|length>=4) and all(.packages[]; .name and .version and .status)' config/pi-manifest.json >/dev/null \
+    && ok "pi-manifest.json shape" || no "pi-manifest.json shape"
+jq -r '.promptTemplates[]' config/pi.json.in | while read -r t; do
+    [[ -f config/prompts/$t.md ]] || exit 1
+done && ok "prompt templates complete" || no "prompt templates missing"
+
 # 6. backup/restore roundtrip on scratch HOME
 home2=$(mktemp -d); mkdir -p "$home2/.config/llama.cpp" "$home2/.pi/agent" "$home2/.config/systemd/user"
 echo 'x=1' > "$home2/.config/llama.cpp/models.ini"; echo '{}' > "$home2/.pi/agent/settings.json"

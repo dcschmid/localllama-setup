@@ -78,7 +78,12 @@ the same checksum gate. GGUFs never live in git.
 `cd ~/dev/github/my-project && pi` starts Cyber-Tiel through the router,
 262,144 context / 8,192 output, compaction `39322/20000` (≈85 %), shared
 skills, MCP via codemode, sessions in `~/.pi/agent/sessions`. No cloud
-fallback, no other harnesses. Details: [docs/PI_CODING_AGENT.md](docs/PI_CODING_AGENT.md).
+fallback, no other harnesses. Pinned extension set, prompt templates
+(`/finish`, `/review`, `/fix-ci`, `/finish-docs`) and context budgets:
+[docs/PI_EXTENSIONS.md](docs/PI_EXTENSIONS.md),
+[docs/PI_COMMANDS.md](docs/PI_COMMANDS.md),
+[docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md),
+[docs/PI_CODING_AGENT.md](docs/PI_CODING_AGENT.md).
 
 ## WebUI, MCP, skills
 

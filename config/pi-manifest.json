@@ -1,0 +1,20 @@
+{
+  "comment": "Productive Pi extension manifest for localllma-setup. Pinned versions, reviewed 2026-11-19. No automatic updates; update = PR + re-run doctor/benchmarks.",
+  "pi": { "minVersion": "1.5.2", "install": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent", "node": "pinned v22 (packages needing node>=24 stay excluded: pi-sessions)" },
+  "packages": [
+    { "name": "pi-lens", "version": "4.5.1", "source": "npm:pi-lens", "repo": "https://github.com/amantza/pi-lens", "license": "MIT", "deps": 6, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[]; LSP servers via npm globals", "activation": "automatic", "rollback": "pi remove npm:pi-lens", "tests": "b2-ts refactored correct; +~11s wall vs baseline on small task; required for code intelligence", "status": "active" },
+    { "name": "pi-permission-modes", "version": "2.7.2", "source": "npm:pi-permission-modes", "repo": "https://github.com/earendil-works/pi-permission-modes", "license": "MIT", "deps": 3, "postinstall": "echo only", "node": ">=22.12.0", "pi": ">=1.5", "config": "settings.json packages[]; pi-permission.json per project", "activation": "read-only by default", "rollback": "pi remove npm:pi-permission-modes", "tests": "installed; read-only smoke passed", "status": "active" },
+    { "name": "pi-workspace-history", "version": "0.5.2", "source": "npm:pi-workspace-history", "repo": "https://github.com/anotalk/pi-workspace-history", "license": "MIT", "deps": 1, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[]", "activation": "automatic checkpoints + /undo", "rollback": "pi remove npm:pi-workspace-history", "tests": "installed with 5-pkg smoke; git repos remain source of truth, history is additive layer", "status": "active" },
+    { "name": "pi-todo-agent", "version": "0.3.0", "source": "npm:pi-todo-agent", "repo": "https://github.com/pigmt/pi-todo-agent", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=22", "pi": ">=1.5", "config": "settings.json packages[]", "activation": "automatic", "rollback": "pi remove npm:pi-todo-agent", "tests": "installed with smoke; planning stays in skills for small tasks", "status": "active" },
+    { "name": "pi-condense", "version": "2.18.1", "source": "npm:pi-condense", "repo": "https://github.com/jjuraszek/pi-condense", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[] + condense settings; native compaction stays enabled", "activation": "manual/long-session", "rollback": "pi remove npm:pi-condense", "tests": "3-turn long-read A/B: full=50s correct; condense off=see benchmarks; disabled by default for short tasks", "status": "experimental-off" },
+    { "name": "pi-sessions", "version": "0.23.4", "source": "npm:pi-sessions", "repo": "https://github.com/adamkiss/oo-claude-code", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=24 (host has 22)", "pi": ">=1.5", "config": "-", "activation": "-", "rollback": "-", "tests": "NOT installed: node engine incompatible with pinned v22; revisit on node24", "status": "excluded" }
+  ],
+  "native": {
+    "codemode": "provided via pi-lens bundle; allowed for read-heavy multi-call work, disabled for parallel LLM fanout",
+    "compaction": "enabled native: reserve 39322, keepRecent 20000 on 262144 coding-long-256k",
+    "promptTemplates": "~/.pi/agent/prompts/{finish,review,fix-ci,finish-docs}.md -> reference skills, never duplicate them",
+    "skills": "~/dev/github/skillset/skills (read-only, central source of truth)",
+    "mcp": [ "websearch 127.0.0.1:8642/mcp", "gateway 127.0.0.1:8643 (context7, github read-only, skills)" ]
+  },
+  "sandbox": { "tool": "pi-sandbox (bwrap)", "deny": ["ssh", "gnupg", "browser profiles", "cloud agent auth", "other projects"], "ro": ["skillset", "project selection by explicit mount"] }
+}

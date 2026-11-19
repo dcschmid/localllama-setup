@@ -437,6 +437,33 @@ PY
             install_file 600 "$stage_pi/$n" "$pi_dir/$n"
         fi
     done
+
+    # pinned Pi extensions: manifest is the only install source, no auto-updates
+    local m=$src/config/pi-manifest.json name ver status
+    [[ -f $m ]] || fail 'config/pi-manifest.json missing'
+    jq -e . "$m" >/dev/null || fail 'pi manifest invalid JSON'
+    while IFS=$'\t' read -r name ver status; do
+        [[ $status == active ]] || { skip "extension $name ($status)"; continue; }
+        if grep -q "\"npm:$name\"" <<<"$(jq '.packages // []' "$pi_dir/settings.json" 2>/dev/null)"; then
+            skip "extension $name already installed"
+            continue
+        fi
+        if $DRY; then skip "pi install npm:$name@$ver (dry-run)"; continue
+        elif ! $pi_bin install "npm:$name@$ver" >/dev/null 2>&1; then
+            fail "pi install npm:$name@$ver failed"
+        fi
+    done < <(jq -r '.packages[] | [.name,.version,.status] | @tsv' "$m")
+
+    # prompt templates ship from config/prompts/ (finish, review, fix-ci, finish-docs);
+    # existing user copies are kept, same rule as settings.json
+    local t
+    for t in "$src"/config/prompts/*.md; do
+        if [[ -e $pi_dir/prompts/$(basename "$t") ]]; then
+            skip "prompt template $(basename "$t") (existing kept)"
+        else
+            install_file 644 "$t" "$pi_dir/prompts/$(basename "$t")"
+        fi
+    done
     if [[ ! -e $HOME/.local/bin/pi ]]; then
         link_to "$pi_bin" "$HOME/.local/bin/pi"
     fi
@@ -479,6 +506,20 @@ doctor() {
     curl -fsS --max-time 5 http://127.0.0.1:8643/status >/dev/null && printf 'gateway ok\n' || { printf 'gateway down\n'; rc=1; }
     printf '== pi\n'
     if command -v pi >/dev/null; then pi --version; else printf 'pi missing\n'; rc=1; fi
+    if [[ -f ${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json ]]; then
+        local pdir=${PI_CODING_AGENT_DIR:-$HOME/.pi/agent} want
+        while IFS= read -r want; do
+            [[ -d $pdir/npm/node_modules/$want ]] && printf 'extension: %s ok\n' "$want" \
+                || { printf 'extension: %s missing\n' "$want"; rc=1; }
+        done < <(jq -r '[.packages[]|select(.status=="active")|.name][]' "$src/config/pi-manifest.json")
+        ls "$pdir"/prompts/*.md >/dev/null 2>&1 \
+            && printf 'prompt templates: %s\n' "$(ls "$pdir"/prompts/*.md | wc -l)" \
+            || { printf 'prompt templates missing\n'; rc=1; }
+    fi
+    local l
+    for l in typescript-language-server pyright ruff shellcheck rust-analyzer; do
+        command -v "$l" >/dev/null || printf 'lsp/linter missing: %s\n' "$l"
+    done
     printf '== skills\n'
     ls -d "$skills"/*/SKILL.md 2>/dev/null | wc -l
     printf '== sandbox\n'

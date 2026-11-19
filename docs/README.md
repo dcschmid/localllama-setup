@@ -14,6 +14,9 @@ below carry the current architecture and workflows.
 | Installation | [INSTALLATION.md](INSTALLATION.md) |
 | Models | [MODELS.md](MODELS.md) |
 | Pi Coding Agent | [PI_CODING_AGENT.md](PI_CODING_AGENT.md) |
+| Pi extensions (pinned set) | [PI_EXTENSIONS.md](PI_EXTENSIONS.md) |
+| Pi prompt templates | [PI_COMMANDS.md](PI_COMMANDS.md) |
+| Context engineering | [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) |
 | MCP setup | [MCP_SETUP.md](MCP_SETUP.md) |
 | Shared skills | [SHARED_SKILLS.md](SHARED_SKILLS.md) |
 | Performance | [PERFORMANCE.md](PERFORMANCE.md) (data: PERFORMANCE_OPTIMIZATION.md, de) |

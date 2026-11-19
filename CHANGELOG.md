@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.11-pi-ext - Pi extensions, templates, context record
+
+- manifest config/pi-manifest.json: pi-lens 4.5.1, pi-permission-modes 2.7.2,
 ## 2026.11 - Pi one-click stack
 
 - setup.sh becomes a command interface: install/update/repair/doctor/status/
