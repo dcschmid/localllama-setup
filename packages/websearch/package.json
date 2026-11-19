@@ -1,0 +1,53 @@
+{
+  "name": "websearch-mcp",
+  "version": "0.1.0",
+  "description": "Local-first MCP server for web search and page-to-markdown reading.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Danmoreng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Danmoreng/websearch-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Danmoreng/websearch-mcp/issues"
+  },
+  "homepage": "https://github.com/Danmoreng/websearch-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "web-search",
+    "llama-cpp",
+    "typescript",
+    "open-webui"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "smoke:search": "tsx scripts/smoke-search.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "jsdom": "latest",
+    "pdf-parse": "latest",
+    "playwright": "latest",
+    "turndown": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/jsdom": "latest",
+    "@types/node": "latest",
+    "@types/turndown": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}

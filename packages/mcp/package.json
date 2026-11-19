@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@modelcontextprotocol/server-filesystem": "2.4.0",
+    "@upstash/context7-mcp": "4.7.3",
+    "mcp-remote": "0.16.6"
+  }
+}

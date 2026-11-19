@@ -1,0 +1,12 @@
+model = "coding-long-256k"
+model_provider = "llamacpp"
+model_reasoning_effort = "low"
+web_search = "disabled"
+
+[model_providers.llamacpp]
+name = "llama.cpp"
+base_url = "http://127.0.0.1:8080/v1"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+stream_idle_timeout_ms = 900000

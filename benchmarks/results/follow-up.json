@@ -1,0 +1,784 @@
+{
+  "llama_cpp": "b12503-4577932fa",
+  "context_previous_full": [
+    {
+      "model": "coding-long-256k",
+      "target": 262144,
+      "input_tokens": 261497,
+      "ttft_s": 562.7588066637982,
+      "first_content_s": 562.7588091988582,
+      "first_fact_s": 564.6799661580008,
+      "wall_s": 576.3295745679643,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 261688,
+        "prompt_ms": 562325.386,
+        "prompt_per_token_ms": 2.1488390220415154,
+        "prompt_per_second": 465.36757278818635,
+        "predicted_n": 95,
+        "predicted_ms": 13565.052,
+        "predicted_per_token_ms": 144.30906382978722,
+        "predicted_per_second": 6.929571666957119
+      },
+      "usage": {
+        "completion_tokens": 95,
+        "prompt_tokens": 261688,
+        "total_tokens": 261783,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "retrieval": 3,
+      "answer": "{\n  \"recovery_code\": \"AX4-KAPPA\",\n  \"retention_days\": 43,\n  \"test_name\": \"test_retry_cross_currency_keeps_first\",\n  \"rule\": \"Deduplicate by event id, keeping the first occurrence globally (see docs/refunds.md). Normalize currency identifiers by trimming whitespace and uppercasing (see pricing/plugin_*.py and tests/test_settlement_retries.py).\"\n}",
+      "run": 1
+    }
+  ],
+  "cases": {
+    "deep-a": {
+      "results": [
+        {
+          "topic": "Python Decimal fixed-point arithmetic documentation",
+          "wall_s": 19.700501048995648,
+          "finish": "length",
+          "reasoning_chars": 3083,
+          "answer": "",
+          "valid": false,
+          "parsed": {},
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 334,
+            "prompt_ms": 2168.25,
+            "prompt_per_token_ms": 6.491766467065868,
+            "prompt_per_second": 154.04127752796032,
+            "predicted_n": 700,
+            "predicted_ms": 17521.569,
+            "predicted_per_token_ms": 25.066622317596565,
+            "predicted_per_second": 39.893687602976655
+          }
+        },
+        {
+          "topic": "Python Decimal rounding and arithmetic contexts",
+          "wall_s": 19.036271519988077,
+          "finish": "stop",
+          "reasoning_chars": 2448,
+          "answer": "```json\n{\n  \"analysisBrief\": \"The Python Decimal context controls precision during arithmetic operations, with a default precision of 28 and a default rounding mode of ROUND_HALF_EVEN.\",\n  \"keyFindings\": [\n    \"The default precision is 28.\",\n    \"The default rounding mode is ROUND_HALF_EVEN.\",\n    \"Precision is applied during arithmetic operations.\"\n  ],\n  \"openQuestions\": [\n    \"What are the timing benchmarks for decimal arithmetic?\",\n    \"What is the hardware performance of these operations?\"\n  ]\n}\n```",
+          "valid": true,
+          "parsed": {
+            "analysisBrief": "The Python Decimal context controls precision during arithmetic operations, with a default precision of 28 and a default rounding mode of ROUND_HALF_EVEN.",
+            "keyFindings": [
+              "The default precision is 28.",
+              "The default rounding mode is ROUND_HALF_EVEN.",
+              "Precision is applied during arithmetic operations."
+            ],
+            "openQuestions": [
+              "What are the timing benchmarks for decimal arithmetic?",
+              "What is the hardware performance of these operations?"
+            ]
+          },
+          "timings": {
+            "cache_n": 42,
+            "prompt_n": 279,
+            "prompt_ms": 824.696,
+            "prompt_per_token_ms": 2.955899641577061,
+            "prompt_per_second": 338.3064789934715,
+            "predicted_n": 687,
+            "predicted_ms": 18167.021,
+            "predicted_per_token_ms": 26.482537900874636,
+            "predicted_per_second": 37.760731382431935
+          }
+        }
+      ],
+      "gpu": {
+        "vram_peak_mib": 6641.0,
+        "temp_peak_c": 49.53,
+        "power_peak_w": 49.38
+      }
+    },
+    "deep-b": {
+      "results": [
+        {
+          "topic": "Python Decimal fixed-point arithmetic documentation",
+          "wall_s": 9.26244148099795,
+          "finish": "stop",
+          "reasoning_chars": 507,
+          "answer": "```json\n{\n  \"analysisBrief\": \"An examination of the official Python documentation for the 'decimal' module, focusing on string construction, float conversion, and the application of context precision and rounding.\",\n  \"keyFindings\": [\n    \"Decimal('0.1') represents exactly one tenth when constructed from a string.\",\n    \"Constructing a Decimal from a float converts the exact stored binary floating-point value.\",\n    \"Context precision and rounding rules are applied during arithmetic operations.\"\n  ],\n  \"openQuestions\": [\n    \"The provided source does not specify the default context precision or the specific rounding modes available.\"\n  ]\n}\n```",
+          "valid": true,
+          "parsed": {
+            "analysisBrief": "An examination of the official Python documentation for the 'decimal' module, focusing on string construction, float conversion, and the application of context precision and rounding.",
+            "keyFindings": [
+              "Decimal('0.1') represents exactly one tenth when constructed from a string.",
+              "Constructing a Decimal from a float converts the exact stored binary floating-point value.",
+              "Context precision and rounding rules are applied during arithmetic operations."
+            ],
+            "openQuestions": [
+              "The provided source does not specify the default context precision or the specific rounding modes available."
+            ]
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 334,
+            "prompt_ms": 1955.492,
+            "prompt_per_token_ms": 5.854766467065868,
+            "prompt_per_second": 170.80100557813583,
+            "predicted_n": 271,
+            "predicted_ms": 7296.134,
+            "predicted_per_token_ms": 27.02271851851852,
+            "predicted_per_second": 37.00589928858214
+          }
+        },
+        {
+          "topic": "Python Decimal rounding and arithmetic contexts",
+          "wall_s": 7.953450814995449,
+          "finish": "stop",
+          "reasoning_chars": 582,
+          "answer": "```json\n{\n  \"analysisBrief\": \"An examination of the Python Decimal default context regarding precision and rounding modes based on the provided documentation excerpt.\",\n  \"keyFindings\": [\n    \"The default precision for the Decimal context is 28.\",\n    \"The default rounding mode is ROUND_HALF_EVEN.\",\n    \"Precision settings are applied during arithmetic operations.\"\n  ],\n  \"openQuestions\": [\n    \"What are the timing benchmarks for Decimal operations?\",\n    \"What is the hardware performance associated with these operations?\"\n  ]\n}\n```",
+          "valid": true,
+          "parsed": {
+            "analysisBrief": "An examination of the Python Decimal default context regarding precision and rounding modes based on the provided documentation excerpt.",
+            "keyFindings": [
+              "The default precision for the Decimal context is 28.",
+              "The default rounding mode is ROUND_HALF_EVEN.",
+              "Precision settings are applied during arithmetic operations."
+            ],
+            "openQuestions": [
+              "What are the timing benchmarks for Decimal operations?",
+              "What is the hardware performance associated with these operations?"
+            ]
+          },
+          "timings": {
+            "cache_n": 42,
+            "prompt_n": 279,
+            "prompt_ms": 905.912,
+            "prompt_per_token_ms": 3.2469964157706093,
+            "prompt_per_second": 307.9769337419087,
+            "predicted_n": 252,
+            "predicted_ms": 7015.144,
+            "predicted_per_token_ms": 27.948780876494023,
+            "predicted_per_second": 35.77973595410158
+          }
+        }
+      ],
+      "gpu": {
+        "vram_peak_mib": 6641.0,
+        "temp_peak_c": 48.91,
+        "power_peak_w": 46.16
+      }
+    },
+    "ctx-a": {
+      "results": [
+        {
+          "model": "coding-long-256k",
+          "target": 65536,
+          "input_tokens": 64815,
+          "ttft_s": 127.27450802299427,
+          "first_content_s": 127.2745105369977,
+          "first_fact_s": 127.88193182800023,
+          "wall_s": 132.73690061600064,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 65006,
+            "prompt_ms": 127156.669,
+            "prompt_per_token_ms": 1.956075885302895,
+            "prompt_per_second": 511.22761009098156,
+            "predicted_n": 96,
+            "predicted_ms": 5458.552,
+            "predicted_per_token_ms": 57.45844210526315,
+            "predicted_per_second": 17.40388293452183
+          },
+          "usage": {
+            "completion_tokens": 96,
+            "prompt_tokens": 65006,
+            "total_tokens": 65102,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "retrieval": 3,
+          "answer": "{\"recovery_code\": \"AX4-KAPPA\", \"retention_days\": 43, \"test_name\": \"test_retry_cross_currency_keeps_first\", \"rule\": \"When rows contain a duplicate event id, use the first event globally (refunds/settlement.py, refunds/settlement.py). Currency identifiers must be normalized by trimming whitespace and uppercasing (pricing/plugin_0000.py through pricing/plugin_0259.py).\"}",
+          "run": 1
+        }
+      ],
+      "gpu": {
+        "vram_peak_mib": 6725.0,
+        "temp_peak_c": 58.22,
+        "power_peak_w": 61.04
+      }
+    },
+    "ctx-b": {
+      "results": [
+        {
+          "model": "coding-long-256k",
+          "target": 65536,
+          "input_tokens": 64815,
+          "ttft_s": 73.33554591800203,
+          "first_content_s": 73.33554793101212,
+          "first_fact_s": 73.95583882600476,
+          "wall_s": 79.5659377950069,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 65006,
+            "prompt_ms": 73222.214,
+            "prompt_per_token_ms": 1.1263916253884259,
+            "prompt_per_second": 887.7906914969819,
+            "predicted_n": 107,
+            "predicted_ms": 6227.855,
+            "predicted_per_token_ms": 58.75334905660377,
+            "predicted_per_second": 17.020306349457396
+          },
+          "usage": {
+            "completion_tokens": 107,
+            "prompt_tokens": 65006,
+            "total_tokens": 65113,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "retrieval": 3,
+          "answer": "{\"recovery_code\": \"AX4-KAPPA\", \"retention_days\": 43, \"test_name\": \"test_retry_cross_currency_keeps_first\", \"rule\": \"When rows share a duplicate event id, use the first event globally (retries never overwrite the first accepted event). Currency identifiers are normalized by trimming whitespace and uppercasing (e.g., `item.currency.strip().upper()`), as enforced in `pricing/plugin_*.py` and `tests/test_settlement_retries.py`.\"}",
+          "run": 1
+        }
+      ],
+      "gpu": {
+        "vram_peak_mib": 6829.0,
+        "temp_peak_c": 67.03,
+        "power_peak_w": 74.87
+      }
+    },
+    "ctx-full": {
+      "results": [
+        {
+          "model": "coding-long-256k",
+          "target": 262144,
+          "input_tokens": 261497,
+          "ttft_s": 393.7360621789994,
+          "first_content_s": 393.7360643030115,
+          "first_fact_s": 395.68046880500333,
+          "wall_s": 408.09331552100775,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 261688,
+            "prompt_ms": 393291.936,
+            "prompt_per_token_ms": 1.5029039772553574,
+            "prompt_per_second": 665.3785039721739,
+            "predicted_n": 100,
+            "predicted_ms": 14359.531,
+            "predicted_per_token_ms": 145.0457676767677,
+            "predicted_per_second": 6.894375589286308
+          },
+          "usage": {
+            "completion_tokens": 100,
+            "prompt_tokens": 261688,
+            "total_tokens": 261788,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "retrieval": 3,
+          "answer": "{\n  \"recovery_code\": \"AX4-KAPPA\",\n  \"retention_days\": 43,\n  \"test_name\": \"test_retry_cross_currency_keeps_first\",\n  \"rule\": \"When rows share a duplicate event id, use the first event globally (see docs/refunds.md). Currency identifiers are normalized by trimming whitespace and uppercasing (see pricing/plugin_0000.py and tests/test_settlement_retries.py).\"\n}",
+          "run": 1
+        },
+        {
+          "model": "coding-long-256k",
+          "target": 262144,
+          "input_tokens": 261497,
+          "ttft_s": 0.6683873209985904,
+          "first_content_s": 0.6683894049929222,
+          "first_fact_s": 2.5827802419953514,
+          "wall_s": 15.158505173996673,
+          "timings": {
+            "cache_n": 261684,
+            "prompt_n": 4,
+            "prompt_ms": 238.042,
+            "prompt_per_token_ms": 59.5105,
+            "prompt_per_second": 16.803757320136782,
+            "predicted_n": 100,
+            "predicted_ms": 14483.453,
+            "predicted_per_token_ms": 146.29750505050504,
+            "predicted_per_second": 6.835386561478122
+          },
+          "usage": {
+            "completion_tokens": 100,
+            "prompt_tokens": 261688,
+            "total_tokens": 261788,
+            "prompt_tokens_details": {
+              "cached_tokens": 261684
+            }
+          },
+          "retrieval": 3,
+          "answer": "{\n  \"recovery_code\": \"AX4-KAPPA\",\n  \"retention_days\": 43,\n  \"test_name\": \"test_retry_cross_currency_keeps_first\",\n  \"rule\": \"When rows share a duplicate event id, use the first event globally (see docs/refunds.md). Currency identifiers are normalized by trimming whitespace and uppercasing (see pricing/plugin_0000.py and tests/test_settlement_retries.py).\"\n}",
+          "run": 2
+        }
+      ],
+      "gpu": {
+        "vram_peak_mib": 6782.0,
+        "temp_peak_c": 79.81,
+        "power_peak_w": 93.46
+      }
+    }
+  },
+  "deploy": {
+    "deep_research": true,
+    "256k": true
+  },
+  "mcp": {
+    "explicit": {
+      "status": "completed",
+      "result": {
+        "currentDate": "2026-11-19T16:29:13.316Z",
+        "durationMs": 18920,
+        "topic": "Python Decimal fixed-point arithmetic documentation",
+        "objective": "Find and cite the official Decimal documentation. Explain one concrete difference between string and float conversion from that source.",
+        "provider": "duckduckgo",
+        "model": "deep-research",
+        "analysisBrief": "The analysis identifies the official Python documentation for the `decimal` module and examines the behavior of Decimal instance construction from different data types.",
+        "keyFindings": [
+          "The official documentation for Python's decimal module is located at https://docs.python.org/3/library/decimal.html (S1).",
+          "A concrete difference in conversion behavior is that constructing a Decimal from an integer or a float performs an exact conversion of the value of that integer or float (S1).",
+          "The documentation notes that binary floating point (float) cannot exactly represent certain numbers like 1.1 or 2.2, whereas Decimal numbers can be represented exactly (S1)."
+        ],
+        "openQuestions": [
+          "The provided source text cuts off before explicitly detailing the specific behavior/differences of string conversion compared to float conversion, though it implies Decimal can be constructed from strings (S1)."
+        ],
+        "queriesUsed": [
+          "Python Decimal fixed-point arithmetic documentation"
+        ],
+        "skippedSearches": [],
+        "searchRuns": [
+          {
+            "query": "Python Decimal fixed-point arithmetic documentation",
+            "results": [
+              {
+                "title": "Decimal fixed-point and floating-point arithmetic - Python",
+                "url": "https://docs.python.org/3/library/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 1
+              },
+              {
+                "title": "decimal — Decimal fixed point and floating point arithmetic - Python 3. ...",
+                "url": "https://documentation.help/python-3-7-3/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 2
+              },
+              {
+                "title": "4. decimal — Decimal fixed point and floating point arithmetic — Python ...",
+                "url": "https://tedboy.github.io/python_stdlib/09_numeric/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 3
+              },
+              {
+                "title": "15. Floating-Point Arithmetic: Issues and Limitations - Python",
+                "url": "https://docs.python.org/3/tutorial/floatingpoint.html",
+                "snippet": "15. Floating-Point Arithmetic: Issues and Limitations ¶ Floating-point numbers are represented in computer hardware as base 2 (binary) fractions. For example, the decimal fraction 0.625 has value 6/10 + 2/100 + 5/1000, and in the same way the binary fraction 0.101 has value 1/2 + 0/4 + 1/8. These two fractions have identical values, the only real difference being that the first is written in ...",
+                "provider": "duckduckgo",
+                "rank": 4
+              },
+              {
+                "title": "Decimal fixed point and floating point arithmetic in Python",
+                "url": "https://www.tutorialspoint.com/article/decimal-fixed-point-and-floating-point-arithmetic-in-python",
+                "snippet": "This article will explain how decimal fixed-point and floating-point arithmetic work in Python, which is useful for performing accurate calculations in various applications. Numbers in Python can be stored in two ways: floating-point and decimal fixed-point.",
+                "provider": "duckduckgo",
+                "rank": 5
+              }
+            ]
+          }
+        ],
+        "pagesRead": [
+          {
+            "title": "decimal — Decimal fixed-point and floating-point arithmetic",
+            "url": "https://docs.python.org/3/library/decimal.html",
+            "finalUrl": "https://docs.python.org/3/library/decimal.html",
+            "sourceType": "search-result",
+            "links": [
+              {
+                "url": "https://github.com/python/cpython/tree/3.15/Lib/decimal.py",
+                "text": "Lib/decimal.py",
+                "kind": "reference",
+                "sameDomain": false
+              },
+              {
+                "url": "https://speleotrove.com/decimal/damodel.html",
+                "text": "floating-point model",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://speleotrove.com/decimal/decarith.html",
+                "text": "The General Decimal Arithmetic Specification",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://www.bytereef.org/mpdecimal/doc/libmpdec/index.html",
+                "text": "libmpdec",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://en.wikipedia.org/wiki/Karatsuba_algorithm",
+                "text": "Karatsuba multiplication",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://en.wikipedia.org/wiki/Discrete_Fourier_transform_(general)",
+                "text": "Number Theoretic Transform",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://docs.python.org/3/builtins/functions.html",
+                "text": "float",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/reference/lexical_analysis.html",
+                "text": "f-strings",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/library/string.html",
+                "text": "Format specification mini-language",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/builtins/stdtypes.html",
+                "text": "tuple",
+                "kind": "internal",
+                "sameDomain": true
+              }
+            ]
+          }
+        ],
+        "skippedUrls": [],
+        "sources": [
+          {
+            "id": "S1",
+            "title": "decimal — Decimal fixed-point and floating-point arithmetic",
+            "url": "https://docs.python.org/3/library/decimal.html",
+            "domain": "docs.python.org",
+            "sourceType": "search-result"
+          }
+        ],
+        "coverage": {
+          "distinctDomains": 1,
+          "totalSources": 1,
+          "totalSearchQueries": 1,
+          "followupPagesRead": 0
+        },
+        "status": {
+          "completedWithinTimeBudget": true,
+          "maxDurationMs": 240000
+        }
+      },
+      "wall_s": 21.155284066990134,
+      "evidence_fallback": false,
+      "verified": true
+    },
+    "default": {
+      "status": "completed",
+      "result": {
+        "currentDate": "2026-11-19T16:36:59.068Z",
+        "durationMs": 22788,
+        "topic": "Python Decimal fixed-point arithmetic documentation",
+        "objective": "Find and cite the official Decimal documentation. Explain one concrete difference between string and float conversion from that source.",
+        "provider": "duckduckgo",
+        "model": "deep-research",
+        "analysisBrief": "The analysis identifies the official Python documentation for the `decimal` module and highlights the functional differences in how Decimal instances are constructed from different data types.",
+        "keyFindings": [
+          "S1: decimal — Decimal fixed-point and floating-point arithmetic (docs.python.org)"
+        ],
+        "openQuestions": [
+          "The provided source text is truncated at the end; the full details regarding the specific behavior of string conversion (e.g., how it handles precision or trailing zeros compared to float conversion) are not explicitly completed in the excerpt."
+        ],
+        "queriesUsed": [
+          "Python Decimal fixed-point arithmetic documentation"
+        ],
+        "skippedSearches": [],
+        "searchRuns": [
+          {
+            "query": "Python Decimal fixed-point arithmetic documentation",
+            "results": [
+              {
+                "title": "Decimal fixed-point and floating-point arithmetic - Python",
+                "url": "https://docs.python.org/3/library/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 1
+              },
+              {
+                "title": "decimal — Decimal fixed point and floating point arithmetic - Python 3. ...",
+                "url": "https://documentation.help/python-3-7-3/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 2
+              },
+              {
+                "title": "4. decimal — Decimal fixed point and floating point arithmetic — Python ...",
+                "url": "https://tedboy.github.io/python_stdlib/09_numeric/decimal.html",
+                "snippet": "Decimal \"is based on a floating-point model which was designed with people in mind, and necessarily has a paramount guiding principle - computers must provide an arithmetic that works in the same way as the arithmetic that people learn at school.\" - excerpt from the decimal arithmetic specification.",
+                "provider": "duckduckgo",
+                "rank": 3
+              },
+              {
+                "title": "15. Floating-Point Arithmetic: Issues and Limitations - Python",
+                "url": "https://docs.python.org/3/tutorial/floatingpoint.html",
+                "snippet": "15. Floating-Point Arithmetic: Issues and Limitations ¶ Floating-point numbers are represented in computer hardware as base 2 (binary) fractions. For example, the decimal fraction 0.625 has value 6/10 + 2/100 + 5/1000, and in the same way the binary fraction 0.101 has value 1/2 + 0/4 + 1/8. These two fractions have identical values, the only real difference being that the first is written in ...",
+                "provider": "duckduckgo",
+                "rank": 4
+              },
+              {
+                "title": "Decimal fixed point and floating point arithmetic in Python",
+                "url": "https://www.tutorialspoint.com/article/decimal-fixed-point-and-floating-point-arithmetic-in-python",
+                "snippet": "This article will explain how decimal fixed-point and floating-point arithmetic work in Python, which is useful for performing accurate calculations in various applications. Numbers in Python can be stored in two ways: floating-point and decimal fixed-point.",
+                "provider": "duckduckgo",
+                "rank": 5
+              }
+            ]
+          }
+        ],
+        "pagesRead": [
+          {
+            "title": "decimal — Decimal fixed-point and floating-point arithmetic",
+            "url": "https://docs.python.org/3/library/decimal.html",
+            "finalUrl": "https://docs.python.org/3/library/decimal.html",
+            "sourceType": "search-result",
+            "links": [
+              {
+                "url": "https://github.com/python/cpython/tree/3.15/Lib/decimal.py",
+                "text": "Lib/decimal.py",
+                "kind": "reference",
+                "sameDomain": false
+              },
+              {
+                "url": "https://speleotrove.com/decimal/damodel.html",
+                "text": "floating-point model",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://speleotrove.com/decimal/decarith.html",
+                "text": "The General Decimal Arithmetic Specification",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://www.bytereef.org/mpdecimal/doc/libmpdec/index.html",
+                "text": "libmpdec",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://en.wikipedia.org/wiki/Karatsuba_algorithm",
+                "text": "Karatsuba multiplication",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://en.wikipedia.org/wiki/Discrete_Fourier_transform_(general)",
+                "text": "Number Theoretic Transform",
+                "kind": "external",
+                "sameDomain": false
+              },
+              {
+                "url": "https://docs.python.org/3/builtins/functions.html",
+                "text": "float",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/reference/lexical_analysis.html",
+                "text": "f-strings",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/library/string.html",
+                "text": "Format specification mini-language",
+                "kind": "internal",
+                "sameDomain": true
+              },
+              {
+                "url": "https://docs.python.org/3/builtins/stdtypes.html",
+                "text": "tuple",
+                "kind": "internal",
+                "sameDomain": true
+              }
+            ]
+          }
+        ],
+        "skippedUrls": [],
+        "sources": [
+          {
+            "id": "S1",
+            "title": "decimal — Decimal fixed-point and floating-point arithmetic",
+            "url": "https://docs.python.org/3/library/decimal.html",
+            "domain": "docs.python.org",
+            "sourceType": "search-result"
+          }
+        ],
+        "coverage": {
+          "distinctDomains": 1,
+          "totalSources": 1,
+          "totalSearchQueries": 1,
+          "followupPagesRead": 0
+        },
+        "status": {
+          "completedWithinTimeBudget": true,
+          "maxDurationMs": 240000
+        }
+      },
+      "wall_s": 24.17743418000464,
+      "evidence_fallback": false,
+      "verified": true
+    }
+  },
+  "story": {
+    "scenes": [
+      {
+        "label": "scene-1",
+        "model": "creative-writing",
+        "text": "The garage smelled of burnt rubber and ozone, its heat held captive by the corrugated walls. Rain hammered against the metal roof in a steady rhythm that drowned out everything except the occasional hiss of a pneumatic wrench. Tessa knelt beside the control cabinet, her fingers steady despite the humidity. A smear of grease marked her left knuckle.\n\n\"Two point four seconds, not three point two. I felt the drag on the hairpin.\" Jonah paced the narrow aisle between the workstations, his racing suit half-zipped. \"The sensor must have lagged. I need that lap logged correctly before the season review.\"\n\nTessa didn't look up. \"The sensor didn't lag, Jonah. Your entry angle was wide. The system records physics, not feelings.\" Her voice was flat, each word measured like a component she was installing. \"The log stays.\"\n\n\"Feelings are part of the driving.\" Jonah stopped, hands on his hips. \"If I'm going to get the sponsorship, I need the data to reflect the actual effort.\"\n\n\"Then you should have stayed on the apex.\" Tessa finally glanced at him, her dark eyes unblinking. \"The timing loop is a closed circuit. It doesn't negotiate.\"\n\n\"Try bypassing the relay, then.\" Jonah gestured toward the open panel where exposed copper traced patterns like veins. \"Give me a workaround. Just get the timestamp to override.\"\n\nTessa sighed, reaching for a soldering iron. \"I'm not overriding anything. I'm fixing the timing loop's communication error.\" She twisted a connector, her movements precise and economical. \"If I can bridge this gap, we might get a clean read.\"\n\nShe touched the leads together. \"There. Now we wait for the system to handshake.\"\n\nA sharp crack of electricity sparked behind the panel. The green status lights flickered erratically before dying. The entire control board went black.",
+        "words": 295,
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 2899,
+          "prompt_ms": 3813.334,
+          "prompt_per_token_ms": 1.315396343566747,
+          "prompt_per_second": 760.2271398204302,
+          "predicted_n": 392,
+          "predicted_ms": 21266.653,
+          "predicted_per_token_ms": 54.390416879795396,
+          "predicted_per_second": 18.385591752496268
+        },
+        "finish": "stop",
+        "wall_s": 32.63513249599782
+      },
+      {
+        "label": "scene-2",
+        "model": "creative-writing",
+        "text": "\"Well, that's one way to announce it's broken.\" Jonah said, stepping closer. The joke landed flat against the sudden silence of the garage. He crouched beside her, the damp fabric of his suit rustling. \"Should we call in a priest or an electrician?\"\n\n\"Neither. We need to check the physical trigger points along the perimeter.\" Tessa's fingers moved methodically across the dead circuitry. \"The system didn't just fail; it shorted. Something is interfering with the ground loop.\"\n\nThey moved to the garage entrance where the track curved sharply left. Rain lashed down in sheets, turning the asphalt slick and reflective. Tessa grabbed a handheld diagnostic wand while Jonah took a tattered notebook. \"The gate triggers on a specific physical contact point,\" she explained, her breath visible in the humid air. \"If the signal drops, we find where it dropped.\"\n\nTessa knelt in the growing puddle, prying up a corroded metal cover near the track's edge. The metal groaned as she lifted it. \"Here. The cable runs through this conduit.\"\n\n\"Looks intact to me,\" Jonah said, squinting through the rain. \"Unless the ground itself is acting as a conductor.\"\n\n\"Not the ground. The housing.\" Tessa gripped the cable housing, testing the tension. The moment her fingers shifted the cable beneath the cover, the control panel back in the garage emitted a sharp electronic whine. The green status lights flickered to life with a desperate pulse.\n\n\"Did you see that?\" Jonah asked, pointing toward the building. \"The moment you moved that wire, the system responded.\"\n\n\"Not responded. Reacted.\" Tessa pulled the cover back down and examined the mounting bracket. \"The gate triggers whenever the cable under this cover is moved.\"",
+        "words": 278,
+        "timings": {
+          "cache_n": 2725,
+          "prompt_n": 588,
+          "prompt_ms": 999.953,
+          "prompt_per_token_ms": 1.7006003401360543,
+          "prompt_per_second": 588.0276372989531,
+          "predicted_n": 369,
+          "predicted_ms": 19093.156,
+          "predicted_per_token_ms": 51.883576086956516,
+          "predicted_per_second": 19.27392202734844
+        },
+        "finish": "stop",
+        "wall_s": 20.11378482900909
+      },
+      {
+        "label": "scene-3",
+        "model": "creative-writing",
+        "text": "Tessa shoved aside a tangle of protective conduit and stopped. \"There. That's the pinch point.\" The cable was wedged between two corroded brackets, its insulation scraped raw. The connector at the junction was soaked, the copper pins green with oxidation from months of exposure.\n\n\"Looks like a classic case of 'oops' from whoever installed this last season.\" Jonah stepped closer, his boots splashing in the growing puddle. \"Maybe we could just bypass the connector entirely. If we jump the signal directly to the next junction, we'll skip the faulty part and prove the lap timing works right now.\"\n\nTessa didn't look up. \"A bypass would be a temporary patch. The moisture will still degrade the connection within days.\"\n\n\"But we'd know if the lap counts,\" Jonah insisted, his voice climbing half an octave. \"The fans are waiting, and I'd like to prove I can hit that apex without the system eating my time.\"\n\n\"We aren't racing, Jonah. We're fixing.\" She pulled a strip of waterproof wrapping from her kit. \"A shortcut now creates a failure later.\"\n\n\"Then we're stuck here until dawn?\"\n\n\"Until this repair holds.\" She wrapped the connector tight, securing the ends with zip ties. \"Now we test the loop. Three times.\"\n\nShe stood and tapped the diagnostic wand against the conduit. \"I'm initiating a test sequence. The system will register three passes through the gate.\"\n\n\"Three?\" Jonah grinned nervously. \"That's a lot of laps for a test run.\"\n\n\"Precisely.\"",
+        "words": 242,
+        "timings": {
+          "cache_n": 2725,
+          "prompt_n": 573,
+          "prompt_ms": 1012.719,
+          "prompt_per_token_ms": 1.7673979057591624,
+          "prompt_per_second": 565.8035447147728,
+          "predicted_n": 334,
+          "predicted_ms": 17142.783,
+          "predicted_per_token_ms": 51.47982882882883,
+          "predicted_per_second": 19.42508401348836
+        },
+        "finish": "stop",
+        "wall_s": 18.17629312700592
+      },
+      {
+        "label": "scene-4",
+        "model": "creative-writing",
+        "text": "Tessa tapped the diagnostic wand against her palm twice and signaled toward the gate. \"The system just registered the first pass.\" The monitor flickered from amber to green. \"Two.\" The countdown timer on the display began its rhythmic pulse. \"Three.\" The circuit completed, and the green light held steady. \"The timing loop is holding.\"\n\n\"There we go,\" Jonah said, wiping sweat from his forehead despite the rain. \"Now we just need to verify the disputed lap data.\" He gestured toward the log. \"If the system registers that specific lap as valid, then I'm officially vindicated.\"\n\n\"The hardware is functional now,\" Tessa said, her voice flat as she began packing her tools into the case. \"But the system cannot retroactively verify data that was corrupted during the malfunction.\"\n\nJonah's grin faltered. \"So you're saying the system doesn't know if I actually hit that apex?\"\n\n\"I'm saying the system doesn't know anything about what happened last month.\" She checked the connection one final time. \"The repair proves the gate works today. Your lap remains unverified.\"\n\n\"That's not quite the victory lap I was hoping for,\" he muttered, though he couldn't quite suppress a grin.\n\n\"Facts are not negotiations, Jonah.\" She zipped the case shut with a sharp click. \"The data is either in the system or it isn't.\"\n\n\"And right now, it's in a state of quantum uncertainty.\" He stepped back, watching the rain cascade off the awning. \"So we're stuck with 'maybe'?\"\n\nTessa didn't answer. She grabbed the handle of her kit and shouldered the weight. \"We're stuck with the truth.\"\n\nJonah sighed and reached for the control panel, adjusting a manual override switch. \"One thing at a time.\"\n\nTessa turned toward the exit, her boots splashing in the puddle.",
+        "words": 289,
+        "timings": {
+          "cache_n": 2725,
+          "prompt_n": 519,
+          "prompt_ms": 908.348,
+          "prompt_per_token_ms": 1.750188824662813,
+          "prompt_per_second": 571.3669210478803,
+          "predicted_n": 405,
+          "predicted_ms": 20916.098,
+          "predicted_per_token_ms": 51.7725198019802,
+          "predicted_per_second": 19.31526616484585
+        },
+        "finish": "stop",
+        "wall_s": 21.844387503006146
+      }
+    ],
+    "words": 1104,
+    "linter_findings": 0
+  },
+  "factuality": {
+    "previous_article": "The room transformed through three distinct instrumental exercises, each moment stripping away layers of artifice to reveal the core of the compositions.\n\nThe first piece established the space, a dense exploration of texture where the full ensemble operated in unison. The second piece, however, provided the most striking shift in atmosphere. By slowing the tempo to exactly 126 BPM, the music gained weight. The deliberate pace allowed the notes to hang longer, changing the room's acoustics from a continuous flow to a series of deliberate, measured statements. At this tempo, the space between the notes became as significant as the notes themselves.\n\nBy the final piece, the band began experimenting with restraint. During the last run, the drummer made a specific choice: replacing a busy fill with a single snare accent. This moment of economy fundamentally altered the energy, shifting the focus from technical display to raw impact. Simultaneously, the guitarists stopped doubling each other during the intro. This decision eliminated the wall of sound that had previously defined the opening, creating a more spacious, transparent arrangement.\n\nThese changes—the reduction of tempo, the simplification of percussion, and the de-layering of guitars—fundamentally altered the room's character. The music moved from a crowded, layered experience toward something leaner and more defined. By removing these elements, the band found a different way to occupy the space, proving how much the environment changes when the performance becomes more sparse.",
+    "control_audit": {
+      "label": "music-control-audit",
+      "model": "research",
+      "text": "{\n  \"unsupported\": [\n    \"The room transformed through three distinct instrumental exercises\",\n    \"each moment stripping away layers of artifice to reveal the core of the compositions\",\n    \"The first piece established the space, a dense exploration of texture where the full ensemble operated in unison\",\n    \"the music gained weight\",\n    \"The deliberate pace allowed the notes to hang longer, changing the room's acoustics from a continuous flow to a series of deliberate, measured statements\",\n    \"At this tempo, the space between the notes became as significant as the notes themselves\",\n    \"the band began experimenting with restraint\",\n    \"This moment of economy fundamentally altered the energy, shifting the focus from technical display to raw impact\",\n    \"This decision eliminated the wall of sound that had previously defined the opening, creating a more spacious, transparent arrangement\",\n    \"These changes—the reduction of tempo, the simplification of percussion, and the de-layering of guitars—fundamentally altered the room's character\",\n    \"The music moved from a crowded, layered experience toward something leaner and more defined\",\n    \"By removing these elements, the band found a different way to occupy the space, proving how much the environment changes when the performance becomes more sparse\"\n  ],\n  \"supported_ids\": [\n    \"F2\",\n    \"F3\",\n    \"F4\"\n  ]\n}",
+      "words": 190,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 450,
+        "prompt_ms": 1541.831,
+        "prompt_per_token_ms": 3.426291111111111,
+        "prompt_per_second": 291.86078111025137,
+        "predicted_n": 305,
+        "predicted_ms": 7114.655,
+        "predicted_per_token_ms": 23.403470394736843,
+        "predicted_per_second": 42.72870574890841
+      },
+      "finish": "stop",
+      "wall_s": 18.892341201993986
+    },
+    "fact_sheet_article": {
+      "label": "music-candidate",
+      "model": "human-writing",
+      "text": "The band rehearsed three instrumental pieces in one room [F1]. The second piece was slowed to 126 BPM [F2].\n\nDuring the final run, the drummer replaced a busy fill with a single snare accent [F3]. The guitarists stopped doubling each other in the intro [F4].",
+      "words": 45,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3192,
+        "prompt_ms": 3731.656,
+        "prompt_per_token_ms": 1.1690651629072681,
+        "prompt_per_second": 855.3843119515841,
+        "predicted_n": 65,
+        "predicted_ms": 3472.275,
+        "predicted_per_token_ms": 54.254296875,
+        "predicted_per_second": 18.431719837858463
+      },
+      "finish": "stop",
+      "wall_s": 12.273370196999167
+    },
+    "fact_sheet_audit": {
+      "label": "music-candidate-audit",
+      "model": "research",
+      "text": "{\n  \"unsupported\": [],\n  \"supported_ids\": [\n    \"F1\",\n    \"F2\",\n    \"F3\",\n    \"F4\"\n  ]\n}",
+      "words": 6,
+      "timings": {
+        "cache_n": 1,
+        "prompt_n": 223,
+        "prompt_ms": 712.142,
+        "prompt_per_token_ms": 3.193461883408072,
+        "prompt_per_second": 313.1397951532138,
+        "predicted_n": 53,
+        "predicted_ms": 1356.359,
+        "predicted_per_token_ms": 26.08382692307692,
+        "predicted_per_second": 38.33793265647222
+      },
+      "finish": "stop",
+      "wall_s": 2.105489110996132
+    },
+    "linter_findings": 0
+  }
+}

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+
+case "${1:-}" in
+    --serve)
+        /usr/bin/socat -d0 TCP-LISTEN:8080,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/llama/server.sock &
+        relay=$!
+        trap 'kill "$relay" 2>/dev/null || true' EXIT
+        /usr/bin/setpriv --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs \
+            /node/bin/node /mcp/dist/index.js
+        ;;
+    --configure)
+        cfg="$HOME/.config/llama.cpp"
+        mcp="$HOME/.local/opt/llama.cpp/websearch"
+        node="$HOME/.nvm/versions/node/v24.22.1"
+        socket="$XDG_RUNTIME_DIR/llama-cpp"
+        state=${CACHE_DIRECTORY:?CacheDirectory fehlt}
+        /usr/bin/nft -f "$cfg/research.nft"
+        exec /usr/bin/bwrap --die-with-parent --unshare-pid --unshare-ipc \
+            --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+            --ro-bind /etc/pki /etc/pki --ro-bind /etc/hosts /etc/hosts \
+            --ro-bind /etc/nsswitch.conf /etc/nsswitch.conf --ro-bind "$cfg/research-resolv.conf" /etc/resolv.conf \
+            --ro-bind "$mcp" /mcp --ro-bind "$node" /node --ro-bind "$socket" /llama \
+            --ro-bind "$HOME/.local/libexec/llama-research" /entrypoint \
+            --bind "$state" /state --proc /proc --dev /dev --tmpfs /tmp --chdir /state \
+            --clearenv --setenv PATH /usr/bin:/bin --setenv HOME /state --setenv LANG C.UTF-8 \
+            --setenv HOST 127.0.0.1 --setenv HOST_ALLOWLIST 127.0.0.1 --setenv PORT 8642 \
+            --setenv CORS_ALLOW_ORIGIN http://127.0.0.1:8080 --setenv BROWSER_FALLBACK '' \
+            --setenv LLM_BASE_URL http://127.0.0.1:8080 --setenv LLM_MODEL deep-research --setenv LLM_TIMEOUT_MS 90000 \
+            --setenv DEEP_RESEARCH_MAX_DURATION_MS 240000 --setenv DEEP_RESEARCH_MAX_QUERIES 2 \
+            --setenv DEEP_RESEARCH_MAX_PAGES 3 --setenv DEEP_RESEARCH_MAX_FOLLOWUP_LINKS 1 \
+            --setenv REQUEST_TIMEOUT_MS 12000 --setenv SEARCH_RETRY_ATTEMPTS 1 \
+            /bin/bash /entrypoint --serve
+        ;;
+    *)
+        exec /usr/bin/pasta --foreground --config-net --no-map-gw -4 \
+            --host-lo-to-ns-lo -t 127.0.0.1/8642 -u none -T none -U none \
+            --dns-forward 192.0.2.53 --dns-host 127.0.0.53 -- /usr/bin/bash "$0" --configure
+        ;;
+esac

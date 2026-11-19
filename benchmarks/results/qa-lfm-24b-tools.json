@@ -1,0 +1,5 @@
+{
+  "model": "lfm-24b",
+  "mode": "tools",
+  "passed": true
+}

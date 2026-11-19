@@ -1,0 +1,126 @@
+{
+  "images": [
+    {
+      "task": "kart",
+      "job_id": "89603c655afd4d2094dc486bd119908b",
+      "seed": 41831,
+      "size": [
+        1216,
+        832
+      ],
+      "seconds": 181.51,
+      "path": "~/.local/share/llama.cpp/atelier-exports/20261118T163538993378Z_moss_41831_7b9a1356d195.png",
+      "transport": "Firefox"
+    },
+    {
+      "task": "character",
+      "job_id": "daa2f6bef31d4d4588a6076eff0f396b",
+      "seed": 41832,
+      "size": [
+        576,
+        832
+      ],
+      "seconds": 53.18,
+      "path": "~/.local/share/llama.cpp/atelier-exports/20261118T162759856487Z_moss_41832_07d0dbccd8d9.png",
+      "transport": "MCP SDK"
+    },
+    {
+      "task": "cover",
+      "job_id": "a60a853d342149ac937134dd71eff484",
+      "seed": 41833,
+      "size": [
+        768,
+        768
+      ],
+      "seconds": 56.55,
+      "path": "~/.local/share/llama.cpp/atelier-exports/20261118T162856783728Z_moss_41833_476f8e63595b.png",
+      "transport": "MCP SDK"
+    }
+  ],
+  "audio": [
+    {
+      "path": "~/dev/github/game-audio-forge/output/sfx/20261118-172010_midnight-apex-fictional-kart-racer-lap-c.wav",
+      "qa": {
+        "duration_s": 2.0,
+        "rate": 48000,
+        "bpm": null,
+        "bpm_conf": 0.0,
+        "rms_db": -23.5,
+        "peak_db": -0.1,
+        "stereo_corr": 0.782,
+        "hf_delta_db": -3.3
+      },
+      "transport": "GAF CLI"
+    },
+    {
+      "path": "~/dev/github/game-audio-forge/output/music/20261118-172003_midnight-apex-fictional-kart-racer-instr.wav",
+      "qa": {
+        "duration_s": 9.2,
+        "rate": 48000,
+        "bpm": 147,
+        "bpm_conf": 1.95,
+        "rms_db": -15.9,
+        "peak_db": 0.0,
+        "stereo_corr": 0.504,
+        "hf_delta_db": -17.4
+      },
+      "transport": "GAF CLI"
+    },
+    {
+      "path": "~/dev/github/game-audio-forge/output/sfx/20261118-171955_small-two-stroke-racing-kart-motor-close.wav",
+      "qa": {
+        "duration_s": 3.0,
+        "rate": 48000,
+        "bpm": null,
+        "bpm_conf": 0.0,
+        "rms_db": -20.5,
+        "peak_db": 0.0,
+        "stereo_corr": 0.911,
+        "hf_delta_db": -8.0
+      },
+      "transport": "GAF CLI"
+    },
+    {
+      "path": "~/dev/github/game-audio-forge/output/sfx/20261118-171958_single-sharp-metallic-collision-between.wav",
+      "qa": {
+        "duration_s": 2.0,
+        "rate": 48000,
+        "bpm": null,
+        "bpm_conf": 0.0,
+        "rms_db": -21.7,
+        "peak_db": 0.0,
+        "stereo_corr": 0.294,
+        "hf_delta_db": -3.5
+      },
+      "transport": "GAF CLI"
+    },
+    {
+      "path": "~/dev/github/game-audio-forge/output/sfx/20261118-172001_single-clean-menu-confirmation-chime-sho.wav",
+      "qa": {
+        "duration_s": 2.0,
+        "rate": 48000,
+        "bpm": null,
+        "bpm_conf": 0.0,
+        "rms_db": -26.6,
+        "peak_db": -0.3,
+        "stereo_corr": 0.662,
+        "hf_delta_db": -5.1
+      },
+      "transport": "GAF CLI"
+    },
+    {
+      "path": "~/dev/github/game-audio-forge/output/music/20261118-171946_fast-instrumental-heavy-metal-kart-racin.wav",
+      "qa": {
+        "duration_s": 12.0,
+        "rate": 48000,
+        "bpm": 81,
+        "bpm_conf": 3.0,
+        "rms_db": -14.6,
+        "peak_db": 0.0,
+        "stereo_corr": 0.763,
+        "hf_delta_db": -9.1
+      },
+      "transport": "GAF CLI"
+    }
+  ]
+}

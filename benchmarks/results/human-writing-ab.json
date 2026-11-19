@@ -1,0 +1,828 @@
+{
+  "date": "2026-11-18",
+  "build": "b12503-4577932fa",
+  "gguf": "Gemma-4-12B-StyleTune.Q4_K_M.gguf",
+  "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+  "sampling": {
+    "temperature": 0.55,
+    "top_p": 0.9,
+    "top_k": 40,
+    "seed": 90210,
+    "cache_prompt": false,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "pairs": [
+    {
+      "case": "story",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write an English Riff Racers short story of 900–1,200 words. This is a standalone fictional scenario.\nCleo, a mechanic who speaks in short, literal sentences, and Jax, a driver who talks around what scares him, are stuck in the paddock after their last run. The rain has stopped. A timing-light fault makes their quickest lap look valid. Only Cleo can show what happened. She needs the prize money for a replacement axle. Use close third-person through Cleo only. Let the argument turn on a concrete action at the timing desk. Keep the last moment open. Output the story only."
+        }
+      ],
+      "max_tokens": 2200,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 1048,
+          "wall_s": 63.04,
+          "response": "The garage smelled of burnt rubber, ionized air, and the metallic tang of fear. Cleo wiped a streak of grease across her forehead with the back of her wrist. The grease was old, embedded in the pores of her skin. Rain had stopped. The asphalt outside was slick and black, reflecting the neon signs of the betting booths.\n\n\"It's a ghost in the machine,\" Jax said. His voice was too high. \"The timing system. It doesn't know what it saw. It just... imagined the lap.\"\n\nCleo looked at him. \"The sensor malfunctioned.\"\n\n\"Right. Malfunctioned. That's one way to put it. I'm saying the system got confused by the timing of the gate, and now the officials are looking at the numbers and wondering why we broke the record.\"\n\nCleo turned her attention to the data pad. \"The timing-light fault occurred at Turn Seven.\"\n\n\"It's not just a fault, Cleo. It's a miracle. Or a disaster. Depends on who asks.\" Jax paced the small confines of the trailer. His leather jacket creered. \"The officials want proof. They want to know if the car actually crossed the line or if the computer just hallucinated a victory.\"\n\nCleo did not understand his metaphor. \"The computer does not hallucinate.\"\n\n\"No, but it can glitch.\" Jax stopped pacing. His hands shook slightly. \"If they think we cheated, we're banned. If they think the equipment failed, we get nothing.\"\n\n\"I need the prize money.\"\n\n\"I know you do. I'd give you every cent if I could.\"\n\n\"I need the axle. The current one is cracked.\"\n\n\"The axle. Right. The part that keeps us from exploding into a fireball.\" Jax laughed, but the sound ended too quickly. \"We need to show them the raw data. The raw feed from the transponder.\"\n\nCleo nodded. \"I can show the log.\"\n\n\"You have to go to the desk. Now.\"\n\n\"The officials are there.\"\n\n\"They're the only ones who can verify the timestamp.\"\n\n\"I will go.\"\n\nCleo grabbed her toolkit and the data pad. She walked through the crowded paddock toward the timing booth. The crowd was thinning as the evening settled in. The air was humid. People moved in groups, their voices muffled by the distance.\n\nThe timing desk was a cramped glass enclosure. Two officials sat behind reinforced windows, their faces lined with exhaustion. A tattered monitor displayed the lap times of the day.\n\n\"Lap 84,\" the woman on the left said without looking up. \"You're the one from the Red Stallion?\"\n\n\"Yes,\" Cleo said.\n\n\"The officials are questioning the validity of your final lap. The system shows a jump in speed that doesn't match your engine output.\"\n\n\"The sensor failed at Turn Seven,\" Cleo said.\n\nThe woman looked up. Her eyes were sharp. \"How do you know it was a sensor failure?\"\n\n\"I checked the log.\" Cleo placed the data pad on the counter. \"The light malfunctioned. The timing gap closed incorrectly.\"\n\nThe woman frowned. \"The officials want proof. They need to see the raw data before they can' confirm the win.\"\n\n\"I have the data here.\"\n\n\"But the system's data is different from your device's data. We need to compare.\"\n\nThe man beside her leaned forward. \"The discrepancy is large. If we can't reconcile the two, we have to disqualify you. Standard procedure.\"\n\n\"The data is consistent,\" Cleo said.\n\n\"Prove it.\"\n\nCleo opened the pad. She tapped the screen. \"I need to access the main terminal's input.\"\n\nThe woman hesitated. \"That's not standard procedure. You can't just—\"\n\n\"I am showing you the timestamp.\"\n\nCleo didn't wait for permission. She reached past the woman's arm and plugged the data pad into the port beneath the desk. The screen flickered. The numbers began to scroll.\n\n\"What are you doing?\" the woman demanded.\n\n\"Syncing the logs.\"\n\n\"You're interfering with the system.\"\n\n\"I am showing the truth.\"\n\nCleo watched the lines of code. Her fingers moved across the screen. She was not looking for what was there. She was looking for what was missing. The glitch was visible as a gap in the sequence—a moment where the system had stuttered and filled in the blank with an impossible number.\n\n\"There,\" Cleo said.\n\nThe man leaned in, his glasses sliding down his nose. \"That's the gap.\"\n\n\"The system corrected itself automatically. But it created a false peak.\"\n\n\"So the lap is valid?\" the woman asked.\n\n\"The car's speed was real. The timing jump was false.\"\n\n\"We need to verify the sensor's hardware status.\"\n\n\"I can show you the diagnostic report from the car's onboard computer.\"\n\n\"You're being very direct about this.\" The man's voice was grudgingly impressed.\n\n\"I am stating facts.\"\n\n\"The fact is, if this doesn't match, we have to disqualify you.\"\n\n\"It matches.\"\n\n\"How do you know?\"\n\n\"I have tested the equipment.\"\n\nThe woman looked at the man. They both looked at Cleo. She did not blink. The silence stretched. Outside, a car engine revved in the distance, a lonely growl.\n\n\"The officials need to verify the physical location of the sensor.\"\n\n\"It is at Turn Seven.\"\n\n\"We can't verify that right now. It's dark.\"\n\n\"The log shows the coordinates.\"\n\n\"The coordinates are logged.\"\n\nBoth officials looked at each other. They looked at the screen, where Cleo's data stood in stark contrast to the system's error. They were weighing the evidence. The prize money was substantial enough to fund a season. The axle was worth enough to keep the team alive.\n\n\"If we accept this, we're taking responsibility for the override.\"\n\n\"I am not overriding.\"\n\n\"The system needs to be overridden to accept your data as the primary source.\"\n\n\"Then override it.\"\n\n\"We need a confirmation from the driver.\"\n\n\"The driver is not here.\"\n\n\"The driver is not here,\" Cleo repeated. \"The data is correct.\"\n\nThe woman's fingers hovered over the keyboard. \"I need to input the override code.\"\n\n\"What is the code?\"\n\n\"It's a three-digit sequence.\"\n\nShe looked at Cleo. The woman's hand trembled slightly. \"The code is 887.\"\n\nCleo watched her fingers move toward the keys. The woman's face was a mask of indecision. The man beside her was watching the screen intently. The air in the booth felt thin.\n\n\"Enter the code,\" Cleo said.\n\nThe woman's fingers touched the keys. The first digit appeared. Then the second. The third remained hanging in the air.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 1511,
+            "prompt_tokens": 147,
+            "total_tokens": 1658,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 147,
+            "prompt_ms": 292.198,
+            "prompt_per_token_ms": 1.9877414965986393,
+            "prompt_per_second": 503.08352555458976,
+            "predicted_n": 1511,
+            "predicted_ms": 62721.689,
+            "predicted_per_token_ms": 41.53754238410596,
+            "predicted_per_second": 24.074606791918505
+          },
+          "linter_findings": [
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 1,
+              "excerpt": "“the data pad” ×4",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 1,
+              "excerpt": "“the officials are” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 81,
+              "excerpt": "“cleo said the” ×4",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 3,
+              "col": 104,
+              "excerpt": "“at turn seven” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 7,
+              "col": 179,
+              "excerpt": "“we need to” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            }
+          ]
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 1072,
+          "wall_s": 66.209,
+          "response": "The rain had stopped, leaving the paddock thick with the smell of wet asphalt, burnt rubber, and ionized air. Droplets clung to the carbon fiber body of the car like shattered glass. Cleo wiped a streak of grease across her forehead. The grime didn't come off.\n\n\"The timing light malfunctioned at sector three,\" Cleo said. Her words were blunt, each one placed precisely where it belonged. \"The sensor failed to register the gap. Our lap time shows as valid.\"\n\nJax paced the confined space between the car and the tool cart. His movements were erratic, hands fluttering near his temples. \"Valid is a loaded word. It means we're in the running. It means the officials might not see the gap. They'll just see the numbers and think we're gods.\"\n\n\"The numbers are wrong.\" Cleo grabbed her wrench. \"The gap is real. I need the prize money. The axle is cracked. The car needs replacement parts.\"\n\nJax stopped pacing and grinned, but the expression didn't reach his eyes. \"Of course, the axle. But think about the prestige, Cleo. If we can't prove the malfunction, we get the win. If we prove it, we get nothing but a technical report and a pat on the back for playing fair. Maybe we just... let it ride.\"\n\n\"The axle will fail in three laps if I don't replace it.\" Cleo's voice remained flat. \"The race isn't over. The next heat is in two hours.\"\n\n\"The next heat is a death trap if the axle snaps,\" Jax countered. His voice went higher, climbing an octave. \"But if we don't take this purse, we're out of the season. We're just another team with a broken car and no sponsor. We need to be strategic about how we present the... the situation.\"\n\n\"The situation is a faulty sensor.\"\n\n\"The situation is a choice.\" Jax stepped closer, his shadow stretching across the engine bay. \"We could go to the officials and explain the technicality. Or we could let the timing system stand as is. Either way, we get the result we want.\"\n\nCleo looked at the engine block. \"The technical report is the correct procedure.\"\n\n\"The technical report gets you a replacement part. The win gets you a whole new car.\" Jax was talking faster now, circling the point like a dog chasing its own tail. \"We could argue that the timing system is unreliable and that our lap should be verified by manual backup. That way, we're not admitting fault, we're just pointing out their flaws.\"\n\n\"That is a lie.\"\n\n\"It's a nuance.\"\n\n\"It is not a nuance.\" Cleo stood up. Her boots crunched on gravel. \"I need the parts. I need the axle.\"\n\n\"I'm trying to protect us, Cleo. Everything I'm saying is about keeping us in the game.\"\n\n\"You are talking about the prize money.\"\n\n\"I'm talking about survival.\"\n\nThe argument lasted twenty minutes. Jax spun elaborate webs of hypotheticals, describing scenarios where they became champions and scenarios where they became legends. Cleo listened to each word and stripped away the adjectives. The core remained: Jax wanted to hide the error. Cleo needed the money to fix the machine.\n\n\"The officials are at the desk now,\" Cleo said.\n\n\"They're just processing data, Cleo. They don't know what we know.\"\n\n\"They will know if I show them the log.\" She grabbed her tablet. \"I have the sensor data from the last lap. The voltage drop at sector three proves the failure.\"\n\n\"If you show them that, they'll disqualify us for the technical error.\"\n\n\"The error was not ours.\"\n\n\"Doesn't matter.\"\n\n\"It matters to the record.\"\n\nCleo walked toward the timing station. The tent was lit with harsh fluorescent bulbs that made the raindrops on the canvas glow. Two officials sat behind a desk cluttered with monitors and clipboards. A man in a high-visibility vest was adjusting a cable near the gate.\n\n\"You're making this complicated,\" Jax said, following her. His voice was tight, strained. \"Just tell them the timing system had a glitch and we'd like it re-verified. Don't show them the raw data.\"\n\n\"I will show them the data.\"\n\n\"Cleo, stop. Just ask for the verification.\"\n\n\"The data proves the malfunction.\"\n\nThe man at the desk looked up as they approached. \"Problem with your heat?\"\n\nCleo stepped forward. \"Sector three timing error. Requesting manual review of lap 22.\"\n\nThe official frowned. \"We've got a discrepancy flagged. Your lap came in under the threshold. We're running it through the system now.\"\n\nJax's breathing became audible. \"We're just trying to clarify the technical parameters of the sensor.\"\n\nCleo ignored him. She opened the log on her tablet and handed it to the official. \"The voltage dropped at 14:03:12. The sensor failed. The lap should be adjusted to the nearest backup reading.\"\n\nThe official took the tablet. His fingers moved across the screen. \"If this is true, the lap won't stand as a record. It'll be marked as a technical void.\"\n\n\"I know.\"\n\n\"But it would confirm the equipment failure for the league.\"\n\n\"Yes.\"\n\nThe official looked at Jax. \"You want to challenge the timing system's integrity?\"\n\nJax opened his mouth. His throat moved visibly as he swallowed. \"I want to ensure the driver's performance is accurately captured.\"\n\n\"You're saying the car was faster than the system could measure?\"\n\n\"I'm saying we need to be sure of the numbers.\"\n\nThe official looked back at Cleo's screen. \"The data shows a hard failure. Not a lag. A complete drop-off.\" He turned to the second official. \"We need to log this as a system error.\"\n\nThe official turned back to them. \"If I log this as a system error, the win is voided for this heat. You'll have to run a verification lap in the next session.\"\n\n\"Then I will run the lap.\"\n\n\"The lap will be under supervision.\"\n\n\"I will run it.\"\n\nThe official began to type into his terminal. The keys clacked like gunfire in the quiet tent. \"I'll need you to sign this declaration of equipment failure.\"\n\nHe slid a clipboard across the table.\n\n\"I need the parts for the axle,\" Cleo said, stating the fact plainly.\n\n\"I'll get them,\" Jax whispered, his voice cracking. \"The parts will be there.\"\n\nThe official handed her the stylus. \"Sign here and here.\"\n\nCleo took the stylus. Her hand was steady. The plastic tip hovered over the paper. The rain continued to patter against the tent, a steady, indifferent rhythm.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 1489,
+            "prompt_tokens": 2872,
+            "total_tokens": 4361,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 2872,
+            "prompt_ms": 2876.231,
+            "prompt_per_token_ms": 1.001473189415042,
+            "prompt_per_second": 998.52897767947,
+            "predicted_n": 1489,
+            "predicted_ms": 63309.53,
+            "predicted_per_token_ms": 42.546727150537635,
+            "predicted_per_second": 23.503570473513232
+          },
+          "linter_findings": [
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 1,
+              "excerpt": "“the timing system” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 7,
+              "excerpt": "“i need the” ×4",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 1,
+              "col": 67,
+              "excerpt": "“we need to” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 3,
+              "col": 182,
+              "excerpt": "“show them the” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "dialogue",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write an English dialogue scene, 220–280 words, between two characters on the last ferry. Bea is an electrician and asks literal questions. Rowan is a radio host who gives long answers and habitually changes the subject. Rowan failed to bring the key Bea needs. Neither says how they feel. An interruption changes who controls the conversation. End on a quiet physical action. Output the scene only."
+        }
+      ],
+      "max_tokens": 620,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 247,
+          "wall_s": 13.545,
+          "response": "The ferry engines groaned as they cut through the black water. The deck was empty except for them.\n\n\"Is the key in your pocket?\" Bea asked. Her voice was flat, eyes fixed on the brass keychain dangling from Rowan's belt.\n\nRowan leaned against the railing, watching the distant shoreline blur. \"The concept of 'having' is complicated, isn't it? Like a radio wave—it exists in the air, felt by the listener but never touched. I remember this old station in Prague where we'd broadcast poetry into the fog. The listeners would call in and describe the sounds as haunting, though I suspect it was mostly just static and poor equipment. Speaking of equipment, have you ever noticed how the tarnish on old metal tells a story about humidity?\"\n\n\"I need the key to unlock the electrical cabinet at the dock.\"\n\n\"Metal has memories, Bea. Every scratch is a choice made by someone who wasn't thinking about the future. Speaking of the future, I read once that some people believe time isn't linear but cyclical—like the tides. Do you think the tide tonight feels different because of the moon's position?\"\n\n\"I need to know if you have the physical object.\"\n\n\"I have many things. I have stories, I have—\"\n\nA horn blasted. The dock workers' voices crackled over the intercom: \"Dock 4 is clear for docking. Prepare for mooring.\"\n\n\"They're here,\" Rowan said, his voice dropping. \"The music stops now.\"\n\nBea reached out and gripped the railing.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 327,
+            "prompt_tokens": 96,
+            "total_tokens": 423,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 96,
+            "prompt_ms": 265.068,
+            "prompt_per_token_ms": 2.761125,
+            "prompt_per_second": 362.17121644257327,
+            "predicted_n": 327,
+            "predicted_ms": 13214.045,
+            "predicted_per_token_ms": 40.53388036809816,
+            "predicted_per_second": 24.670719677434125
+          },
+          "linter_findings": []
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 224,
+          "wall_s": 15.746,
+          "response": "\"You brought the key?\" Bea asked. \"The brass one with the serrated edge?\"\n\nRowan adjusted the collar of his coat, watching the shoreline blur. \"Keys are such curious objects, aren't they? They grant access, they symbolize trust, and yet they're so easily misplaced. I remember a story about a locksmith in Prague who refused to cut keys for doors he didn't personally unlock. He believed the door had a right to its own secrets.\"\n\n\"Did you bring the key?\" Bea asked again. \"The one for the electrical cabinet?\"\n\n\"The cabinet is a sturdy thing, certainly. But I'm thinking about how the radio waves carry our voices across the water. Sometimes the signal wavers, and the words become fragments—poetry made of static. It reminds me of the way old ships used to communicate using signal flags.\"\n\n\"Is the key in your pocket?\"\n\n\"I've misplaced it. Or perhaps it's waiting for a different door. I recall a woman who lost her—\"\n\nA crackle erupted from Rowan's pocket. \"This is Kestrel Station. We have a breach on the pier. Repeat, we have a breach on the pier.\" The voice was distorted, urgent.\n\nThe ferry lurched as the engine cut out. The radio's crackle became the only sound. Rowan stopped talking, his eyes fixed on the dark water. Bea stepped closer, reaching for the radio's power switch.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 306,
+            "prompt_tokens": 2821,
+            "total_tokens": 3127,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 2821,
+            "prompt_ms": 2752.726,
+            "prompt_per_token_ms": 0.9757979439914924,
+            "prompt_per_second": 1024.8023232243238,
+            "predicted_n": 306,
+            "predicted_ms": 12971.455,
+            "predicted_per_token_ms": 42.529360655737705,
+            "predicted_per_second": 23.51316795224591
+          },
+          "linter_findings": []
+        }
+      ]
+    },
+    {
+      "case": "metal",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write an English heavy-metal review in 260–330 words using this press sheet for a fictional release. Silt Psalm is a fictional band. Their fictional EP is Bellwether Teeth. Its opener “Cable Burn” moves from a dry bass intro into a slow, off-beat riff. “Third Shift” leaves the vocal unaccompanied for the first four bars. The closing track “Blind Solder” ends with one repeated snare hit, then silence. The supplied notes say that only “Third Shift” has lyrics about night work. Keep claims tied to the press sheet. Give a clear critical judgment about pacing. Output the article only."
+        }
+      ],
+      "max_tokens": 700,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 290,
+          "wall_s": 15.018,
+          "response": "With their debut EP, *Bellwether Teeth*, Silt Psalm emerges as a formidable force in the underground scene, crafting a sonic landscape that feels both deliberate and punishing. The band navigates the space between industrial grit and doom-laden metal with surgical precision, creating an atmosphere that is as oppressive as it is compelling.\n\nThe opening salvo, “Cable Burn,” establishes this tension immediately. The track begins with a stark, dry bass intro that strips away pretense, building anticipation before dissolving into a slow, off-beat riff. This deliberate pacing forces the listener to confront the weight of each note, establishing a grinding rhythm that defines the EP's opening movement. The transition from minimalism to groove is seamless, showcasing the band's command over timing.\n\nThe experience becomes more visceral on “Third Shift.” Here, the band employs a haunting production choice: the vocals remain unaccompanied for the first four bars. This silence creates a vacuum that makes the eventual entrance of the vocals feel earned and visceral. Notably, this is the sole track on the release that features lyrics centered on the grueling nature of night work, grounding the abstract noise in a specific, weary reality.\n\nThe record concludes with “Blind Solder,” a track that masterfully manages tension through restraint. The final moments are particularly striking, culminating in a single, repeated snare hit followed by abrupt silence. This stark punctuation mirrors the album's overall ethos of controlled aggression.\n\nCritically, the pacing of *Bellwether Teeth* is the band's greatest strength. Rather than rushing through their compositions, Silt Psalm embraces the \"slow burn\" philosophy. By leaning into these pauses and deliberate tempos, they create a sense of dread that builds steadily. It is a cohesive, punishing journey that proves they understand the power of what isn't played.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 368,
+            "prompt_tokens": 146,
+            "total_tokens": 514,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 146,
+            "prompt_ms": 300.627,
+            "prompt_per_token_ms": 2.0590890410958904,
+            "prompt_per_second": 485.65165470832625,
+            "predicted_n": 368,
+            "predicted_ms": 14671.988,
+            "predicted_per_token_ms": 39.9781689373297,
+            "predicted_per_second": 25.013651865036966
+          },
+          "linter_findings": []
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 296,
+          "wall_s": 18.274,
+          "response": "Silt Psalm's debut EP, *Bellwether Teeth*, is a masterclass in industrial-tinged doom, trading conventional metal pyrotechnics for a suffocating, mechanical atmosphere. The record succeeds by leaning into its own discomfort, crafting a sonic landscape that feels less like a performance and more like a ritual.\n\nThe opening track, \"Cable Burn,\" establishes the band's ethos immediately. It begins with a stark, dry bass intro that hangs in the air before dissolving into a slow, off-beat riff. This deliberate pacing forces the listener to confront the space between notes, building tension through repetition rather than speed. The band's ability to let a groove breathe without collapsing into chaos is a rare feat in contemporary metal.\n\n\"Third Shift\" continues this patient construction. The track notably leaves the vocals unaccompanied for the first four bars, allowing the instrumentation to establish its grinding texture before any words emerge. This is the only moment on the record where lyrics appear, focusing specifically on the grueling nature of night work—a thematic choice that grounds the abstract noise in a concrete, weary reality.\n\nThe EP's pacing is its strongest asset, though it demands absolute patience from the listener. By refusing to rush the transitions, Silt Psalm creates a sense of inevitable momentum. This culminates in \"Blind Solder,\" a punishing finale that strips away layers until only the core remains. The track concludes with a single, echoing snare hit followed by abrupt silence, leaving the listener in the void.\n\n*Bellwether Teeth* is not an easy listen, but it is a rewarding one. Silt Psalm has crafted a cohesive, punishing, and meticulously paced descent into gloom. It is a definitive statement of intent for a band that understands that sometimes the most powerful statement is the one made in the silence after the noise stops.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 371,
+            "prompt_tokens": 2569,
+            "total_tokens": 2940,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 2569,
+            "prompt_ms": 2601.196,
+            "prompt_per_token_ms": 1.0125325029194239,
+            "prompt_per_second": 987.6226166732533,
+            "predicted_n": 371,
+            "predicted_ms": 15652.603,
+            "predicted_per_token_ms": 42.30433243243243,
+            "predicted_per_second": 23.638240872780074
+          },
+          "linter_findings": [
+            {
+              "rule": "contrast",
+              "category": "artificial-contrast",
+              "severity": "med",
+              "line": 3,
+              "col": 288,
+              "excerpt": "repetition rather than speed",
+              "why": "Contrast frame: only earns its place when the contrast is the point.",
+              "fix": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "blog",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Schreibe einen deutschen Blogartikel mit 260–330 Wörtern für Hobby-Musiker. Die Autorin beschreibt ihren ersten Proberaumabend im neuen Raum. Gegeben sind drei Beobachtungen. Der Bass dröhnt neben der Tür, der Teppich hilft gegen die Reflexionen der Snare, und beim nächsten Termin soll der Bassverstärker 40 cm von der Wand wegrücken. Erfinde keine weiteren Messwerte, Anschaffungen oder Ergebnisse. In der Ich-Perspektive, ohne Fazit-Floskel. Gib nur den Artikel aus."
+        }
+      ],
+      "max_tokens": 740,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 273,
+          "wall_s": 17.123,
+          "response": "Endlich ist es so weit: Wir haben heute Abend unseren ersten offiziellen Proberaum bespielt. Nach Wochen der Planung und der Suche nach dem perfekten Ort fühlte es sich unglaublich gut an, die Instrumente in diesem neuen Raum in die Hand zu nehmen und die ersten Töne in die Luft zu jagen. Die Akustik war anfangs eine Überraschung, aber wir konnten sofort an den Stellschrauben drehen.\n\nEine Sache war sofort spürbar: Der Bass dröhnt regelrecht neben der Tür. Die tiefen Frequenzen sammeln sich dort und erzeugen eine beinahe physische Welle, die den Raum füllt. Es ist ein intensives Gefühl, aber es zeigt uns deutlich, wie der Raum auf die tiefen Töne reagiert.\n\nEin glücklicher Zufall war die Wahl des Bodenbelags. Der Teppich im Zentrum des Raumes bewirht Wunder und hilft massiv gegen die Reflexionen der Snare. Ohne diesen weichen Untergrund würde der perkussive Schlag viel zu hart und unkontrolliert hallen. Stattdessen bekommt der Beat genau die Definition, die wir uns für unsere Übungsstunden gewünscht haben. Es macht einen riesigen Unterschied für die Dynamik des gesamten Ensembles.\n\nFür die nächste Sitzung haben wir bereits eine konkrete Anpassung geplant: Der Bassverstärker soll beim nächsten Mal 40 cm von der Wand wegrücken. Diese kleine Änderung soll helfen, die tiefen Frequenzen besser zu kontrollieren und die Überlagerungen im Bereich der Tür zu minimieren. Es sind diese kleinen Details, die den Unterschied zwischen einem unkontrollierten Lärmteppich und einem sauberen Sound ausmachen.\n\nEs war ein produktiver Abend, an dem wir nicht nur die Songs ausprobiert, sondern auch das Zusammenspiel mit der neuen Umgebung verstanden haben. Die Basis steht, und wir können uns jetzt voll und ganz auf die Musik konzentrieren.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 417,
+            "prompt_tokens": 142,
+            "total_tokens": 559,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 142,
+            "prompt_ms": 284.65,
+            "prompt_per_token_ms": 2.004577464788732,
+            "prompt_per_second": 498.85824696996315,
+            "predicted_n": 417,
+            "predicted_ms": 16804.171,
+            "predicted_per_token_ms": 40.39464182692307,
+            "predicted_per_second": 24.755758555420556
+          },
+          "linter_findings": [
+            {
+              "rule": "contrast",
+              "category": "artificial-contrast",
+              "severity": "med",
+              "line": 9,
+              "col": 42,
+              "excerpt": "nicht nur die Songs ausprobiert, sondern",
+              "why": "Contrast frame: only earns its place when the contrast is the point.",
+              "fix": ""
+            }
+          ]
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 251,
+          "wall_s": 18.224,
+          "response": "Der Geruch von altem Holz und ein bisschen Staub in der Luft waren der perfekte Start in unseren ersten Proberaumbesuch. Endlich hatten wir einen Ort, der nicht nur ein Zimmer war, sondern ein echtes Refugium für unsere Töne. Die Akustik des Raumes hat uns sofort überrascht – es war kein klinisch trockener Keller, sondern ein Ort mit Charakter.\n\nWir haben direkt mit den ersten Tacks angefangen, um die Räumlichkeit zu testen. Besonders die Snare wirkte in der neuen Umgebung deutlich kontrollierter. Der dicke Teppich im Zentrum des Raumes bewirkt hier Wunder gegen die harten Reflexionen der Snare und sorgt dafür, dass die Höhen nicht so unkontrolliert im Raum umherhüpfen. Es ist dieser kleine Unterschied zwischen einem halligen Chaos und einem sauberen Sound, der den Unterschied macht.\n\nAllerhin haben wir auch die tiefe Frequenz des Basses in den Griff bekommen. Er dröhnt jetzt zwar immer noch deutlich, wenn man direkt neben der Tür steht, aber er bleibt innerhalb der Grenzen des Raumes und verliert nicht die Form. Es ist ein rauer, direkter Sound, der genau das richtige Maß an Wucht mitbringt.\n\nFür die nächste Session haben wir bereits die Details für die Feinjustierung besprochen: Der Bassverstärker wird beim nächsten Mal 40 cm von der Wand wegrücken. Dieser kleine Abstand soll die Bassresonanz weiter stabilisieren und den Mix im Raum noch klarer machen. Es ist diese ständige Arbeit an den Details, die den Raum zu unserem künftigen Zuhause machen wird. Wenn wir das nächste Mal die Instrumente auspacken, wird der Sound noch präziser sein.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 366,
+            "prompt_tokens": 2772,
+            "total_tokens": 3138,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 2772,
+            "prompt_ms": 2694.217,
+            "prompt_per_token_ms": 0.9719397546897547,
+            "prompt_per_second": 1028.8703545408553,
+            "predicted_n": 366,
+            "predicted_ms": 15507.931,
+            "predicted_per_token_ms": 42.48748219178082,
+            "predicted_per_second": 23.536344080973794
+          },
+          "linter_findings": [
+            {
+              "rule": "contrast",
+              "category": "artificial-contrast",
+              "severity": "med",
+              "line": 1,
+              "col": 156,
+              "excerpt": "nicht nur ein Zimmer war, sondern",
+              "why": "Contrast frame: only earns its place when the contrast is the point.",
+              "fix": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "devlog",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write an English developer devlog of 220–280 words for players who sometimes inspect Git diffs. In Riff Racers, replay ghost interpolation used the render delta. On uneven frames the ghost drifted out of turn 3. This patch samples both replay frames using the fixed simulation tick. One local 90-second deterministic replay now matches all checkpoints. The team has yet to run a two-player regression. Explain the bug in one concrete moment. Preserve that scope. Output only the devlog."
+        }
+      ],
+      "max_tokens": 650,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 202,
+          "wall_s": 10.58,
+          "response": "Hey everyone! We've just pushed a hotfix to address a subtle synchronization issue with ghost interpolation in Replay mode.\n\nFor those who dive into the Git diffs, you'll notice changes in how we process ghost positions relative to the render loop. Previously, the system used the render delta to interpolate ghost positions between frames. This worked fine on stable frame rates but caused issues on uneven frames: if a frame spiked, the ghost would occasionally \"drift\" and clip out of bounds—specifically, we noticed ghosts occasionally floating outside the track boundaries during Turn 3.\n\nTo fix this, we've refactored the interpolation logic to sample both replay frames using the fixed simulation tick instead of the variable render delta. This ensures the ghost's position is calculated based on the underlying simulation state rather than the visual frame timing.\n\nWe've verified this fix through rigorous internal testing: one local 90-second deterministic replay now matches all checkpoints perfectly. While the math is now solid, the team hasn't run a full two-player regression test yet. We're moving forward with caution, but the ghost should now stay firmly on the track regardless of your frame rate. Thanks for bearing with us as we polish these racing systems!",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 255,
+            "prompt_tokens": 120,
+            "total_tokens": 375,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 120,
+            "prompt_ms": 270.48,
+            "prompt_per_token_ms": 2.254,
+            "prompt_per_second": 443.6557231588287,
+            "predicted_n": 255,
+            "predicted_ms": 10257.197,
+            "predicted_per_token_ms": 40.38266535433071,
+            "predicted_per_second": 24.763100484469586
+          },
+          "linter_findings": [
+            {
+              "rule": "contrast",
+              "category": "artificial-contrast",
+              "severity": "med",
+              "line": 5,
+              "col": 237,
+              "excerpt": "state rather than the",
+              "why": "Contrast frame: only earns its place when the contrast is the point.",
+              "fix": ""
+            }
+          ]
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 168,
+          "wall_s": 11.712,
+          "response": "We've just pushed a fix for a subtle but frustrating issue with ghost interpolation in Replay Mode.\n\nPreviously, the system calculated ghost positions based on the render delta. While this worked during smooth gameplay, it created problems during frame drops or uneven frame timing. Specifically, during a recent test, a ghost would visibly \"drift\" out of alignment during Turn 3 because the interpolation couldn't reconcile the gap between the last rendered frame and the actual simulation state. The ghost wasn't following the track; it was following the stutter.\n\nWe have refactored the system to sample both replay frames using the fixed simulation tick instead of the variable render time. This ensures that regardless of your frame rate, the ghost's position is locked to the underlying physics logic.\n\nWe've verified this with a local 90-second deterministic replay, which now matches all checkpoints perfectly. While we haven't run a full two-player regression yet, the core logic for single-player ghost tracking is now solid. Your replays should now stay on rails.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 217,
+            "prompt_tokens": 2543,
+            "total_tokens": 2760,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 2543,
+            "prompt_ms": 2502.811,
+            "prompt_per_token_ms": 0.9841962249311837,
+            "prompt_per_second": 1016.0575448965184,
+            "predicted_n": 217,
+            "predicted_ms": 9192.588,
+            "predicted_per_token_ms": 42.558277777777775,
+            "predicted_per_second": 23.497191432924005
+          },
+          "linter_findings": []
+        }
+      ]
+    },
+    {
+      "case": "slop",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Rewrite this paragraph for a plain English blog. Keep both concrete facts, and return only the finished paragraph.\n \nIn today's fast-paced world, it's important to note that our practice room is a game-changer. At its core, moving the amplifier 40 cm away from the back wall reduced the rattle in the door. The band recorded one take after the move. This powerful reminder highlights the importance of making meaningful changes that unlock our potential."
+        }
+      ],
+      "max_tokens": 420,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 44,
+          "wall_s": 2.344,
+          "response": "Moving the amplifier just 40 cm away from the back wall stopped the door from rattling. After making this simple change, the band was able to record their song in just one take. This shows how even small adjustments can make a big difference.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 51,
+            "prompt_tokens": 109,
+            "total_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 109,
+            "prompt_ms": 258.765,
+            "prompt_per_token_ms": 2.373990825688073,
+            "prompt_per_second": 421.23161942302863,
+            "predicted_n": 51,
+            "predicted_ms": 2057.202,
+            "predicted_per_token_ms": 41.144040000000004,
+            "predicted_per_second": 24.304856790922813
+          },
+          "linter_findings": []
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 27,
+          "wall_s": 4.63,
+          "response": "Moving the amplifier 40 cm away from the back wall stopped the door from rattling. The band recorded their track in a single take after the change.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 32,
+            "prompt_tokens": 3402,
+            "total_tokens": 3434,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 3402,
+            "prompt_ms": 3283.454,
+            "prompt_per_token_ms": 0.965154027042916,
+            "prompt_per_second": 1036.1040538408638,
+            "predicted_n": 32,
+            "predicted_ms": 1324.882,
+            "predicted_per_token_ms": 42.738129032258065,
+            "predicted_per_second": 23.398310189133824
+          },
+          "linter_findings": []
+        }
+      ]
+    },
+    {
+      "case": "good",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Rewrite only if the prose needs a concrete edit. Preserve deliberate rhythm and return only the resulting text.\n \nI kept the old ticket in my coat. By February the ink had run, but the crease still showed me where I'd folded it at the station. I put it back."
+        }
+      ],
+      "max_tokens": 300,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 30,
+          "wall_s": 1.757,
+          "response": "I kept the old ticket in my coat. By February the ink had run, but the crease still showed where I'd folded it at the station. I put it back.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 37,
+            "prompt_tokens": 73,
+            "total_tokens": 110,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 73,
+            "prompt_ms": 246.326,
+            "prompt_per_token_ms": 3.3743287671232878,
+            "prompt_per_second": 296.35523655643334,
+            "predicted_n": 37,
+            "predicted_ms": 1495.093,
+            "predicted_per_token_ms": 41.53036111111111,
+            "predicted_per_second": 24.07876968188601
+          },
+          "linter_findings": []
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 31,
+          "wall_s": 4.889,
+          "response": "I kept the old ticket in my coat. By February the ink had run, but the crease still showed me where I'd folded it at the station. I put it back.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 38,
+            "prompt_tokens": 3366,
+            "total_tokens": 3404,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 3366,
+            "prompt_ms": 3273.029,
+            "prompt_per_token_ms": 0.9723793820558526,
+            "prompt_per_second": 1028.4051867551432,
+            "predicted_n": 38,
+            "predicted_ms": 1590.698,
+            "predicted_per_token_ms": 42.99183783783784,
+            "predicted_per_second": 23.260229157263037
+          },
+          "linter_findings": []
+        }
+      ]
+    },
+    {
+      "case": "protected",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Rewrite this short release note minimally. Keep the exact heading, names, quotes, numbers, units, versions, commands, and link text and URL. Preserve the uncertainty and ownership of the claims. Output only the resulting Markdown.\n \n## Iris Bridge v2.4.1\n \nIt is important to note that Mina Patel measured 3.5 MB/s on 7 May 2026. Mina said, “The first run may be noisy.” Run `iris check --dry-run` before copying a file. See the [release notes](https://example.com/iris/v2.4.1). We haven't tested live transfers."
+        }
+      ],
+      "max_tokens": 520,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 49,
+          "wall_s": 3.773,
+          "response": "## Iris Bridge v2.4.1\n\nMina Patel measured 3.5 MB/s on 7 May 2026. Mina said, “The first run may be noisy.” Run `iris check --dry-run` before copying a file. See the [release notes](https://example.com/iris/v2.4.1). Live transfers have not been tested.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 85,
+            "prompt_tokens": 153,
+            "total_tokens": 238,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 153,
+            "prompt_ms": 297.201,
+            "prompt_per_token_ms": 1.9424901960784315,
+            "prompt_per_second": 514.8031130447071,
+            "predicted_n": 85,
+            "predicted_ms": 3463.757,
+            "predicted_per_token_ms": 41.23520238095238,
+            "predicted_per_second": 24.25112385193303
+          },
+          "linter_findings": []
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 47,
+          "wall_s": 6.874,
+          "response": "## Iris Bridge v2.4.1\n\nMina Patel measured 3.5 MB/s on 7 May 2026. Mina noted, “The first run may be noisy.” Run `iris check --dry-run` before copying a file. See the [release notes](https://example.com/iris/v2.4.1). Live transfers remain untested.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 83,
+            "prompt_tokens": 3498,
+            "total_tokens": 3581,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 3498,
+            "prompt_ms": 3340.28,
+            "prompt_per_token_ms": 0.9549113779302459,
+            "prompt_per_second": 1047.2175985246745,
+            "predicted_n": 83,
+            "predicted_ms": 3511.638,
+            "predicted_per_token_ms": 42.82485365853658,
+            "predicted_per_second": 23.350926262900675
+          },
+          "linter_findings": []
+        }
+      ]
+    },
+    {
+      "case": "voice",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Calibrate my personal writing voice from these three supplied examples. Give me a concise, reusable voice profile only. Cite a short pattern or phrase from the samples for each observation and mark uncertainties. Do not invent family details or a backstory.\n \n1. I took the long way to the shop. The dog didn't ask why. That's one point in his favour.\n2. Three screws left over. I can account for two, which feels like progress. The bookshelf is upright for now.\n3. The kettle took its time. So did I. By the time it clicked, the thing I meant to say had stopped sounding clever."
+        }
+      ],
+      "max_tokens": 560,
+      "runs": [
+        {
+          "model": "creative-writing",
+          "system_skill": false,
+          "words": 157,
+          "wall_s": 11.434,
+          "response": "**Voice Profile**\n\n**Tone:** Understated, wry, and observational. The voice favors dry humor and understated irony over melodrama.\n\n**Stylistic Markers:**\n*   **Dry Wit:** Uses understated irony to create humor. (*\"That's one point in his favour.\"*)\n*   **Rhythmic Contrast:** Employs a pattern of short, declarative sentences followed by a wry observation. (*\"The kettle took its time. So did I.\"*)\n*   **Pragmatic Focus:** Finds narrative significance in mundane details. (*\"I can account for two, which feels like progress.\"*)\n*   **Self-Deprecating Realism:** Admits to social awkwardness or hesitation in a matter-of-fact way. (*\"...had stopped sounding clever.\"*)\n\n**Structural Patterns:**\n*   **The \"Observation + Punchline\" structure:** Sets a scene with a simple fact, then follows with a wry commentary. (*\"Three screws left over. ... The bookshelf is upright for now.\"*)\n\n**Uncertainties:**\n*   **Tense/Tense Consistency:** Not enough data to determine if the voice favors present-tense immediacy or reflective past-tense narration.\n*   **Pacing:** Cannot determine if this is a snapshot of a larger narrative style or a consistent stylistic choice for longer prose.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 278,
+            "prompt_tokens": 147,
+            "total_tokens": 425,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 147,
+            "prompt_ms": 283.854,
+            "prompt_per_token_ms": 1.9309795918367345,
+            "prompt_per_second": 517.8718637045805,
+            "predicted_n": 278,
+            "predicted_ms": 11125.952,
+            "predicted_per_token_ms": 40.1658916967509,
+            "predicted_per_second": 24.896745914417036
+          },
+          "linter_findings": [
+            {
+              "rule": "formatting",
+              "category": "formatting-overuse",
+              "severity": "med",
+              "line": 5,
+              "col": 1,
+              "excerpt": "bold ×5",
+              "why": "Formatting doing a structure's job without the structure.",
+              "fix": "Bold every other word and none stand out."
+            },
+            {
+              "rule": "formatting",
+              "category": "formatting-overuse",
+              "severity": "med",
+              "line": 11,
+              "col": 1,
+              "excerpt": "bold ×2",
+              "why": "Formatting doing a structure's job without the structure.",
+              "fix": "Bold every other word and none stand out."
+            },
+            {
+              "rule": "formatting",
+              "category": "formatting-overuse",
+              "severity": "med",
+              "line": 14,
+              "col": 1,
+              "excerpt": "bold ×3",
+              "why": "Formatting doing a structure's job without the structure.",
+              "fix": "Bold every other word and none stand out."
+            }
+          ]
+        },
+        {
+          "model": "human-writing",
+          "system_skill": true,
+          "words": 169,
+          "wall_s": 17.521,
+          "response": "**Voice Profile — Personal**\n\n- **Language / variant:** en-US / en-GB (Neutral)\n- **Audience:** General / Personal readers\n- **Tone:** Understated, wry, self-deprecating\n- **Formality:** Informal / Casual\n- **Rhythm:** Short, declarative sentences; abrupt pauses (e.g., \"So did I.\", \"That's one point...\")\n- **Density:** Low; emphasizes observation over exposition\n- **Vocabulary:** Plain-word preference; concrete objects (kettle, screws, shop)\n- **Humor:** Dry, observational\n- **Quirks:** Use of understated irony (\"stopped sounding clever\"), understated stakes, period-stop for emphasis.\n- **Preferred phrasings:** \"That's one point in his favour\", \"for now\", \"I can account for\"\n- **Banned phrasings:** None identified.\n- **Typical length:** Short to medium\n- **Genre:** Narrative / Memoir / Observational prose\n- **Communication goal:** Sharing a moment through a specific, wry lens.\n\n**Evidence per trait:**\n- **Rhythm:** Short sentences used for comedic timing (\"The dog didn't ask why. That's one point in his favour.\")\n- **Tone:** Understated irony (\"the thing I meant to say had stopped sounding clever\")\n- **Density:** Focus on immediate physical details (\"Three screws left over\")\n- **Humor:** Dry observation (\"The kettle took its time. So did I.\")\n- **Uncertainty:** Longer-form pacing; broader narrative structure; preferred punctuation habits beyond periods are unclear.",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 345,
+            "prompt_tokens": 3020,
+            "total_tokens": 3365,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 3020,
+            "prompt_ms": 2911.112,
+            "prompt_per_token_ms": 0.9639443708609272,
+            "prompt_per_second": 1037.4042633880113,
+            "predicted_n": 345,
+            "predicted_ms": 14589.842,
+            "predicted_per_token_ms": 42.412331395348836,
+            "predicted_per_second": 23.578048343498168
+          },
+          "linter_findings": [
+            {
+              "rule": "formatting",
+              "category": "formatting-overuse",
+              "severity": "med",
+              "line": 3,
+              "col": 1,
+              "excerpt": "bold ×14",
+              "why": "Formatting doing a structure's job without the structure.",
+              "fix": "Bold every other word and none stand out."
+            },
+            {
+              "rule": "repetition",
+              "category": "repetition",
+              "severity": "med",
+              "line": 7,
+              "col": 80,
+              "excerpt": "“that's one point” ×3",
+              "why": "Same wording repeated; merge or cut.",
+              "fix": "Keep one instance or merge the duplicates."
+            },
+            {
+              "rule": "formatting",
+              "category": "formatting-overuse",
+              "severity": "med",
+              "line": 18,
+              "col": 1,
+              "excerpt": "bold ×6",
+              "why": "Formatting doing a structure's job without the structure.",
+              "fix": "Bold every other word and none stand out."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

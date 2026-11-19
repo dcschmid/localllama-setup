@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pi in einer Sandbox: schreibend nur das aktuelle Projekt, lesend Skills und
+# Pi-Konfiguration, kein Zugriff auf SSH-Schluessel, Browserprofile oder
+# Cloud-Zugangsdaten. Netzwerk bleibt fuer Loopback erhalten (Router und MCP).
+set -euo pipefail
+
+project=$PWD
+run=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+skills=$HOME/dev/github/skillset/skills
+agentdir=$HOME/.pi/agent
+pi_bin=$(command -v pi)
+
+exec /usr/bin/bwrap \
+    --die-with-parent \
+    --unshare-pid \
+    --ro-bind / / \
+    --dev /dev \
+    --proc /proc \
+    --bind "$project" "$project" \
+    --ro-bind "$skills" "$skills" \
+    --bind "$agentdir" "$agentdir" \
+    --bind "$run" "$run" \
+    --tmpfs "$HOME/.ssh" \
+    --tmpfs "$HOME/.aws" \
+    --setenv PI_SANDBOX 1 \
+    --setenv PI_CODING_AGENT_DIR "$agentdir" \
+    "$pi_bin" "$@"

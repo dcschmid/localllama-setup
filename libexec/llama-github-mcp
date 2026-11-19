@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if ! token=$("$HOME/.local/bin/gh" auth token --hostname github.com 2>/dev/null) || [[ -z $token ]]; then
+    printf '%s\n' 'GitHub MCP benötigt eine vorhandene gh-Anmeldung für github.com.' >&2
+    exit 1
+fi
+export GITHUB_PERSONAL_ACCESS_TOKEN=$token
+unset token
+exec "$HOME/.local/opt/llama.cpp/github-mcp-v2.2.0/github-mcp-server" stdio \
+    --read-only --toolsets '' --tools get_latest_release,list_releases,get_file_contents,search_repositories

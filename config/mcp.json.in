@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "skills": {
+      "command": "@NODE@",
+      "args": [
+        "@HOME@/.local/opt/llama.cpp/mcp/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "--read-only",
+        "@SKILLS@"
+      ],
+      "timeout_ms": 10000
+    },
+    "context7": {
+      "command": "@NODE@",
+      "args": [
+        "@HOME@/.local/opt/llama.cpp/mcp/node_modules/@upstash/context7-mcp/dist/index.js"
+      ],
+      "env": {
+        "OTEL_SDK_DISABLED": "true"
+      },
+      "timeout_ms": 20000
+    },
+    "github": {
+      "command": "@HOME@/.local/libexec/llama-github-mcp",
+      "args": [],
+      "timeout_ms": 10000
+    }
+  }
+}

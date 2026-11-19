@@ -1,0 +1,8 @@
+{
+  "enableDiscoverModels": false,
+  "useHuggingFaceHub": false,
+  "groupModelsByFamily": false,
+  "agenticMaxTurns": 8,
+  "mcpRequestTimeoutSeconds": 35,
+  "mcpServers": "[{\"id\":\"llama-websearch\",\"displayName\":\"Websearch & Deep Research\",\"url\":\"http://127.0.0.1:8642/mcp\",\"enabled\":true,\"useProxy\":false},{\"id\":\"llama-context7\",\"displayName\":\"Context7\",\"url\":\"http://127.0.0.1:8643/servers/context7/mcp\",\"enabled\":true,\"useProxy\":false},{\"id\":\"llama-github\",\"displayName\":\"GitHub\",\"url\":\"http://127.0.0.1:8643/servers/github/mcp\",\"enabled\":true,\"useProxy\":false},{\"id\":\"llama-skills\",\"displayName\":\"Skill-Sammlung (read-only)\",\"url\":\"http://127.0.0.1:8643/servers/skills/mcp\",\"enabled\":true,\"useProxy\":false}]"
+}

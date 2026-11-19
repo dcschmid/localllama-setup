@@ -1,0 +1,76 @@
+version = 1
+
+[*]
+parallel = 1
+device = CUDA0
+flash-attn = on
+threads = 12
+threads-batch = 12
+batch-size = 512
+ubatch-size = 256
+fit-target = 1024
+cache-ram = 512
+sleep-idle-seconds = 900
+jinja = true
+
+[research]
+model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
+ctx-size = 32768
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 1024
+
+[deep-research]
+model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
+ctx-size = 32768
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 1024
+reasoning-budget = 128
+
+[coding-long-256k]
+model = @HOME@/models/gguf/Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf
+ctx-size = 262144
+n-predict = 8192
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+
+[creative-writing]
+model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
+ctx-size = 16384
+cache-type-k = q8_0
+cache-type-v = q8_0
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"generate","writing_genre":"fiction"}
+
+[human-writing]
+model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
+ctx-size = 16384
+cache-type-k = q8_0
+cache-type-v = q8_0
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"generate","writing_genre":"editorial"}
+
+[human-rewrite]
+model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
+ctx-size = 16384
+cache-type-k = q8_0
+cache-type-v = q8_0
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"rewrite","writing_genre":"editorial"}
+
+[human-audit]
+model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
+ctx-size = 16384
+cache-type-k = q8_0
+cache-type-v = q8_0
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}

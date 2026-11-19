@@ -1,0 +1,30 @@
+{
+  "model": "coding-long-128k",
+  "input_tokens": 100708,
+  "wall_s": 179.1167528850492,
+  "ack": "READY",
+  "first_wall": 74.47062270506285,
+  "second_wall": 104.64613017998636,
+  "first_timing": {
+    "cache_n": 0,
+    "prompt_n": 49432,
+    "prompt_ms": 74370.28,
+    "prompt_per_token_ms": 1.5044966823110535,
+    "prompt_per_second": 664.6741144446411,
+    "predicted_n": 2,
+    "predicted_ms": 42.003,
+    "predicted_per_token_ms": 42.003,
+    "predicted_per_second": 23.807823250720187
+  },
+  "timings": {
+    "cache_n": 49433,
+    "prompt_n": 51480,
+    "prompt_ms": 88377.788,
+    "prompt_per_token_ms": 1.7167402486402485,
+    "prompt_per_second": 582.4993040106413,
+    "predicted_n": 243,
+    "predicted_ms": 16170.031,
+    "predicted_per_token_ms": 66.81830991735538,
+    "predicted_per_second": 14.965957702864019
+  }
+}

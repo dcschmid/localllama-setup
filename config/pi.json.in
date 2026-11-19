@@ -1,0 +1,21 @@
+{
+  "piVersion": "1.5.2",
+  "package": "@earendil-works/pi-coding-agent",
+  "agentDir": "@HOME@/.pi/agent",
+  "routerUrl": "http://127.0.0.1:8080",
+  "defaultProvider": "llama.cpp",
+  "defaultModel": "coding-long-256k",
+  "contextTokens": 262144,
+  "outputTokens": 8192,
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 39322,
+    "keepRecentTokens": 20000
+  },
+  "skills": "@SKILLS@",
+  "mcpServers": {
+    "websearch": "http://127.0.0.1:8642/mcp",
+    "context7": "http://127.0.0.1:8643/servers/context7/mcp",
+    "github": "http://127.0.0.1:8643/servers/github/mcp"
+  }
+}

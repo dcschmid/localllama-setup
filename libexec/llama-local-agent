@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${1:-} == --inside ]]; then
+    shift
+    socket=$1
+    shift
+    /usr/bin/socat -d0 TCP-LISTEN:8080,bind=127.0.0.1,reuseaddr,fork "UNIX-CONNECT:$socket" &
+    relay=$!
+    trap 'kill "$relay" 2>/dev/null || true' EXIT
+    for ((attempt=0; attempt<20; attempt++)); do
+        if /usr/bin/curl -qfsS --max-time 1 http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            "$@"
+            exit
+        fi
+        sleep 0.1
+    done
+    printf '%s\n' 'Der isolierte Zugriff auf llama.cpp ist fehlgeschlagen.' >&2
+    exit 1
+fi
+
+agent=${0##*/}
+case "$agent" in
+    claude-local|codex-local) client=${agent%-local} ;;
+    *) printf 'Unbekannter Agent: %s\n' "$agent" >&2; exit 2 ;;
+esac
+executable="$HOME/.local/bin/$client"
+if [[ ! -x $executable ]]; then
+    executable=$(command -v "$client") || {
+        printf '%s ist nicht installiert oder fehlt im PATH.\n' "$client" >&2
+        exit 1
+    }
+fi
+model=coding-long-256k
+if [[ ${1:-} == --model ]]; then
+    if [[ ${2:-} != "$model" ]]; then
+        printf 'Lokales Coding verwendet %s.\n' "$model" >&2
+        exit 2
+    fi
+    shift 2
+fi
+for argument in "$@"; do
+    case "$argument" in
+        --) break ;;
+        --model|--model=*|-m|-m?*|--fallback-model|--fallback-model=*)
+            printf 'Lokales Coding verwendet %s.\n' "$model" >&2
+            exit 2
+            ;;
+    esac
+done
+
+config="$HOME/.config/llama.cpp"
+run=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+socket="$run/llama-cpp/server.sock"
+"$HOME/.local/bin/llama-webui" --check
+request() {
+    /usr/bin/curl -qfsS --unix-socket "$socket" "$@"
+}
+context=262144
+if ! request --max-time 120 "http://localhost/props?model=$model" |
+    /usr/bin/jq -e --arg model "$model" --argjson context "$context" \
+        '.model_alias == $model and .default_generation_settings.n_ctx == $context' >/dev/null; then
+        printf 'Modell %s mit %s Kontext-Tokens konnte nicht geladen werden.\n' "$model" "$context" >&2
+        exit 1
+fi
+
+isolated=(
+    /usr/bin/bwrap --unshare-net --unshare-pid --die-with-parent --dev-bind / /
+    --proc /proc --tmpfs "$run" --ro-bind "$run/llama-cpp" "$run/llama-cpp"
+    "$HOME/.local/libexec/llama-local-agent" --inside "$socket"
+)
+clean=(
+    /usr/bin/env -i "HOME=$HOME" "USER=${USER:-$(id -un)}" "PATH=$PATH"
+    "TERM=${TERM:-xterm-256color}" "LANG=${LANG:-C.UTF-8}"
+    "NO_PROXY=localhost,127.0.0.1" "no_proxy=localhost,127.0.0.1"
+)
+case "$agent" in
+    claude-local)
+        exec "${clean[@]}" "CLAUDE_CONFIG_DIR=$config/claude" \
+            ANTHROPIC_BASE_URL=http://127.0.0.1:8080 ANTHROPIC_API_KEY=local-placeholder \
+            "ANTHROPIC_MODEL=$model" "ANTHROPIC_DEFAULT_HAIKU_MODEL=$model" \
+            "ANTHROPIC_DEFAULT_SONNET_MODEL=$model" "ANTHROPIC_DEFAULT_OPUS_MODEL=$model" \
+            "ANTHROPIC_CUSTOM_MODEL_OPTION=$model" 'ANTHROPIC_CUSTOM_MODEL_OPTION_NAME=Coding Long 256K' \
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=$context" "CLAUDE_CODE_AUTO_COMPACT_WINDOW=$context" \
+            CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=85 \
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1 \
+            "${isolated[@]}" "$executable" --strict-mcp-config --model "$model" "$@"
+        ;;
+    codex-local)
+        exec "${clean[@]}" "CODEX_HOME=$config/codex" CODEX_DISABLE_TELEMETRY=1 \
+            "${isolated[@]}" "$executable" -p llama-cpp -m "$model" \
+            -c "model_context_window=$context" -c model_auto_compact_token_limit=222822 "$@"
+        ;;
+esac

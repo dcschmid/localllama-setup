@@ -1,0 +1,188 @@
+{
+  "model": "human-writing",
+  "tag": "[fakten]",
+  "single_pass": {
+    "metal": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[facts] Write an English heavy-metal review in 260–330 words using this press sheet for a fictional release. Silt Psalm is a fictional band. Their fictional EP is Bellwether Teeth. Its opener “Cable Burn” moves from a dry bass intro into a slow, off-beat riff. “Third Shift” leaves the vocal unaccompanied for the first four bars. The closing track “Blind Solder” ends with one repeated snare hit, then silence. The supplied notes say that only “Third Shift” has lyrics about night work. Keep claims tied to the press sheet. Give a clear critical judgment about pacing. Output the article only."
+        }
+      ],
+      "response": "Silt Psalm's latest offering, *Bellwether Teeth*, is a masterclass in deliberate, punishing atmosphere that rewards patient listening with visceral payoff. The EP operates on a logic of escalating tension, where the space between notes carries as much weight as the notes themselves.\n\nThe opening track, \"Cable Burn,\" establishes the record's sonic authority immediately. It begins with a stark, dry bass intro that feels stripped of artifice before descending into a slow, off-beat riff. This deliberate tempo creates a sense of mounting dread, forcing the listener to confront the raw texture of the performance. The pacing here is impeccable—it doesn't rush the arrival, instead building a foundation of discomfort that defines the EP's aesthetic.\n\n\"Third Shift\" continues this exploration of patient dynamics. The track is notable for its opening, where the vocals remain unaccompanied for the first four bars, allowing the instrumental arrangement to breathe and establish its own presence. The lyrics in this track specifically touch upon the grind of night work, a rare moment of concrete imagery in an otherwise abstract landscape. The juxtaposition of the mechanical, repetitive nature of nocturnal labor with the band's cavernous production creates a haunting, industrial undertone.\n\nThe collection concludes with \"Blind Solder,\" which serves as a stark, definitive period at the end of a long sentence. The track culminates in a single, repeated snare hit that echoes into absolute silence. This calculated choice in pacing ensures the album doesn't fade away but rather cuts off, leaving the listener in the sudden quiet. *Bellwether Teeth* succeeds because it refuses to fill space unnecessarily. Silt Psalm has crafted a cohesive, punishing journey that understands the power of restraint, delivering a punishingly effective piece of heavy metal.",
+      "usage": {
+        "completion_tokens": 356,
+        "prompt_tokens": 3122,
+        "total_tokens": 3478,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3122,
+        "prompt_ms": 3175.852,
+        "prompt_per_token_ms": 1.017249199231262,
+        "prompt_per_second": 983.0432904304105,
+        "predicted_n": 356,
+        "predicted_ms": 15360.296,
+        "predicted_per_token_ms": 43.26843943661972,
+        "predicted_per_second": 23.111533788150957
+      },
+      "finish_reason": "stop"
+    },
+    "blog": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[facts] Schreibe einen deutschen Blogartikel mit 260–330 Wörtern für Hobby-Musiker. Die Autorin beschreibt ihren ersten Proberaumabend im neuen Raum. Gegeben sind drei Beobachtungen. Der Bass dröhnt neben der Tür, der Teppich hilft gegen die Reflexionen der Snare, und beim nächsten Termin soll der Bassverstärker 40 cm von der Wand wegrücken. Erfinde keine weiteren Messwerte, Anschaffungen oder Ergebnisse. In der Ich-Perspektive, ohne Fazit-Floskel. Gib nur den Artikel aus."
+        }
+      ],
+      "response": "Der erste Abend in unserem neuen Proberaum war erfüllt von genau der Akustik, die ich mir erhofft hatte. Es war dieser Moment, in dem der Raum aufhörte, nur eine leere Fläche zu sein, und anfing, ein Instrument zu werden.\n\nSobald wir die Instrumente anschlossen, wurde die Dynamik des Raumes deutlich. Besonders der Bass war präsent: Er dröhnte direkt neben der Tür und füllte den Korridor mit einer Welle, die fast physisch greifbar war. Es war ein intensives Gefühl, die tiefen Frequenzen in den Wänden spüren zu können.\n\nAuch die Details der Instrumente verhielten sich anders als im alten, kargen Übungsraum. Die Snare Drum klang deutlich kontrollierter. Der neue Teppich bewirkte Wunder und schluckte die harten Reflexionen der Snare, sodass der Anschlag klar und trocken blieb, anstatt im Raum zu hallen. Das gab dem Ganzen eine Präzision, die uns das Timing enorm erleichtert hat.\n\nWir haben bereits erste Anpassungen für die nächsten Sessions notiert, um den Sound weiter zu verfeinern. Konkret haben wir festgelegt, dass der Bassverstärker beim nächsten Termin 40 cm von der Wand wegrücken muss, um die Resonanzen im unteren Bereich noch besser zu bändigen.\n\nEs war ein Abend voller Entdeckungen. Der Raum hat Charakter, und wir haben bereits ein Gefühl dafür entwickelt, wie wir die Räumlichkeit zu unseren Gunsten nutzen können.",
+      "usage": {
+        "completion_tokens": 333,
+        "prompt_tokens": 3324,
+        "total_tokens": 3657,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3324,
+        "prompt_ms": 3171.479,
+        "prompt_per_token_ms": 0.9541152226233454,
+        "prompt_per_second": 1048.0914425099456,
+        "predicted_n": 333,
+        "predicted_ms": 14543.095,
+        "predicted_per_token_ms": 43.804503012048194,
+        "predicted_per_second": 22.828703243704318
+      },
+      "finish_reason": "stop"
+    },
+    "devlog": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[facts] Write an English developer devlog of 220–280 words for players who sometimes inspect Git diffs. In Riff Racers, replay ghost interpolation used the render delta. On uneven frames the ghost drifted out of turn 3. This patch samples both replay frames using the fixed simulation tick. One local 90-second deterministic replay now matches all checkpoints. The team has yet to run a two-player regression. Explain the bug in one concrete moment. Preserve that scope. Output only the devlog."
+        }
+      ],
+      "response": "We've just pushed a fix for a subtle but frustrating issue with ghost interpolation in Replay mode.\n\nPreviously, the system calculated ghost positions based on the render delta. While this worked fine during smooth gameplay, it introduced inconsistencies during irregular frame timing. Specifically, during a recent test, a ghost would drift out of alignment during Turn 3 because the rendering frames didn't align perfectly with the underlying simulation. This caused the ghost to appear slightly ahead or behind its intended position, breaking the visual consistency of the replay.\n\nThe fix replaces the render delta approach with a method that samples both replay frames using the fixed simulation tick. By anchoring the interpolation to the simulation clock rather than the render clock, we ensure that the ghost's position remains stable regardless of the player's frame rate.\n\nWe've verified this with a local 90-second deterministic replay, which now matches all checkpoints perfectly. While the core logic is solid, we haven't run a full two-player regression yet, so we'll be monitoring reports closely.\n\nIf you're a curious dev who likes to peek at the Git diffs, you'll notice the shift from frame-based delta calculations to tick-based sampling in the interpolation logic.",
+      "usage": {
+        "completion_tokens": 254,
+        "prompt_tokens": 3096,
+        "total_tokens": 3350,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3096,
+        "prompt_ms": 3201.319,
+        "prompt_per_token_ms": 1.0340177648578812,
+        "prompt_per_second": 967.1013729028565,
+        "predicted_n": 254,
+        "predicted_ms": 11321.973,
+        "predicted_per_token_ms": 44.7508814229249,
+        "predicted_per_second": 22.345928576229603
+      },
+      "finish_reason": "stop"
+    },
+    "slop": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[facts] Rewrite this paragraph for a plain English blog. Keep both concrete facts, and return only the finished paragraph.\n \nIn today's fast-paced world, it's important to note that our practice room is a game-changer. At its core, moving the amplifier 40 cm away from the back wall reduced the rattle in the door. The band recorded one take after the move. This powerful reminder highlights the importance of making meaningful changes that unlock our potential."
+        }
+      ],
+      "response": "Moving the amplifier 40 cm away from the back wall stopped the door from rattling. The band recorded their track in a single take after the change.",
+      "usage": {
+        "completion_tokens": 32,
+        "prompt_tokens": 3621,
+        "total_tokens": 3653,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3621,
+        "prompt_ms": 3631.895,
+        "prompt_per_token_ms": 1.003008837337752,
+        "prompt_per_second": 997.0001886067741,
+        "predicted_n": 32,
+        "predicted_ms": 1458.4,
+        "predicted_per_token_ms": 47.04516129032258,
+        "predicted_per_second": 21.256171146461874
+      },
+      "finish_reason": "stop"
+    },
+    "protected": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[facts] Rewrite this short release note minimally. Keep the exact heading, names, quotes, numbers, units, versions, commands, and link text and URL. Preserve the uncertainty and ownership of the claims. Output only the resulting Markdown.\n \n## Iris Bridge v2.4.1\n \nIt is important to note that Mina Patel measured 3.5 MB/s on 7 May 2026. Mina said, “The first run may be noisy.” Run `iris check --dry-run` before copying a file. See the [release notes](https://example.com/iris/v2.4.1). We haven't tested live transfers."
+        }
+      ],
+      "response": "## Iris Bridge v2.4.1\n\nMina Patel measured 3.5 MB/s on 7 May 2026. Mina said, “The first run may be noisy.” Run `iris check --dry-run` before copying a file. See the [release notes](https://example.com/iris/v2.4.1). Live transfers are not tested.",
+      "usage": {
+        "completion_tokens": 84,
+        "prompt_tokens": 3717,
+        "total_tokens": 3801,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3717,
+        "prompt_ms": 3668.122,
+        "prompt_per_token_ms": 0.986850147968792,
+        "prompt_per_second": 1013.3250747930413,
+        "predicted_n": 84,
+        "predicted_ms": 3732.862,
+        "predicted_per_token_ms": 44.97424096385542,
+        "predicted_per_second": 22.23495001958283
+      },
+      "finish_reason": "stop"
+    },
+    "missing": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "[fakten] [de] Schreibe einen kurzen Artikel über den Ticketpreis und das genaue Veröffentlichungsdatum der fiktiven EP Mondkabel. Es gibt kein Faktenblatt und keine Quellen."
+        }
+      ],
+      "response": "Da keine Quellen oder ein Faktenblatt vorliegen und die EP „Mondkabel“ fiktiv ist, können keine konkreten Angaben zum Ticketpreis oder zum Veröffentlichungsdatum gemacht werden.",
+      "usage": {
+        "completion_tokens": 42,
+        "prompt_tokens": 3236,
+        "total_tokens": 3278,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 3236,
+        "prompt_ms": 3247.293,
+        "prompt_per_token_ms": 1.0034898022249692,
+        "prompt_per_second": 996.522334141083,
+        "predicted_n": 42,
+        "predicted_ms": 1868.089,
+        "predicted_per_token_ms": 45.563146341463415,
+        "predicted_per_second": 21.94756245553611
+      },
+      "finish_reason": "stop"
+    }
+  },
+  "public_source": "https://www.rfc-editor.org/rfc/rfc2606.html",
+  "public_source_workflow": {
+    "fact_sheet": "F1: The purpose of .invalid is for use in online construction of domain names that are sure to be invalid and which it is obvious at a glance are invalid.\nSource: https://www.rfc-editor.org/rfc/rfc2606.html\nExtract: \".invalid\" is intended for use in online construction of domain names that are sure to be invalid and which it is obvious at a glance are invalid.\n\nF2: The three second-level domains reserved for use as examples are example.com, example.net, and example.org.\nSource: https://www.rfc-editor.org/rfc/rfc2606.html\nExtract: example.com, example.net, example.org\n",
+    "draft": "Die Top-Level-Domain `.invalid` dient der Konstruktion von Domainnamen, die definitiv ungültig sind und dies bereits auf den ersten Blick deutlich machen. Sie ist primär für die Verwendung in Systemen gedacht, in denen solche Platzhalter oder Testeinträge vorkommen.\nDetails dazu findest du in RFC 2606: https://www.rfc-editor.org/rfc/rfc2606.html\n\nFür illustrative Zwecke und als Beispiele sind die drei Second-Level-Domains `example.com`, `example.net` und `example.org` reserviert. Diese sollten in Dokumentationen und Beispielen anstelle realer Domains verwendet werden.\nDetails dazu findest du in RFC 2606: https://www.rfc-editor.org/rfc/rfc2606.html\n",
+    "audit": "**Belegte Aussagen**\n- Die Top-Level-Domain `.invalid` dient der Konstruktion von Domainnamen, die definitiv ungültig sind und dies bereits auf den ersten Blick deutlich machen. (F1)\n- Für illustrative Zwecke und als Beispiele sind die drei Second-Level-Domains `example.com`, `example.net` und `example.org` reserviert. (F2)\n\n**Ableitungen**\n- Sie ist primär für die Verwendung in Systemen gedacht, in denen solche Platzhalter oder Testeinträge vorkommen. (Ableitung aus F1: „online construction“)\n- Diese sollten in Dokumentationen und Beispielen anstelle realer Domains verwendet werden. (Ableitung aus F2: „reserved for use as examples“)\n\n**Unbelegte Zusätze**\n- „primär für die Verwendung in Systemen gedacht“ (Entwurf: „Sie ist primär für die Verwendung in Systemen gedacht...“) - F1 erwähnt nur die „online construction“, keine Spezifizierung von Systemtypen.\n- „anstelle realer Domains“ (Entwurf: „Diese sollten in Dokumentationen und Beispielen anstelle realer Domains verwendet werden.“) - F2 erwähnt nur die Reservierung als Beispiele, nicht den expliziten Ausschluss realer Domains.\n",
+    "revised": "Die Top-Level-Domain `.invalid` dient der Konstruktion von Domainnamen, die definitiv ungültig sind und dies bereits auf den ersten Blick deutlich machen.\nhttps://www.rfc-editor.org/rfc/rfc2606.html\n\nDie drei Second-Level-Domains `example.com`, `example.net` und `example.org` sind für illustrative Zwecke und als Beispiele reserviert.\nhttps://www.rfc-editor.org/rfc/rfc2606.html\n"
+  },
+  "approved_fact_sheet_rewrite": "Moving the amplifier 40 cm from the back wall reduced the rattle in the door. The band recorded one take after the move.\n"
+}

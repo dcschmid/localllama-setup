@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=llama.cpp
+Comment=Lokaler Chat mit CUDA
+Exec=@HOME@/.local/bin/llama-webui
+Icon=applications-science
+Terminal=false
+Categories=Utility;
+StartupNotify=false

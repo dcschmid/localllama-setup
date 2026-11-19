@@ -1,0 +1,13 @@
+[Unit]
+Description=Loopback HTTP gateway for llama.cpp MCP servers
+PartOf=llama-cpp.service
+After=llama-cpp.service
+
+[Service]
+Type=exec
+UMask=0077
+NoNewPrivileges=yes
+UnsetEnvironment=OPENAI_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN HF_TOKEN HUGGING_FACE_HUB_TOKEN GITHUB_TOKEN GH_TOKEN CONTEXT7_API_KEY OTEL_EXPORTER_OTLP_ENDPOINT
+ExecStart=%h/.local/opt/llama.cpp/mcp-http-v0.15.0/bin/mcp-proxy --host 127.0.0.1 --port 8643 --allow-origin http://127.0.0.1:8080 --initialization-timeout 12 --named-server-config %h/.config/llama.cpp/mcp.json
+Restart=on-failure
+RestartSec=3

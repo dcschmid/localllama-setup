@@ -1,0 +1,16 @@
+[Unit]
+Description=llama.cpp CUDA inference router
+Wants=llama-cpp-research.service llama-cpp-mcp.service
+
+[Service]
+Type=exec
+RuntimeDirectory=llama-cpp
+RuntimeDirectoryMode=0700
+UMask=0077
+UnsetEnvironment=OPENAI_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN HF_TOKEN HUGGING_FACE_HUB_TOKEN GITHUB_TOKEN GH_TOKEN CONTEXT7_API_KEY OTEL_EXPORTER_OTLP_ENDPOINT
+WorkingDirectory=%h/models/gguf
+ExecStartPre=-/usr/bin/python3 %h/.config/llama.cpp/writing/render.py
+ExecStart=%h/.local/opt/llama.cpp/current/llama-server --host 127.0.0.1,%t/llama-cpp/server.sock --port 8080 --webui-config-file %h/.config/llama.cpp/ui.json --cors-origins localhost --no-cors-credentials --models-preset %h/.config/llama.cpp/models.ini --models-max 1 --offline
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes

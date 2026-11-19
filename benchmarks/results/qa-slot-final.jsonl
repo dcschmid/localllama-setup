@@ -1,0 +1,7 @@
+{"stage": "cold", "wall_s": 3.5200756860431284, "timings": {"cache_n": 0, "prompt_n": 2664, "prompt_ms": 576.09, "prompt_per_token_ms": 0.21625000000000003, "prompt_per_second": 4624.277456647398, "predicted_n": 20, "predicted_ms": 205.899, "predicted_per_token_ms": 10.836789473684211, "predicted_per_second": 92.27825292983454}}
+{"stage": "warm-in-process", "wall_s": 0.2344621669035405, "timings": {"cache_n": 2663, "prompt_n": 1, "prompt_ms": 10.969, "prompt_per_token_ms": 10.969, "prompt_per_second": 91.16601331023794, "predicted_n": 20, "predicted_ms": 210.359, "predicted_per_token_ms": 11.071526315789475, "predicted_per_second": 90.32178323722778}}
+{"stage": "save", "result": [{"id_slot": 0, "filename": "local-fixture.bin", "n_saved": 2683, "n_written": 395668292, "timings": {"save_ms": 78.468}}, 0.08073358191177249]}
+{"stage": "unload", "result": [{"success": true}, 0.0009167399257421494]}
+{"stage": "reload", "seconds": 1.36641271202825}
+{"stage": "restore", "result": [{"id_slot": 0, "filename": "local-fixture.bin", "n_restored": 2683, "n_read": 395668292, "timings": {"restore_ms": 60.227}}, 0.06264000106602907]}
+{"stage": "restored", "wall_s": 0.21762351715005934, "timings": {"cache_n": 2663, "prompt_n": 1, "prompt_ms": 14.39, "prompt_per_token_ms": 14.39, "prompt_per_second": 69.49270326615705, "predicted_n": 20, "predicted_ms": 191.921, "predicted_per_token_ms": 10.101105263157894, "predicted_per_second": 98.99906732457627}}

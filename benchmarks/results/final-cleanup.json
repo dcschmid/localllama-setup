@@ -1,0 +1,298 @@
+{
+  "model": "Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus",
+  "coding_context": 32768,
+  "claude_initial": {
+    "exit": 124,
+    "seconds": 520.0,
+    "label": "default system prompt"
+  },
+  "clients": [
+    {
+      "case": "retry-codex",
+      "cli": "codex",
+      "exit": 0,
+      "seconds": 403.31,
+      "independent_contract_pass": true,
+      "test_count_last": 6,
+      "tools": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "usage": {
+        "input_tokens": 55996,
+        "cached_input_tokens": 46699,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1995,
+        "reasoning_output_tokens": 0
+      },
+      "decode_tps": [
+        8.98,
+        14.26,
+        14.02,
+        13.89,
+        14.25,
+        7.15
+      ],
+      "median_decode_tps": 13.955
+    },
+    {
+      "case": "compact-claude",
+      "cli": "claude",
+      "exit": 124,
+      "seconds": 550.0,
+      "independent_contract_pass": false,
+      "test_count_last": 1,
+      "tools": [
+        "Read",
+        "Read",
+        "Read",
+        "Read"
+      ],
+      "usage": {},
+      "decode_tps": [
+        2.09
+      ],
+      "median_decode_tps": 2.09
+    }
+  ],
+  "research": {
+    "model": "Gemma 4 26B A4B QAT",
+    "browser": "Firefox regular profile",
+    "search": "https://docs.python.org/3/library/decimal.html",
+    "deep_status": "completed",
+    "deep_source_urls": [
+      "https://docs.python.org/3/library/decimal.html"
+    ],
+    "deep_job_seconds": 90.026
+  },
+  "cyber-audit": {
+    "wall": 121.2621780091431,
+    "tokens": {
+      "completion_tokens": 318,
+      "prompt_tokens": 290,
+      "total_tokens": 608,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 290,
+      "prompt_ms": 42688.661,
+      "prompt_per_token_ms": 147.20227931034484,
+      "prompt_per_second": 6.793373069256026,
+      "predicted_n": 318,
+      "predicted_ms": 63195.998,
+      "predicted_per_token_ms": 199.35646056782335,
+      "predicted_per_second": 5.0161404207905695
+    }
+  },
+  "cyber-tools": {
+    "passed": true
+  },
+  "writing-story": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2800,
+      "prompt_ms": 3288.106,
+      "prompt_per_token_ms": 1.1743235714285716,
+      "prompt_per_second": 851.554055739079,
+      "predicted_n": 234,
+      "predicted_ms": 10615.272,
+      "predicted_per_token_ms": 45.55910729613734,
+      "predicted_per_second": 21.94950821797124
+    },
+    "usage": {
+      "completion_tokens": 234,
+      "prompt_tokens": 2800,
+      "total_tokens": 3034,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "writing-rewrite": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 3831,
+      "prompt_ms": 4470.913,
+      "prompt_per_token_ms": 1.1670354998694856,
+      "prompt_per_second": 856.8719632880354,
+      "predicted_n": 32,
+      "predicted_ms": 1470.135,
+      "predicted_per_token_ms": 47.42370967741935,
+      "predicted_per_second": 21.086498858948328
+    },
+    "usage": {
+      "completion_tokens": 32,
+      "prompt_tokens": 3831,
+      "total_tokens": 3863,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "context64": {
+    "model": "coding-long-64k",
+    "context": 65536,
+    "usage": {
+      "completion_tokens": 12,
+      "prompt_tokens": 236,
+      "total_tokens": 248,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 236,
+      "prompt_ms": 33192.07,
+      "prompt_per_token_ms": 140.64436440677966,
+      "prompt_per_second": 7.11013202852368,
+      "predicted_n": 12,
+      "predicted_ms": 1661.715,
+      "predicted_per_token_ms": 151.065,
+      "predicted_per_second": 6.619667030748353
+    },
+    "short_retrieval_pass": true
+  },
+  "style_template_cases_passed": 6,
+  "final_service_restart": "passed",
+  "claude_recheck": {
+    "passed": true,
+    "wall_s": 288.61,
+    "unit_tests": 4,
+    "independent_contract_pass": true,
+    "profile_during_test": "performance",
+    "decode_tps": [
+      49.91,
+      50.75,
+      52.03,
+      51.93,
+      52.9,
+      49.38,
+      51.77,
+      50.52,
+      51.85,
+      54.25,
+      51.44,
+      54.49,
+      54.46,
+      56.44
+    ],
+    "median_decode_tps": 51.89,
+    "cache_read_input_tokens": 54087,
+    "stageground_restarted": true,
+    "available_ram_gib_before": 4.1,
+    "available_ram_gib_after": 18
+  },
+  "cuda_short_bench_before_restart": {
+    "baseline_fit_mib": 1024,
+    "baseline_kv": "q8_0",
+    "tighter_fit_mib": 512,
+    "tighter_kv": "q4_0",
+    "baseline": [
+      {
+        "prompt_tokens": 512,
+        "decode_tokens": 0,
+        "tps": 78.450131
+      },
+      {
+        "prompt_tokens": 0,
+        "decode_tokens": 48,
+        "tps": 9.696078
+      }
+    ],
+    "tighter": [
+      {
+        "prompt_tokens": 512,
+        "decode_tokens": 0,
+        "tps": 73.044106
+      },
+      {
+        "prompt_tokens": 0,
+        "decode_tokens": 48,
+        "tps": 10.991754
+      }
+    ]
+  },
+  "normal_context_recheck": {
+    "system_profile": "low-power",
+    "alias": "coding-fast",
+    "runs": [
+      {
+        "model": "coding-fast",
+        "target": 8192,
+        "input_tokens": 7628,
+        "ttft_s": 20.987231987994164,
+        "first_content_s": 20.987234593136236,
+        "first_fact_s": 21.375982875935733,
+        "wall_s": 23.40391591307707,
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 7819,
+          "prompt_ms": 20878.803,
+          "prompt_per_token_ms": 2.670265123417317,
+          "prompt_per_second": 374.4946489509001,
+          "predicted_n": 109,
+          "predicted_ms": 2416.56,
+          "predicted_per_token_ms": 22.375555555555554,
+          "predicted_per_second": 44.69162776839806
+        },
+        "usage": {
+          "completion_tokens": 109,
+          "prompt_tokens": 7819,
+          "total_tokens": 7928,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "retrieval": 3,
+        "answer": "{\n  \"recovery_code\": \"AX4-KAPPA\",\n  \"retention_days\": 43,\n  \"test_name\": \"test_retry_cross_currency_keeps_first\",\n  \"rule\": \"On duplicate event ids, use the first event globally (retries never overwrite the first accepted event). Normalize currency by trimming whitespace and uppercasing. Source: docs/refunds.md, pricing/plugin_0000.py, refunds/settlement.py, tests/test_settlement_retries.py.\"\n}",
+        "run": 1
+      },
+      {
+        "model": "coding-fast",
+        "target": 16384,
+        "input_tokens": 15833,
+        "ttft_s": 41.83100430900231,
+        "first_content_s": 41.83100648294203,
+        "first_fact_s": 42.175432885997,
+        "wall_s": 44.26292861811817,
+        "timings": {
+          "cache_n": 179,
+          "prompt_n": 15845,
+          "prompt_ms": 41721.382,
+          "prompt_per_token_ms": 2.633094477753234,
+          "prompt_per_second": 379.7812833716774,
+          "predicted_n": 106,
+          "predicted_ms": 2431.47,
+          "predicted_per_token_ms": 23.15685714285714,
+          "predicted_per_second": 43.18375303828549
+        },
+        "usage": {
+          "completion_tokens": 106,
+          "prompt_tokens": 16024,
+          "total_tokens": 16130,
+          "prompt_tokens_details": {
+            "cached_tokens": 179
+          }
+        },
+        "retrieval": 3,
+        "answer": "{\n  \"recovery_code\": \"AX4-KAPPA\",\n  \"retention_days\": 43,\n  \"test_name\": \"test_retry_cross_currency_keeps_first\",\n  \"rule\": \"When rows contain a duplicate event id, use the first event globally (refunds/settlement.md); retries never overwrite the first accepted event (refunds/settlement.py). Currency identifiers must be uppercase and trimmed (pricing/plugin_*.py, tests/test_settlement_retries.py).\"\n}",
+        "run": 1
+      }
+    ]
+  },
+  "final_defaults": {
+    "claude_version_check": true,
+    "codex_response_check": true,
+    "gguf_count": 3,
+    "router_profiles": 10,
+    "retained_model_bytes": 37138301536,
+    "released_btrfs_gib_approx": 21.41
+  }
+}

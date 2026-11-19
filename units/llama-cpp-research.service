@@ -1,0 +1,15 @@
+[Unit]
+Description=Isolated websearch-mcp for llama.cpp
+Requires=llama-cpp.service
+After=llama-cpp.service
+PartOf=llama-cpp.service
+
+[Service]
+Type=exec
+UMask=0077
+CacheDirectory=llama-cpp-research
+CacheDirectoryMode=0700
+ExecStart=%h/.local/libexec/llama-research
+Restart=on-failure
+RestartSec=3
+MemoryMax=1G

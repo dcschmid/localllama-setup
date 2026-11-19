@@ -1,0 +1,9 @@
+*.gguf
+*.partial
+*.tar.gz
+*.tar.xz
+.env
+node_modules/
+__pycache__/
+*.pyc
+benchmarks/__pycache__/
