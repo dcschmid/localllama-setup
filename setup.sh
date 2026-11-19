@@ -438,6 +438,36 @@ PY
         fi
     done
 
+    # pinned Pi extensions: manifest is the single install source; no auto-updates
+    local m=$src/config/pi-manifest.json name ver status
+    [[ -f $m ]] || fail 'config/pi-manifest.json missing'
+    jq -e . "$m" >/dev/null || fail 'pi manifest invalid JSON'
+    while IFS=$'\t' read -r name ver status; do
+        [[ $status == active ]] || { skip "extension $name ($status)"; continue; }
+        if grep -q "\"npm:$name\"" <<<"$(jq '.packages // []' "$pi_dir/settings.json" 2>/dev/null)"; then
+            skip "extension $name already installed"
+            continue
+        fi
+        if $DRY; then skip "pi install npm:$name@$ver (dry-run)"; continue
+        elif ! $pi_bin install "npm:$name@$ver" >/dev/null 2>&1; then
+            fail "pi install npm:$name@$ver failed"
+        fi
+    done < <(jq -r '.packages[] | [.name,.version,.status] | @tsv' "$m")
+
+    # prompt templates ship from config/prompts/ (finish, review, fix-ci, finish-docs);
+    # existing user copies are kept, same rule as settings.json
+    local t
+    for t in "$src"/config/prompts/*.md; do
+        if [[ -e $pi_dir/prompts/$(basename "$t") ]]; then
+            skip "prompt template $(basename "$t") (existing kept)"
+        else
+            install_file 644 "$t" "$pi_dir/prompts/$(basename "$t")"
+        fi
+    done
+    if [[ ! -e $HOME/.local/bin/pi ]]; then
+        link_to "$pi_bin" "$HOME/.local/bin/pi"
+    fi
+
     # pinned Pi extensions: manifest is the single install source, no auto-updates
     local m=$src/config/pi-manifest.json name ver status
     [[ -f $m ]] || fail 'config/pi-manifest.json missing'
