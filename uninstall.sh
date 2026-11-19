@@ -71,7 +71,7 @@ for name in llama-github-mcp llama-research pi-sandbox; do
     save+=("$libexec/$name")
 done
 save+=("$home/.pi/agent/settings.json" "$home/.pi/agent/auth.json" "$home/.pi/agent/mcp.json"
-       "$home/.pi/agent/models-store.json")
+       "$home/.pi/agent/models-store.json" "$home/.pi/agent/prompts" "$home/.pi/agent/npm")
 for name in libcudart.so.12 libcublas.so.12 libcublasLt.so.12; do
     if [[ ! -L $opt/$release && -f $opt/$release/$name && ! -L $opt/$release/$name ]]; then
         save+=("$opt/$release/$name")

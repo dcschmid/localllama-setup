@@ -3,10 +3,15 @@
 ## 2026.11-pi-ext - Pi extensions, templates, context record
 
 - manifest config/pi-manifest.json: pi-lens 4.5.1, pi-permission-modes 2.7.2,
+  pi-workspace-history 0.5.2, pi-todo-agent 0.3.0 (pinned, doctor-checked);
+  pi-condense experimental-off, pi-sessions excluded (node>=24 vs pinned 22).
+- setup.sh installs manifest-pinned extensions + config/prompts templates
+  (finish/review/fix-ci/finish-docs); backup/uninstall cover prompts+npm.
+- doctor reports extensions, templates, LSPs; unit tests 10/10.
+- new docs: PI_EXTENSIONS.md, PI_COMMANDS.md, CONTEXT_ENGINEERING.md;
+  measured A/B: native 49s/9826 vs +ext 50s/16951 ctx, both correct.
 
-- manifest config/pi-manifest.json: pi-lens 4.5.1, pi-permission-modes 2.7.2,
 
-- manifest config/pi-manifest.json: pi-lens 4.5.1, pi-permission-modes 2.7.2,
 ## 2026.11 - Pi one-click stack
 
 - setup.sh becomes a command interface: install/update/repair/doctor/status/
