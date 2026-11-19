@@ -1,0 +1,1 @@
+{"fixture": "/home/danielschmid/pi-harness/b2-ts", "rc": 0, "wall_s": 23.4, "model_calls": 5, "tool_calls": 4, "input_tokens": 1743, "output_tokens": 515, "cache_read_tokens": 44880, "peak_ctx_tokens": 9958, "compactions": 0, "session": "/home/danielschmid/.pi/agent/sessions/--home-danielschmid-pi-harness-b2-ts--/2026-11-19T19-30-17-053Z_b2base.jsonl"}
