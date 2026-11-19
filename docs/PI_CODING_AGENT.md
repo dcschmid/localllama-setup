@@ -106,3 +106,6 @@ Delete `~/.pi/agent/`, rerun `pi update` or the installer. Wrapper recovery
 - The router loads one model at a time; coding and research alternate as before.
 - Compaction summaries are model text; keep critical project decisions in
   files (AGENTS.md, notes) as well.
+- The pinned extension set and its decision matrix live in
+  `docs/PI_EXTENSIONS.md`; templates in `docs/PI_COMMANDS.md`; budgets and
+  the measured schema cost in `docs/CONTEXT_ENGINEERING.md`.
