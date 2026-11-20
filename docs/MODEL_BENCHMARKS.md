@@ -10,13 +10,13 @@ Gemma 4 26B A4B QAT, Cyber-Tiel 35B A3B, and Gemma 4 12B StyleTune make up the l
 
 Model cleanup affects files under `~/models/gguf/`. The Exclusive column gives the exclusively occupied blocks measured before removal on Btrfs.
 
-| Datei | Dateigröße | Exklusiv | Stand |
+| File | File size | Exclusive | Status |
 |---|---:|---:|---|
-| `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | 2,33 GiB | 0 GiB | Entfernt |
-| `gemma-4-12b-it-qat-q4_0.gguf` | 6,50 GiB | 6,50 GiB | Nach bestandener Claude-Abnahme entfernt |
-| `LFM2.5-24B-A2B-Q4_K_M.gguf` | 13,53 GiB | 13,53 GiB | Entfernt |
-| `mtp-Cyber-Tiel-Coder-35B-A3B.gguf` | 1,38 GiB | 1,38 GiB | Entfernt |
-| **Gesamt** | **23,73 GiB** | **21,41 GiB** | **21,41 GiB freigegeben** |
+| `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | 2,33 GiB | 0 GiB | Removed |
+| `gemma-4-12b-it-qat-q4_0.gguf` | 6,50 GiB | 6,50 GiB | Removed after passing the Claude sign-off |
+| `LFM2.5-24B-A2B-Q4_K_M.gguf` | 13,53 GiB | 13,53 GiB | Removed |
+| `mtp-Cyber-Tiel-Coder-35B-A3B.gguf` | 1,38 GiB | 1,38 GiB | Removed |
+| **Total** | **23,73 GiB** | **21,41 GiB** | **21,41 GiB freed** |
 
 Atelier uses a separate Qwen path with its own inode and jointly occupied Btrfs data blocks. The image pipeline still requires its own file. No model projector was found in the llama.cpp model library.
 
@@ -24,7 +24,7 @@ Atelier uses a separate Qwen path with its own inode and jointly occupied Btrfs 
 
 The two CLI tests used the same original Ledger fixture and the same task contract as the historical Gemma-QAT runs. For Cyber-Tiel, Q8_0 K/V, 32K context, and 256 thinking tokens were the router default. The second Claude run listed here used a shortened system prompt. The models ran in separate tests within the existing local network isolation.
 
-| Client | Ergebnis | Dauer und Durchsatz |
+| Client | Result | Duration and throughput |
 |---|---|---|
 | Codex 0.169.0 | PASSED. Bugfix, helper function, six unit tests, and independent contract check. 46.699 prompt tokens were reused from the cache. | 403,31 s. First prefill 8.128 tokens at 73,6 t/s. Decode per turn 7,15–14,26 t/s. |
 | Claude Code 2.1.326 | FAILED. The first run ended at the time limit after 520 s. The shortened run read all four files. The independent check of the unchanged code failed. | 550,00 s. First prefill 3.065 tokens at 8,47 t/s. The first full decode turn reached 2,09 t/s. |
@@ -39,7 +39,7 @@ After both sign-offs, `coding-fast` takes the verified Cyber-Tiel preset with 32
 
 After the switch to `coding-fast`, the native chat API answered the same retrieval fixture at 8K and 16K. This ran on the original laptop profile `low-power`. The measurement captures a structured answer over repository data.
 
-| Kontextprofil | Prompt-Tokens | Wiederverwendet | Prefill | Decode | Retrieval |
+| Context profile | Prompt tokens | Reused | Prefill | Decode | Retrieval |
 |---|---:|---:|---:|---:|---:|
 | 8K | 7.819 | 0 | 374,49 t/s | 44,69 t/s | 3/3 |
 | 16K | 16.024 | 179 | 379,78 t/s | 43,18 t/s | 3/3 |
@@ -48,7 +48,7 @@ The tight 512 MiB CUDA reserve with Q4_0 K/V raised decode throughput from 9,70 
 
 ## Historical selection before the downloads
 
-| Kriterium | Gewicht | Grundlage der Auswahl |
+| Criterion | Weight | Basis of selection |
 |---|---:|---|
 | Coding quality | 25 % | Model card and repository benchmark with a matching harness, later locally confirmed correctness and unit tests |
 | Agentic coding and tools | 20 % | Tool template, local API parser, multiple tool rounds in Claude Code and Codex |
@@ -62,7 +62,7 @@ The weights steer the selection. For pure research candidates, shared local meas
 
 ## Researched coding and everyday models
 
-| Modell und Quelle | Herkunft, Architektur und Nennkontext | Quantisierung und Größe | Template, MTP und Bewertung |
+| Model and source | Origin, architecture, and nominal context | Quantization and size | Template, MTP, and rating |
 |---|---|---|---|
 | [LiquidAI LFM2.5-24B-A2B](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B-GGUF) | Official LiquidAI GGUF from 09.10.2026. `lfm2moe`, 24B total, about 2B active, 4 of 64 experts. 10 Attention and 30 Conv blocks. 131.072 tokens. [LFM Open License 1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE) | Q4_K_M 14,53 GB. Q4_0 13,58 GB, QAD Q4_0 13,58 GB, Q5_K_M 17,03 GB. | Embedded LFM tool template. Published LiveClaw results are manufacturer measurements. Mixed Attention/Conv states determine context, caching, and speculation. No MTP head is documented for the selected file. |
 | [Gemma 4 26B-A4B IT QAT](https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf) | Official Google QAT GGUF from 01.05.2026. 25,23B GGUF tensor parameters, about 4B active, 8 of 128 experts. 5 full Attention blocks at 30 layers, otherwise SWA. 262.144 tokens. Apache 2.0. | QAT Q4_0 14,44 GB. The separate projector has 1,19 GB. [Community PTQ](https://huggingface.co/bartowski/google_gemma-4-26B-A4B-it-GGUF) IQ4_XS 14,21 GB, Q4_K_M 17,04 GB, Q5_K_M 19,32 GB. | Gemma tool template with optional reasoning. QAT and PTQ rest on different checkpoints. The community PTQ card lists assistant heads whose suitability for the official QAT would need separate proof. |
@@ -82,7 +82,7 @@ For Qwen35-MoE, the model configuration yields about 1,4 GiB Q4_0-KV at 262.144 
 
 The writing probe rates English prose, character voice, consistency, dialog, and adherence to concrete constraints. Tool calls do not count here.
 
-| Kandidat | Kategorien und Metadaten | Auswahl |
+| Candidate | Categories and metadata | Selection |
 |---|---|---|
 | [Gryphe StyleTune 12B](https://huggingface.co/Gryphe/Gemma-4-12B-StyleTune) | Gemma-4 writing fine-tune, [community Q4_K_M 7,95 GB](https://huggingface.co/mradermacher/Gemma-4-12B-StyleTune-GGUF), Apache 2.0, 262.144 nominal. | Comparison with Gemma QAT on the same writing task. |
 | [Gemma The Writer 9B Heretic](https://huggingface.co/DavidAU/Gemma-The-Writer-9B-HERETIC-Uncensored-Abliterated) | Revised abliteration of a Gemma-2 writing merge. [Q4_K_M 5,76 GB](https://huggingface.co/mradermacher/Gemma-The-Writer-9B-HERETIC-Uncensored-Abliterated-GGUF), 8192 nominal. Observe origin and Gemma-2 license terms. | Comparison candidate for short English stories and dialog. |
@@ -93,7 +93,7 @@ The writing probe rates English prose, character voice, consistency, dialog, and
 
 The table uses the official `llama-bench` output. In these short tests, prefill and decode are measured separately. The decode value starts without a long prompt. The memory columns show peak RSS including file-backed mappings and the total dedicated GPU peak including the desktop. The power values are observed GPU peaks in 500 ms samples. Small models ran in the original Fedora profile Power Saver. Large models ran during a temporary performance lease.
 
-| Modell | Quant | Prefill 8K / 16K t/s | Decode t/s | RAM Peak | VRAM Peak | GPU-Spitze | Coding und Tools |
+| Model | Quant | Prefill 8K / 16K t/s | Decode t/s | RAM Peak | VRAM Peak | GPU peak | Coding and tools |
 |---|---|---:|---:|---:|---:|---:|---|
 | Qwen3 4B Instruct 2507, existing file | Q4_K_M | 2.651 / 2.573 together with 96 decode tokens each | — | 2,80 GiB | 5.084 MiB* | 101,1 W | API smoke and small offline chat probe |
 | Gemma 4 12B IT | QAT Q4_0 | 1.528 / 1.335 | 40,70 | 7,08 GiB | 6.924 MiB | 100,6 W | Bugfix and refactor with both CLI agents |
@@ -105,7 +105,7 @@ The table uses the official `llama-bench` output. In these short tests, prefill 
 
 ### Practical coding fixture in an isolated network
 
-| Client | Modell / Kontextgröße | Aufgabe | Verifizierte Unit Tests | Gesamtzeit |
+| Client | Model / context size | Task | Verified unit tests | Total time |
 |---|---|---|---:|---:|
 | Claude Code 2.1.326 | Gemma 4 12B QAT / 32K | File analysis, global event deduplication, normalization of currency abbreviations, helper function, and regression tests | 4 passed | 177,8 s |
 | Codex CLI 0.169.0 | Gemma 4 12B QAT / 32K | Equivalent task in a separate fixture, six confirmed shell calls | 5 passed | 85,6 s |
@@ -116,7 +116,7 @@ Both changes were verified independently with `python -m unittest discover -s te
 
 All rows use the LFM profile loaded at 131.072 tokens, CUDA for the remaining tensors, all 40 MoE expert layers on the CPU, 1.024/512 batch/microbatch, and Q8_0 K/V. Reasoning was capped. Each row processes the prompt anew. The peak over the whole series was about 6,8 thousand MiB per `nvidia-smi` samples.
 
-| Ziel | Tatsächliche Prompt-Tokens inkl. Template | Prefill t/s | Decode t/s | Erster Token | Erste sichtbare Ausgabe | Gesamt | Retrieval |
+| Target | Actual prompt tokens incl. template | Prefill t/s | Decode t/s | First token | First visible output | Total | Retrieval |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | 8K | 7.499 | 450,0 | 46,4 | 16,7 s | 18,1 s | 24,9 s | 3/3 |
 | 16K | 15.815 | 489,5 | 45,2 | 32,4 s | 33,8 s | 40,9 s | 2/3 |
@@ -134,10 +134,10 @@ LFM at 4K with an explicit 26 CPU expert layers reached 567,1 prefill and 64,3 d
 
 Same 32K router window, same structured prompt with 16.024 tokens. The memory buffer was set from 1.024 to 2.048 MiB for the variant with the sidecar. This way the comparison covers the respectively runnable configuration including tensor fit.
 
-| Modus | Prefill t/s | Decode t/s | Erster Token | Gesamt | Fakten | Toolkette |
+| Mode | Prefill t/s | Decode t/s | First token | Total | Facts | Tool chain |
 |---|---:|---:|---:|---:|---:|---|
-| Standard | 385,8 | 53,8 | 41,5 s | 43,2 s | 3/3 | bestanden |
-| MTP-Sidecar | 312,9 | 53,0 | 51,2 s | 53,2 s | 3/3 | bestanden |
+| Standard | 385,8 | 53,8 | 41,5 s | 43,2 s | 3/3 | passed |
+| MTP-Sidecar | 312,9 | 53,0 | 51,2 s | 53,2 s | 3/3 | passed |
 
 68 of 108 draft tokens were accepted. The measured task was slower with the sidecar. The regular coding profiles stay on standard inference. For repetition, the upstream options `--spec-type draft-mtp --spec-draft-model <Sidecar>` serve.
 
@@ -145,7 +145,7 @@ Same 32K router window, same structured prompt with 16.024 tokens. The memory bu
 
 The three large prompts were processed in the same instance loaded at 262.144 tokens. CUDA fit, Flash Attention, 1.024/512 batch/microbatch, Q4_0 K/V, and capped reasoning applied throughout. The 128K and 192K aliases were loaded separately with their set context limits. The results rate three distributed facts and one rule from a repository-shaped input. The rule was correct in content. Individual file references in the 256K result were imprecise.
 
-| Ziel | Prompt gesamt | Cache-Tokens | Prefill t/s neu | Decode t/s | Erster Token | Erster gesuchter Fakt | Gesamt | Fakten |
+| Target | Prompt total | Cache tokens | Prefill t/s new | Decode t/s | First token | First sought fact | Total | Facts |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 128K | 130.651 | 0 | 558,7 | 12,32 | 233,9 s | 235,0 s | 240,8 s | 3/3 |
 | 192K | 196.291 | 179 | 484,6 | 8,92 | 404,8 s | 406,3 s | 416,6 s | 3/3 |
@@ -165,10 +165,10 @@ Cyber-Tiel processed 100.708 measured archive tokens of real upstream source cod
 
 LFM Q4_K_M, CUDA plus 40 MoE expert layers on the CPU, one 4K prefill and 96 decode tokens. The filesystem stayed in its running state. The differing page-cache states limit the statement on isolated cold load time.
 
-| Ladepfad | Prefill t/s | Decode t/s | Gesamt inkl. Laden | Peak RSS | Reportete Dateisystem-Eingaben |
+| Load path | Prefill t/s | Decode t/s | Total incl. loading | Peak RSS | Reported filesystem inputs |
 |---|---:|---:|---:|---:|---:|
-| mmap | 526,9 | 72,7 | 18,39 s | 14,20 GiB | 33.130.384 Blöcke |
-| Direct I/O | 586,8 | 46,2 | 24,74 s | 8,46 GiB | 40.536.288 Blöcke |
+| mmap | 526,9 | 72,7 | 18,39 s | 14,20 GiB | 33.130.384 blocks |
+| Direct I/O | 586,8 | 46,2 | 24,74 s | 8,46 GiB | 40.536.288 blocks |
 
 The standard profiles use mmap. Direct I/O reduced the measured RSS but needed more time for the whole test. The filesystem or slot cache changes the provisioning of weights and precomputed prompt state. The measured decode rates stay dependent on GPU, host RAM, and context.
 
@@ -186,7 +186,7 @@ As of 18. November 2026. Nine tasks measured once each with and without the skil
 
 The editorial review reads the answers pairwise. It considers narrative perspective, rhythm, variation, character voices, originality, and agreement with the supplied facts. The linter column counts the heuristic individual findings. For fictional texts, deliberate repetition and rhythm remain editorial decisions.
 
-| Aufgabe | Wörter ohne / mit Skill | Linter-Befunde ohne / mit | Redaktioneller Vergleich |
+| Task | Words without / with skill | Linter findings without / with | Editorial comparison |
 |---|---:|---:|---|
 | English Riff-Racers story | 1.048 / 1.072 | 5 / 4 | Both within the 900–1.200 target range with an open decision and recognizable voices. The baseline produces a contradiction around the driver. With the skill, Cleo's action decision at the timing desk is clearer, and the axle motif repeats strongly. The rain at the end stays without a transition. |
 | Dialog on the ferry | 247 / 224 | 0 / 0 | Both within the target range. Bea and Rowan are distinguishable without naming. With the skill, her action at the radio set gives the interruption more consequence. The suddenly reported incident comes across as constructed. |
@@ -198,13 +198,13 @@ The editorial review reads the answers pairwise. It considers narrative perspect
 | Protected facts, quote, numbers, and link | 49 / 47 | 0 / 0 | Heading, version, name, date, the 3,5-MB/s figure in its original format, quote, command, and Markdown link remain in both variants. Both turn the team-related test gap into an impersonal statement. |
 | Personal style calibration | 157 / 169 | 3 / 3 | Both use recognizable text evidence and name uncertainties. With the skill, the profile has more reusable fields; individual entries go beyond the three evidence samples. |
 
-| Messwert | Ohne Skill | Mit Skill |
+| Measurement | Without skill | With skill |
 |---|---:|---:|
-| Decode, Median | 24,67 t/s | 23,50 t/s |
-| Prompt-Verarbeitung, Median | 0,28 s | 2,88 s |
-| Laufzeit aller neun Anfragen | 138,61 s | 164,08 s |
-| Prompt-Tokens je Anfrage | 73–153 | 2.543–3.498 |
-| Linter-Einzelbefunde gesamt | 10 | 9 |
+| Decode, median | 24,67 t/s | 23,50 t/s |
+| Prompt processing, median | 0,28 s | 2,88 s |
+| Runtime of all nine requests | 138,61 s | 164,08 s |
+| Prompt tokens per request | 73–153 | 2.543–3.498 |
+| Linter individual findings total | 10 | 9 |
 
 The system context costs an additional **2.423–3.345 tokens** depending on the mode, median **2.725 tokens**. The runtime covers the HTTP request and the respective response length. For short revisions, the additional prompt processing is more noticeable. The creative-writing rules help with character work and with preserving an already good text. Factual texts with given facts still need a source and scope check. The comparison is a single measurement per task and proves no general quality gain.
 
