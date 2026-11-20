@@ -96,9 +96,9 @@ The existing Filesystem MCP offers ten read-only file tools. The writing context
 
 ```bash
 skill="$HOME/dev/github/skillset/skills/human-writing"
-python3 "$skill/scripts/lint_text.py" /pfad/zum/text.md --lang auto
+python3 "$skill/scripts/lint_text.py" /path/to/text.md --lang auto
 python3 "$skill/scripts/website_audit.py" https://example.com --format json --out audit.json
-python3 "$skill/scripts/project_audit.py" audit /pfad/zum/projekt
+python3 "$skill/scripts/project_audit.py" audit /path/to/project
 ```
 
 The first and third commands work locally. The second explicitly fetches the specified public website. Linter or audit reports can then be attached as files to a writing chat. `[website-rewrite]` delivers suggestions. Applying them via the existing project CLI or in the CMS requires the intended approval. The writing profiles do not enable shell execution.
