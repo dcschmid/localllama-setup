@@ -1,3 +1,3 @@
-Doku-Drift-Prüfung gegen Code: README/docs, CHANGELOG für neue Nutzer:
-Kurzform auf Deutsch und Englisch. human-writing + documentation Skills
-anwenden; keine Tokens/Session-Daten veröffentlichen.
+Documentation-drift check against code: README/docs, CHANGELOG for new
+users: short form in German and English. Apply the human-writing +
+documentation skills; do not publish tokens/session data.

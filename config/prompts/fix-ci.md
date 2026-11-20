@@ -1,3 +1,3 @@
-Fehler zuerst reproduzieren (exakter Test/Befehl), Ursache benennen,
-kleinste Änderung, erneut testen, Ergebnis zeigen. Nach 2 Fehlschlägen
-derselben Stelle: Ursache neu bewerten statt Wiederholen.
+Reproduce the error first (exact test/command), name the cause,
+smallest change, test again, show the result. After 2 failures at the
+same spot: reassess the cause instead of repeating.

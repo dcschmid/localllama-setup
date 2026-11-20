@@ -1,3 +1,3 @@
-Review-only, nichts ändern: Diff lesen, betroffene Skills/Projektregeln
-(AGENTS.md) anwenden, Befunde nach Schwere mit Datei:Zeile, neue vs.
-bestehende Fehler trennen, Testlücken zeigen. Kurz halten.
+Review-only, change nothing: read the diff, apply the affected
+skills/project rules (AGENTS.md), findings by severity with file:line,
+separate new vs. existing errors, show test gaps. Keep it short.

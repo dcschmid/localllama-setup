@@ -1,57 +1,57 @@
-# Native llama.cpp-Installation
+# Native llama.cpp Installation
 
-Stand 19. November 2026. [Quickstart](QUICKSTART.md) · [Modellvergleich und Messungen](MODEL_BENCHMARKS.md)
+As of November 19, 2026. [Quickstart](QUICKSTART.md) · [Model comparison and measurements](MODEL_BENCHMARKS.md)
 
-## System und Installation
+## System and Installation
 
-- Framework Laptop 16, Fedora 44 KDE/Wayland, Kernel `7.3.4-200.fc44.x86_64` seit dem Neustart am 18. November. AMD Ryzen AI 9 HX 370 mit 12 Kernen und 24 Threads, AVX2, AVX-512, VNNI und FMA. Radeon 890M mit Vulkan/RADV und AMD XDNA wurden erkannt.
-- Linux meldete 46,8 GiB RAM, anfangs rund 23 GiB verfügbar und rund 8 GiB belegten ZRAM-Swap. Die Radeon meldete 16 GiB VRAM-Apertur. Die 16 GiB Grafikreservierung erklären plausibel den größten Teil der Abweichung zur 64-GB-Ausstattung.
-- RTX 5070 Laptop, NVIDIA-Treiber `615.78.08`, Compute Capability `12.0`. `nvidia-smi` meldete 8.151 MiB, die CUDA-Laufzeit 7.799 MiB. Der Treiber meldete CUDA 13.4. Der installierte Upstream-Build nutzt CUDA 12.8.
-- WD PC SN8000S NVMe mit rund 1,5 TiB frei unter `/home`. Btrfs auf LUKS. Die NVMe ist im Kernel als nicht rotierend ausgewiesen. Das Fedora-Profil Energiesparen begrenzte die CPU auf 2,0 GHz. Zeitlich begrenzte Leistungsmessungen verwenden eine D-Bus-Lease und geben sie anschließend frei.
-- Offizielles `llama.cpp` [b12503](https://github.com/ggml-org/llama.cpp/releases/tag/b12503), Commit `4577932fab595eaa8b27ad71734d5de1f3c07d8c`. Upstream-Binärpaket Linux x86_64 CUDA 12.8, GNU 13.3.0, CUDA mit `sm_120a`-Kernels und Zen-4-CPU-Backend sowie eingebettete offizielle Llama Chat WebUI. Die SHA-256 des Pakets wurde gegen das GitHub-Release geprüft. Vorhandene NVIDIA-Laufzeitbibliotheken wurden in die neue versionierte Installation kopiert.
-- Programmdateien unter `~/.local/opt/llama.cpp/b12503`. `current` zeigt auf den aktiven Build. `llama-server`, `llama-cli` und `llama-bench` sind in `~/.local/bin` erreichbar.
-- Gewichte liegen in `~/models/gguf`. `models.ini` verwendet absolute Pfade und native Router-Aliase. Mehrere Profile teilen dasselbe GGUF. Ein Modell und ein Slot laufen gleichzeitig. Der Router lädt bei Bedarf und entlädt beim Wechsel. Für Inaktivität ist der native Sleep-Timeout auf 15 Minuten gesetzt.
-- Der Router bindet an `127.0.0.1:8080` und einen privaten Unix-Socket unter `$XDG_RUNTIME_DIR/llama-cpp/server.sock`. Modell-Downloads sind in der Router-Laufzeit gesperrt. Bestehende Audio-, Bild-, Open-WebUI- und TinySearch-Dienste behalten ihre eigenen Ports und Konfigurationen.
+- Framework Laptop 16, Fedora 44 KDE/Wayland, kernel `7.3.4-200.fc44.x86_64` since the reboot on November 18. AMD Ryzen AI 9 HX 370 with 12 cores and 24 threads, AVX2, AVX-512, VNNI and FMA. Radeon 890M with Vulkan/RADV and AMD XDNA were detected.
+- Linux reported 46.8 GiB RAM, initially around 23 GiB available and around 8 GiB of ZRAM swap in use. The Radeon reported a 16 GiB VRAM aperture. The 16 GiB graphics reservation plausibly explains most of the deviation from the 64 GB configuration.
+- RTX 5070 Laptop, NVIDIA driver `615.78.08`, Compute Capability `12.0`. `nvidia-smi` reported 8,151 MiB, the CUDA runtime 7,799 MiB. The driver reported CUDA 13.4. The installed upstream build uses CUDA 12.8.
+- WD PC SN8000S NVMe with around 1.5 TiB free under `/home`. Btrfs on LUKS. The kernel marks the NVMe as non-rotational. The Fedora power-save profile limited the CPU to 2.0 GHz. Time-limited performance measurements take a D-Bus lease and release it afterwards.
+- Official `llama.cpp` [b12503](https://github.com/ggml-org/llama.cpp/releases/tag/b12503), commit `4577932fab595eaa8b27ad71734d5de1f3c07d8c`. Upstream binary package Linux x86_64 CUDA 12.8, GNU 13.3.0, CUDA with `sm_120a` kernels and the Zen-4 CPU backend, plus the embedded official Llama Chat WebUI. The SHA-256 of the package was verified against the GitHub release. Existing NVIDIA runtime libraries were copied into the new versioned installation.
+- Program files under `~/.local/opt/llama.cpp/b12503`. `current` points to the active build. `llama-server`, `llama-cli` and `llama-bench` are reachable in `~/.local/bin`.
+- Weights live in `~/models/gguf`. `models.ini` uses absolute paths and native router aliases. Several profiles share the same GGUF. One model and one slot run at a time. The router loads on demand and unloads on switch. For inactivity, the native sleep timeout is set to 15 minutes.
+- The router binds to `127.0.0.1:8080` and a private Unix socket under `$XDG_RUNTIME_DIR/llama-cpp/server.sock`. Model downloads are locked in the router runtime. Existing audio, image, Open-WebUI and TinySearch services keep their own ports and configurations.
 
-## Bedienung und Profile
+## Operation and Profiles
 
-`~/.config/llama.cpp/models.ini` enthält die Profile und gemessenen Startwerte. Für eine Liste ohne Modellladung dient `curl -fsS http://127.0.0.1:8080/models`. Zur Diagnose zeigt `/props?model=NAME` die effektive Kontextgröße. Dieser Aufruf kann ein Modell laden.
+`~/.config/llama.cpp/models.ini` contains the profiles and the measured start values. `curl -fsS http://127.0.0.1:8080/models` lists them without loading a model. For diagnostics, `/props?model=NAME` shows the effective context size. That call can load a model.
 
-Die sieben aktiven Profile verwenden drei GGUF-Dateien. Die SHA-256-Prüfsummen stehen im Wiederherstellungspaket unter `packages/models.tsv`.
+The seven active profiles use three GGUF files. The SHA-256 checksums are in the restore package under `packages/models.tsv`.
 
-| Profil | Modell | Kontext |
+| Profile | Model | Context |
 |---|---|---:|
 | `research` | Gemma 4 26B A4B IT QAT Q4_0 | 32K |
-| `deep-research` | Gemma 4 26B A4B IT QAT Q4_0, 128 Denktokens je Anfrage | 32K |
+| `deep-research` | Gemma 4 26B A4B IT QAT Q4_0, 128 thinking tokens per request | 32K |
 | `coding-long-256k` | Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus | 256K |
 | `creative-writing`, `human-writing`, `human-rewrite`, `human-audit` | Gemma 4 12B StyleTune Q4_K_M | 16K |
 
-Cyber-Tiel wird über `coding-long-256k` mit 262.144 Tokens, 2.048/1.024 Batch/Microbatch und Q4_0 für K und V geladen. Die Servervorgabe für die Ausgabe beträgt 8.192 Tokens. Die Profile nutzen mmap, CUDA mit 1.024 MiB Zielreserve und Flash Attention. Der Router lädt maximal einen Modellprozess. MTP ist aus. [Performance-Messung und Rückbau](PERFORMANCE_OPTIMIZATION.md)
+Cyber-Tiel is loaded via `coding-long-256k` with 262,144 tokens, 2,048/1,024 batch/microbatch and Q4_0 for K and V. The server default for the output is 8,192 tokens. The profiles use mmap, CUDA with a 1,024 MiB target reserve and Flash Attention. The router loads at most one model process. MTP is off. [Performance measurement and rollback](PERFORMANCE_OPTIMIZATION.md)
 
-- `llama-webui` startet die Benutzerdienste bei Bedarf und öffnet den Browser.
-- `llama-webui --check` prüft den Inference-Dienst ohne Browseröffnung.
-- `systemctl --user stop llama-cpp.service` beendet den Router und den zugehörigen Research-Dienst.
-- `journalctl --user -u llama-cpp.service -n 80` zeigt Modellstart und CUDA-Speicher. Für Websuche `journalctl --user -u llama-cpp-research.service -n 80`.
-- Nach Änderungen der Presets lädt `curl -fsS 'http://127.0.0.1:8080/models?reload=1'` die Liste erneut. Eine laufende Generation vorher abschließen. Änderungen an systemd-Units benötigen `daemon-reload` und einen Neustart des Benutzerdienstes.
+- `llama-webui` starts the user services on demand and opens the browser.
+- `llama-webui --check` checks the inference service without opening a browser.
+- `systemctl --user stop llama-cpp.service` stops the router and the associated research service.
+- `journalctl --user -u llama-cpp.service -n 80` shows model start-up and CUDA memory. For web search use `journalctl --user -u llama-cpp-research.service -n 80`.
+- After preset changes, `curl -fsS 'http://127.0.0.1:8080/models?reload=1'` reloads the list. Finish a running generation first. Changes to systemd units need `daemon-reload` and a restart of the user service.
 
-## WebUI, Recherche und MCP
+## WebUI, Research and MCP
 
-Der KDE-Starter öffnet die native WebUI auf `http://127.0.0.1:8080`. Modell-API und UI teilen den Port. Die lokalen Coding-Wrapper greifen weiterhin über den privaten Socket `$XDG_RUNTIME_DIR/llama-cpp/server.sock` zu. Firefox speichert Chats, Einstellungen und Tool-Freigaben pro Origin. `localhost`, `127.0.0.1` und verschiedene Ports bezeichnen unterschiedliche Origins.
+The KDE launcher opens the native WebUI at `http://127.0.0.1:8080`. Model API and UI share the port. The local coding wrappers continue to access the private socket `$XDG_RUNTIME_DIR/llama-cpp/server.sock`. Firefox stores chats, settings and tool approvals per origin. `localhost`, `127.0.0.1` and different ports denote different origins.
 
-`llama-server` b12503 übernimmt die zentralen Browser-Vorgaben aus `--webui-config-file ~/.config/llama.cpp/ui.json`. Der gleichwertige Kurzname ist `--ui-config-file`. `mcpServers` enthält eine JSON-kodierte Liste direkter HTTP-Verbindungen. Der Server veröffentlicht sie in `/props.ui_settings`. Firefox übernimmt diese Vorgaben beim ersten Besuch. Vorhandene Profile behalten ihre Einstellungen. Im regulären Profil wurden die vier MCP-Einträge einmalig über die Oberfläche ergänzt.
+`llama-server` b12503 takes the central browser settings from `--webui-config-file ~/.config/llama.cpp/ui.json`. The equivalent short name is `--ui-config-file`. `mcpServers` contains a JSON-encoded list of direct HTTP connections. The server publishes them in `/props.ui_settings`. Firefox adopts these settings on the first visit. Existing profiles keep their settings. In the regular profile the four MCP entries were added once through the interface.
 
-| Anzeige in der WebUI | MCP-Endpunkt | Dienst |
+| Shown in the WebUI | MCP endpoint | Service |
 |---|---|---|
-| Websearch & Deep Research | `http://127.0.0.1:8642/mcp` | `llama-cpp-research.service`, bestehender Danmoreng/websearch-mcp |
-| Context7 | `http://127.0.0.1:8643/servers/context7/mcp` | Bestehendes Context7 über `llama-cpp-mcp.service` |
-| GitHub | `http://127.0.0.1:8643/servers/github/mcp` | Bestehendes GitHub MCP über `llama-cpp-mcp.service` |
-| Skill-Sammlung (read-only) | `http://127.0.0.1:8643/servers/skills/mcp` | Bestehendes Filesystem MCP über `llama-cpp-mcp.service` |
+| Websearch & Deep Research | `http://127.0.0.1:8642/mcp` | `llama-cpp-research.service`, existing Danmoreng/websearch-mcp |
+| Context7 | `http://127.0.0.1:8643/servers/context7/mcp` | Existing Context7 via `llama-cpp-mcp.service` |
+| GitHub | `http://127.0.0.1:8643/servers/github/mcp` | Existing GitHub MCP via `llama-cpp-mcp.service` |
+| Skill collection (read-only) | `http://127.0.0.1:8643/servers/skills/mcp` | Existing Filesystem MCP via `llama-cpp-mcp.service` |
 
-Alle Verbindungen nutzen Streamable HTTP direkt aus der WebUI. Der Benutzer-Dienst `llama-cpp-mcp.service` verwendet [mcp-proxy 0.15.0](https://github.com/sparfenyuk/mcp-proxy/releases/tag/v0.15.0) als Transportadapter für die drei vorhandenen stdio-Programme aus `mcp.json`. Websearch bindet bereits selbst an Loopback und wird direkt verbunden. Der Router verwendet die Browser-Einträge statt der bisher parallel eingeblendeten Server-Tools. Das Modell sieht die ursprünglichen Tool-Namen wie `search_web`, `read_url`, `deep_research` und `read_text_file`.
+All connections use Streamable HTTP directly from the WebUI. The user service `llama-cpp-mcp.service` uses [mcp-proxy 0.15.0](https://github.com/sparfenyuk/mcp-proxy/releases/tag/v0.15.0) as a transport adapter for the three existing stdio programs from `mcp.json`. Websearch already binds to loopback itself and is connected directly. The router uses the browser entries instead of the previously parallel server-side tools. The model sees the original tool names such as `search_web`, `read_url`, `deep_research` and `read_text_file`.
 
-Der Websearch-Dienst behält seinen eigenen Netzwerk-Namespace, die Filterregeln und den lokalen Inference-Socket. Deep Research startet einen Hintergrundjob und verwendet über die bestehende lokale API standardmäßig das Profil `deep-research`. Das Tool-Argument `model` kann das Profil überschreiben. Der Timeout für die lokale Inference beträgt 90 Sekunden. Das Recherchebudget beträgt 240 Sekunden. Der Status kommt über `deep_research_status` mit der Job-ID. Der Gateway bindet an `127.0.0.1`, prüft Host und Browser-Origin und akzeptiert die WebUI unter `http://127.0.0.1:8080`. GitHub verkapselt die vorhandene `gh`-Anmeldung weiterhin im schreibgeschützten Serverprozess. Die Skills-Freigabe bleibt auf `~/dev/github/skillset/skills` beschränkt. Die WebUI fragt pro Tool-Aufruf nach Freigabe, soweit für dieses Tool noch keine Entscheidung gespeichert ist.
+The websearch service keeps its own network namespace, the filter rules and the local inference socket. Deep Research starts a background job and uses the `deep-research` profile by default through the existing local API. The tool argument `model` can override the profile. The local inference timeout is 90 seconds. The research budget is 240 seconds. The status comes through `deep_research_status` with the job ID. The gateway binds to `127.0.0.1`, checks host and browser origin and accepts the WebUI at `http://127.0.0.1:8080`. GitHub continues to wrap the existing `gh` login inside the read-only server process. The skills share remains limited to `~/dev/github/skillset/skills`. The WebUI asks for approval per tool call, as long as no decision is stored for that tool.
 
-### Diagnose
+### Diagnostics
 
 ```bash
 systemctl --user status llama-cpp.service llama-cpp-research.service llama-cpp-mcp.service
@@ -60,39 +60,39 @@ curl -fsS http://127.0.0.1:8642/healthz
 curl -fsS http://127.0.0.1:8643/status
 ```
 
-Die ursprünglichen Firefox-Tests verwendeten neue temporäre Profile und riefen die serverseitig registrierten Werkzeuge über **Tools → Server** auf. Die Anzeige „Add your first MCP server“ gehört dagegen zur Browser-Liste und war bei der früheren Vorgabe `mcpServers = []` zu erwarten. Issue #26497 dokumentiert ein ähnliches Symptom. Der Bericht #28077 wurde vom Autor zurückgezogen. Der installierte Build übernimmt die zentralen Vorgaben beim ersten Besuch auch im Router-Modus. [Upstream-Serverdoku b12503](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md) · [Issue #26497](https://github.com/ggml-org/llama.cpp/issues/26497) · [Issue #28077](https://github.com/ggml-org/llama.cpp/issues/28077)
+The original Firefox tests used new temporary profiles and invoked the server-side registered tools via **Tools → Server**. The "Add your first MCP server" notice, by contrast, belongs to the browser list and was expected under the earlier default `mcpServers = []`. Issue #26497 documents a similar symptom. Report #28077 was withdrawn by its author. The installed build applies the central settings on the first visit also in router mode. [Upstream server docs b12503](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md) · [Issue #26497](https://github.com/ggml-org/llama.cpp/issues/26497) · [Issue #28077](https://github.com/ggml-org/llama.cpp/issues/28077)
 
-## Human Writing in der WebUI
+## Human Writing in the WebUI
 
-Ein früherer Firefox-Chat mit `human-writing` bekam ohne das Tag `[web]` keine Suchwerkzeuge übergeben. Das Template erkennt jetzt auch ausgewählte eindeutige Aufträge am Beginn der ersten Zeile, etwa „Recherchiere im Web“, „Verwende ausdrücklich unseren Websearch MCP“ und „Search the web“. Es reicht bei diesen Aufträgen nur `search_web` und `read_url` an StyleTune weiter. Für Deep Research steht `deep-research` zur Auswahl. Für die übrigen Research-Aufgaben verwende `research`.
+An earlier Firefox chat with `human-writing` received no search tools without the `[web]` tag. The template now also recognizes selected unambiguous tasks at the start of the first line, such as „Recherchiere im Web", „Verwende ausdrücklich unseren Websearch MCP" and „Search the web". For these tasks it passes on only `search_web` and `read_url` to StyleTune. For Deep Research, `deep-research` is available. For the other research tasks use `research`.
 
-Der Router-Build b12503 unterstützt das Gemma-Systemformat und `chat-template-file` sowie `chat-template-kwargs` je Modellsammlungseintrag. Die installierte WebUI bietet kein natives Laden und Ausführen eines Agent-Skills. Die Writing-Profile verwenden deshalb das native Gemma-Template mit einer zusätzlichen Systemnachricht. Das eingebettete Gemma-Format für Benutzer- und Assistentenrollen, Tools und Toolantworten gilt weiterhin. Die WebUI kann eine eigene Systemnachricht ergänzen. Die vier Writing-Profile starten mit ausgeschaltetem Thinking. [Upstream-Dokumentation für b12503](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md)
+The router build b12503 supports the Gemma system format and `chat-template-file` and `chat-template-kwargs` per model collection entry. The installed WebUI offers no native loading and running of an agent skill. The writing profiles therefore use the native Gemma template with an additional system message. The embedded Gemma format for user and assistant roles, tools and tool responses still applies. The WebUI can add its own system message. The four writing profiles start with thinking disabled. [Upstream documentation for b12503](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md)
 
-| Router-Profil | Standardmodus | Geeignet für |
+| Router profile | Default mode | Suited for |
 |---|---|---|
-| `creative-writing` | Generate, Fiction | Englische Kurzgeschichten, Riff-Racers-Szenen, Figuren und Dialoge |
-| `human-writing` | Generate, Editorial | Deutsch und Englisch, Musikrezensionen, Blog, Devlog und persönliche Texte |
-| `human-rewrite` | Rewrite | Behutsame Bearbeitung bereits vorhandener Texte |
-| `human-audit` | Audit | Konkrete Befunde zu Mustern, Dichte und Substanz |
+| `creative-writing` | Generate, Fiction | English short stories, Riff-Racers scenes, characters and dialogue |
+| `human-writing` | Generate, Editorial | German and English, music reviews, blog, devlog and personal texts |
+| `human-rewrite` | Rewrite | Gentle editing of already existing texts |
+| `human-audit` | Audit | Concrete findings on patterns, density and substance |
 
-Alle vier Profile verwenden `Gemma-4-12B-StyleTune.Q4_K_M.gguf`, 16.384 Kontexttokens und Q8_0-K/V. Die erste Auftragszeile kann mit `[generate]`, `[rewrite]`, `[audit]`, `[website-audit]`, `[website-rewrite]` oder `[voice]` den Modus setzen. `[de]` und `[en]` wählen die Sprachreferenz. Weitere Genre-Tags sind `[fiction]`, `[editorial]`, `[technical]`, `[business]`, `[marketing]` und `[ux]`. Naheliegende deutsche und englische Auftragswörter werden in der ersten Zeile erkannt. Bei mehrdeutigen oder fremdsprachigen Anweisungen sind die Tags die verlässliche Steuerung. Die gewählte Einordnung gilt auch für Folgefragen, bis ein neuer Auftrag sie ändert.
+All four profiles use `Gemma-4-12B-StyleTune.Q4_K_M.gguf`, 16,384 context tokens and Q8_0 K/V. The first task line can set the mode with `[generate]`, `[rewrite]`, `[audit]`, `[website-audit]`, `[website-rewrite]` or `[voice]`. `[de]` and `[en]` select the language reference. Further genre tags are `[fiction]`, `[editorial]`, `[technical]`, `[business]`, `[marketing]` and `[ux]`. Common German and English task words are recognized in the first line. For ambiguous or foreign-language instructions the tags are the reliable control. The chosen classification applies to follow-up questions until a new task changes it.
 
-### Systemkontext und Aktualisierung
+### System Context and Updates
 
-- Quelle der Regeln ist `~/dev/github/skillset/skills/human-writing` beziehungsweise der freigegebene Skill-Pfad in `mcp.json`. Der Serverstart baut den Jinja-Cache mit `~/.config/llama.cpp/writing/render.py` aus dieser Quelle. Der generierte Cache unter `~/.cache/llama.cpp/writing/gemma4-human-writing.jinja` wird bei Änderungen im Checkout ausgetauscht. Für die Übernahme in bereits geladene Modelle den Benutzerdienst neu starten.
-- Jede Writing-Anfrage erhält das vollständige `SKILL.md` und die Quality Gates. Die Sprache wählt `style-de.md` oder `style-en.md`. Genrearbeit erhält den passenden Abschnitt von `genre-guides.md` oder `creative-writing.md`. Rewrite ergänzt `fidelity-rules.md` und `patterns-core.md`. Audit erhält die Muster für die Befundbewertung. Voice Calibration erhält `voice-calibration.md` und die Profilvorlage. Die Website-Modi laden ihre Audit- oder Rewrite-Regeln einschließlich der relevanten SEO- und A11y-Hinweise.
-- Die Systemnachricht verlangt bei Generate und Rewrite standardmäßig den fertigen Text. Audit liefert die angeforderten Befunde und Voice Calibration das Profil zu den Beispielen. Die Skill-Regeln begrenzen revidierende Durchläufe auf zwei. Geschützte Fakten, Zitate, Zahlen, URLs und technische Spans sind in der Rewrite-Anweisung priorisiert. Modellantworten mit wichtigen Fakten vor Weitergabe redaktionell prüfen.
-- Meldet der Dienststart einen Fehler beim Rendern, siehe `journalctl --user -u llama-cpp.service -n 60`. Das Skript stellt die generierte Datei erst nach erfolgreichem Lesen aller Quellen um. Für eine Neuinstallation der Writing-Profile wird die lokale Skill-Sammlung benötigt.
+- The source of the rules is `~/dev/github/skillset/skills/human-writing` or the shared skill path in `mcp.json`. Server start builds the Jinja cache with `~/.config/llama.cpp/writing/render.py` from this source. The generated cache under `~/.cache/llama.cpp/writing/gemma4-human-writing.jinja` is replaced on changes in the checkout. To apply changes in already-loaded models, restart the user service.
+- Every writing request receives the full `SKILL.md` and the quality gates. The language selects `style-de.md` or `style-en.md`. Genre work receives the matching section of `genre-guides.md` or `creative-writing.md`. Rewrite adds `fidelity-rules.md` and `patterns-core.md`. Audit receives the patterns for findings assessment. Voice Calibration receives `voice-calibration.md` and the profile template. The website modes load their audit or rewrite rules including the relevant SEO and A11y notes.
+- The system message requires the finished text by default for Generate and Rewrite. Audit delivers the requested findings and Voice Calibration the profile for the examples. The skill rules limit revising passes to two. Protected facts, quotes, numbers, URLs and technical spans are prioritized in the rewrite instruction. Editorially review model answers with important facts before passing them on.
+- If the service start reports an error while rendering, see `journalctl --user -u llama-cpp.service -n 60`. The script replaces the generated file only after all sources have been read successfully. A fresh installation of the writing profiles requires the local skill collection.
 
-### Quellengebundene Schreibaufträge
+### Source-Bound Writing Tasks
 
-`[fakten]` oder `[facts]` aktiviert die Quellenbindung pro Auftrag. Das Template ergänzt die Fidelity-Regeln und fordert den Abgleich jeder Sachbehauptung mit einem eingegebenen Faktenblatt, Quellenauszügen oder tatsächlichen Tool-Ergebnissen. Beobachtung, Planung, Ergebnis, Unsicherheit und Zuschreibung sollen erhalten bleiben. Der zusätzliche Systemkontext ist eine Modellanweisung. Ein separater Durchlauf mit `human-audit` und die Prüfung der Originalquellen bleiben die Freigabeschritte für wichtige Texte.
+`[fakten]` or `[facts]` activates source binding per task. The template adds the fidelity rules and requires checking every factual claim against an entered fact sheet, source excerpts or actual tool results. Observation, plan, result, uncertainty and attribution are to be preserved. The additional system context is a model instruction. A separate pass with `human-audit` and the review of the original sources remain the release steps for important texts.
 
-Recherchiere öffentliche Fakten zuerst und prüfe das Faktenblatt. Schreibe danach mit StyleTune im lokalen Writing-Profil. Der Tag `[fakten]` blendet den Rechercheprozess nicht in den Schreiblauf ein. Die Freigabe für eingeblendete Webtools erfolgt über `[web]`. Bei internen Themen liefert der Nutzer das Faktenblatt. Die [Quickstart-Anleitung](QUICKSTART.md#sachtexte-aus-quellen) enthält die Aufträge für die einzelnen Schritte.
+Research public facts first and check the fact sheet. Then write with StyleTune in the local writing profile. The tag `[fakten]` does not blend the research process into the writing run. Approval for the embedded web tools goes through `[web]`. For internal topics, the user supplies the fact sheet. The [quickstart guide](QUICKSTART.md#fact-sheets-from-sources) contains the tasks for the individual steps.
 
-### Linter, Website-Audit und Freigaben
+### Linter, Website Audit and Approvals
 
-Der bestehende Filesystem-MCP bietet zehn schreibgeschützte Dateiwerkzeuge. Der Schreibkontext wird direkt beim Formatieren des Prompts geladen. Bei gewöhnlichen Writing-Aufträgen blendet das Template die Tool-Beschreibungen im Modellprompt aus. Steht `[web]` am Anfang des aktuellen Auftrags, rendert es ausschließlich die in der WebUI für diesen Chat angebotene Websuche und den Seitenabruf. Die Freigaben der WebUI gelten dabei weiter. Die installierten MCP-Tools bieten keinen auf `lint_text.py` beschränkten Prozessaufruf. Die optionale Textprüfung läuft separat und verwendet die unveränderte Skill-CLI.
+The existing Filesystem MCP offers ten read-only file tools. The writing context is loaded directly when formatting the prompt. For ordinary writing tasks the template hides the tool descriptions in the model prompt. If `[web]` stands at the start of the current task, it renders exclusively the web search and page fetch offered for this chat in the WebUI. The approvals of the WebUI remain in force. The installed MCP tools offer no process call restricted to `lint_text.py`. The optional text check runs separately and uses the unchanged skill CLI.
 
 ```bash
 skill="$HOME/dev/github/skillset/skills/human-writing"
@@ -101,99 +101,99 @@ python3 "$skill/scripts/website_audit.py" https://example.com --format json --ou
 python3 "$skill/scripts/project_audit.py" audit /pfad/zum/projekt
 ```
 
-Der erste und dritte Befehl arbeiten lokal. Der zweite ruft ausdrücklich die angegebene öffentliche Website ab. Linter- oder Auditreports können anschließend als Dateien an einen Writing-Chat angehängt werden. `[website-rewrite]` liefert Vorschläge. Das Anwenden über die vorhandene Projekt-CLI oder im CMS erfordert die vorgesehene Freigabe. Die Schreibprofile schalten keine Shell-Ausführung frei.
+The first and third commands work locally. The second explicitly fetches the specified public website. Linter or audit reports can then be attached as files to a writing chat. `[website-rewrite]` delivers suggestions. Applying them via the existing project CLI or in the CMS requires the intended approval. The writing profiles do not enable shell execution.
 
-## Lokales Coding
+## Local Coding
 
-- `claude-local` startet Claude Code mit llama.cpp `/v1/messages`. `codex-local` verwendet `/v1/responses`. Die CLI-Profile und Zustände liegen unter `~/.config/llama.cpp/claude` bzw. `~/.config/llama.cpp/codex`. Die Skills werden über die vorhandenen Sammlungen eingebunden. Beide Wrapper prüfen die 262.144 Tokens des einzigen Coding-Profils. Claude verwendet 8.192 Ausgabetokens und 85 % als Compaction-Ziel. Codex verwendet die explizite Grenze 222.822 und bezieht seine Ausgabevorgabe vom Server.
-- Beide Wrapper starten den Router bei Bedarf, prüfen das gewählte Profil und starten den lokalen Client in einem eigenen Netzwerk-Namespace. Eine TCP-Verbindung im Namespace leitet ausschließlich über den privaten Router-Socket weiter. Die Clients erhalten eine minimale Umgebung. Claude verwendet einen lokalen Platzhalter und Codex keine OpenAI-Authentifizierung.
-- Die regulären Cloud-Clients, Zugangsdaten und Cloud-Konfigurationen werden durch die Wrapper nicht beschrieben. Der lokale Codex übernimmt über eine Kopie die aktuellen Benutzereinstellungen. Änderungen an der Cloud-Konfiguration fließen deshalb erst nach gezielter Übernahme in den lokalen Modus ein. Remote-MCPs sind im isolierten Netzwerk nicht erreichbar. Die gewöhnlichen Datei- und Shell-Berechtigungen der Clients gelten weiterhin.
-- Coding-Tests liefen in separaten lokalen Git-Fixtures. Tests mit Berechtigungen zum Bearbeiten und Ausführen waren auf die jeweilige Fixture begrenzt. Der beim Claude-SDK angezeigte USD-Wert ist eine Client-Schätzung. Die Requests gingen während der Tests an den lokalen Socket.
+- `claude-local` starts Claude Code with llama.cpp `/v1/messages`. `codex-local` uses `/v1/responses`. The CLI profiles and states live under `~/.config/llama.cpp/claude` and `~/.config/llama.cpp/codex` respectively. The skills are linked in via the existing collections. Both wrappers check the 262,144 tokens of the single coding profile. Claude uses 8,192 output tokens and 85 % as the compaction target. Codex uses the explicit limit 222,822 and takes its output budget from the server.
+- Both wrappers start the router on demand, check the selected profile and start the local client in its own network namespace. A TCP connection in the namespace forwards exclusively through the private router socket. The clients receive a minimal environment. Claude uses a local placeholder and Codex no OpenAI authentication.
+- The wrappers do not write the regular cloud clients, credentials or cloud configurations. The local Codex takes over the current user settings via a copy. Changes to the cloud configuration therefore flow into local mode only after a targeted takeover. Remote MCPs are unreachable in the isolated network. The usual file and shell permissions of the clients remain in force.
+- Coding tests ran in separate local Git fixtures. Tests with edit and execute permissions were limited to the respective fixture. The USD value shown by the Claude SDK is a client estimate. The requests went to the local socket during the tests.
 
-## Updates und Fehlersuche
+## Updates and Troubleshooting
 
-Die pro Modell geprüften Performance-Einstellungen, Messbedingungen und der Rückweg zur Ausgangskonfiguration stehen in [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md).
+The per-model verified performance settings, measurement conditions and the path back to the original configuration are in [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md).
 
-Bei einem Update einen offiziellen Release-Build mit kompatibler CUDA-Laufzeit nach `~/.local/opt/llama.cpp/<build>` entpacken und dessen Release-Hash prüfen. `llama-server --version` und `--list-devices` direkt im neuen Verzeichnis ausführen, dann `current` umstellen und die Benutzerdienste neu starten. Den alten Build für einen Rückwechsel behalten. Änderungen an den Router- oder CLI-Optionen gegen deren `--help` prüfen.
+For an update, unpack an official release build with a compatible CUDA runtime into `~/.local/opt/llama.cpp/<build>` and verify its release hash. Run `llama-server --version` and `--list-devices` directly in the new directory, then switch `current` and restart the user services. Keep the old build for a switch-back. Check router or CLI option changes against their `--help`.
 
-Beim Laden eines großen Modells helfen `nvidia-smi`, `free -h` und das Journal beim Unterscheiden von VRAM-, Host-RAM- und Templatefehlern. Für kleine Coding-Aufgaben genügen kurze Prompts im 256K-Profil. Bei Firefox trat ein HTTP 415 für die eingebettete variable Schriftdatei auf. Chat, Modellwahl und Textanhänge funktionierten mit der Ersatzschrift. Die Dateinavigationsprobe der WebUI wird bei deaktivierten Host-Dateitools abgewiesen. Freigegebene Skills bleiben über Filesystem MCP erreichbar.
+When loading a large model, `nvidia-smi`, `free -h` and the journal help to distinguish VRAM, host-RAM and template errors. For small coding tasks, short prompts in the 256K profile suffice. Firefox showed an HTTP 415 for the embedded variable font file. Chat, model selection and text attachments worked with the fallback font. The file navigation probe of the WebUI is rejected while host file tools are disabled. Shared skills remain reachable via Filesystem MCP.
 
-## Verwendete Skills und Testumfang
+## Skills Used and Test Scope
 
-Skill Orchestrator erfasste 27 Skills im Repository. Agent Harness strukturierte die Offline- und Tooltests. QA und Code Review lieferten Prüfkriterien für Firefox, die API-Verträge und die Setup-Dateien. Für Modell- und Agententests wurden keine Skripte aus den Skills gestartet.
+Skill Orchestrator covered 27 skills in the repository. Agent Harness structured the offline and tool tests. QA and Code Review supplied review criteria for Firefox, the API contracts and the setup files. No scripts from the skills were started for model and agent tests.
 
-Die Artefakte der Messungen liegen in `~/.cache/llama.cpp/setup`. Das Verzeichnis enthält die Download-Protokolle, die offizielle Benchmark-Ausgabe, Gerätetelemetrie und die Ausgaben synthetischer QA-Aufgaben. Die beiden Coding-Fixtures sind eigenständige Testverzeichnisse.
+The artifacts of the measurements are in `~/.cache/llama.cpp/setup`. The directory contains the download logs, the official benchmark output, device telemetry and the outputs of synthetic QA tasks. The two coding fixtures are standalone test directories.
 
-## QA der Modell- und MCP-Bereinigung
+## QA of the Model and MCP Cleanup
 
-Dieser Abschnitt dokumentiert die historische Abnahme vor der Vereinheitlichung auf 256K.
+This section documents the historical acceptance before the unification on 256K.
 
-| Prüfung | Status | Nachweis |
+| Check | Status | Evidence |
 |---|---|---|
-| Websuche im regulären Firefox | PASSED | Gemma 4 26B im Profil `research` rief nach **Allow once** `search_web` auf. Die Antwort verlinkte die offizielle Python-Dokumentation zu Decimal. Ein separater Playwright-Lauf prüfte zusätzlich den tatsächlichen HTTP-Tool-Response. |
-| Deep Research im regulären Firefox | PASSED | `deep_research` wurde nach **Allow once** eingereicht. Die Statusabfrage über MCP meldete `completed`. Der Dienst erfasste eine offizielle Python-Quelle und lieferte nach dem Timeout der lokalen LLM-Synthese eine quellenbasierte Ersatz-Zusammenfassung. |
-| Seitenabruf, Entwicklerdoku, GitHub und Skills | PASSED | Tatsächliche MCP-Aufrufe von `read_url`, `resolve-library-id`, `query-docs`, `get_latest_release` und `read_text_file`. |
-| Keine Medien-MCPs in Llama Chat | PASSED | Nach dem Neustart der llama.cpp-Dienste zeigte ein neu geöffnetes Fenster im regulären Firefox-Profil vier verbundene Einträge. Die Atelier-Karte wurde über das native Menü entfernt. Der Gateway führte nur die drei statischen stdio-Server für Context7, GitHub und Skills. |
-| Codex mit Cyber-Tiel | PASSED | Isolierter Coding-Lauf mit Bugfix, Refactoring, sechs Unit-Tests und unabhängiger Vertragsprüfung. |
-| Claude Code mit Cyber-Tiel | PASSED | Nach dem Neustart des speicherintensiven Stageground-Entwicklungsservers bestand dieselbe Ledger-Fixture vier Unit-Tests und die unabhängige Vertragsprüfung. Die früheren Timeouts stehen im Benchmark-Verlauf. |
-| Tool Calling mit Cyber-Tiel | PASSED | Zwei aufeinander aufbauende Tool-Aufrufe über die lokale Chat-API. Der zweite Aufruf verwendete die zuvor gelieferte Build-ID. |
-| Defensive Prüfung mit Cyber-Tiel | FAILED | Die Prüfung erkannte, dass fehlende Principals abgelehnt werden müssen. Der vorgeschlagene Fix konnte bei einem fehlenden Tenant-Schlüssel weiterhin einen `KeyError` auslösen. |
-| StyleTune und Human Writing | PASSED | Sechs native Template-Tests. Englische Szene mit zwei Dialogstimmen und deutsche Überarbeitung mit erhaltenem Datum, Zahl und Link. |
-| Cyber-Tiel-Kontextprofile | PASSED | Fünf Profile von 32K bis 256K sind registriert. 64K lud mit 65.536 Tokens und beantwortete einen kurzen Retrieval-Test. Die Vollkontext-Messungen für 128K bis 256K stammen aus der früheren Messreihe. |
-| Abschließender Dienstneustart | PASSED | Router, Websearch und MCP-Gateway antworteten nach dem Neustart. Beide lokalen Wrapper starteten mit `coding-fast` und Cyber-Tiel. Der Codex-Smoke-Test erzeugte die erwartete Antwort über die lokale Responses API. Atelier und Game Audio Forge waren weiterhin aktiv. |
+| Web search in the regular Firefox | PASSED | Gemma 4 26B in the `research` profile called `search_web` after **Allow once**. The answer linked the official Python documentation on Decimal. A separate Playwright run additionally checked the actual HTTP tool response. |
+| Deep Research in the regular Firefox | PASSED | `deep_research` was submitted after **Allow once**. The status query over MCP reported `completed`. The service captured one official Python source and delivered a source-based fallback summary after the local LLM synthesis timed out. |
+| Page fetch, developer docs, GitHub and skills | PASSED | Actual MCP calls of `read_url`, `resolve-library-id`, `query-docs`, `get_latest_release` and `read_text_file`. |
+| No media MCPs in Llama Chat | PASSED | After restarting the llama.cpp services, a newly opened window in the regular Firefox profile showed four connected entries. The Atelier card was removed via the native menu. The gateway listed only the three static stdio servers for Context7, GitHub and skills. |
+| Codex with Cyber-Tiel | PASSED | Isolated coding run with bugfix, refactoring, six unit tests and an independent contract check. |
+| Claude Code with Cyber-Tiel | PASSED | After restarting the memory-intensive Stageground development server, the same Ledger fixture passed four unit tests and the independent contract check. The earlier timeouts are in the benchmark history. |
+| Tool calling with Cyber-Tiel | PASSED | Two chained tool calls over the local chat API. The second call used the previously delivered build ID. |
+| Defensive check with Cyber-Tiel | FAILED | The check detected that missing principals must be rejected. The proposed fix could still raise a `KeyError` when a tenant key is missing. |
+| StyleTune and Human Writing | PASSED | Six native template tests. English scene with two dialogue voices and a German revision with preserved date, number and link. |
+| Cyber-Tiel context profiles | PASSED | Five profiles from 32K to 256K are registered. 64K loaded with 65,536 tokens and answered a short retrieval test. The full-context measurements for 128K to 256K come from the earlier measurement series. |
+| Final service restart | PASSED | Router, websearch and MCP gateway responded after the restart. Both local wrappers started with `coding-fast` and Cyber-Tiel. The Codex smoke test produced the expected response via the local Responses API. Atelier and Game Audio Forge remained active. |
 
-## Historische QA vor der Modellbereinigung
+## Historical QA Before the Model Cleanup
 
-| Prüfung | Status | Ergebnis |
+| Check | Status | Result |
 |---|---|---|
-| CUDA, CLI-Werkzeuge und Bindings | PASSED | CUDA0 auf RTX 5070, native sm_120a-Kernels, keine LAN-Bindung des neuen Routers oder Research-Dienstes |
-| Offizielle WebUI, KDE-Starter und systemd | PASSED | Starter ausgeführt, Benutzerdienste neu gestartet, Modellwahl, Chat, Textanhang und wiedergeöffneter Chat im Firefox geprüft |
-| Chat-Suche, Gesprächsexport und -import | PASSED | Testchat per Suche gefunden, als ZIP exportiert und in einem frischen Firefox-Profil importiert |
-| Router-Modellwechsel und Idle-Sleep | PASSED | Maximal eine Instanz, Wechsel zwischen Modellen und Status sleeping im verkürzten Test |
-| Websuche, HTML und PDF per MCP | PASSED | DuckDuckGo-Websuche aus Firefox nach einmaliger Freigabe. Python-Dokumentation und PDF-Text aus arXiv gelesen, Testadressbereich abgewiesen |
-| Deep Research | PASSED | Zwei Jobs mit je zwei gelesenen Quellen, darunter ein Job durch den nativen Router in 39,3 s. Ergänzende Quellen unterschiedlicher Qualität erfordern Sichtprüfung |
-| Filesystem, Context7, GitHub | PASSED | SKILL.md und Referenz gelesen, Pfad außerhalb der Freigabe abgewiesen. Astro-Dokumentation und read-only GitHub-Release gelesen |
-| Hugging Face | PASSED | Anonyme Repo-Suche funktionierte im Test. Der optionale Streamable-HTTP-Zugang ist im Browser bei Bedarf hinzufügbar |
-| Claude Code und Codex offline | PASSED | Getrennte Git-Fixtures bearbeitet und unabhängig mit Unit Tests geprüft. Beide Clients bestätigten auch den 128K-Alias |
-| Skill-Zugriff | PASSED | Claude verwendete den Skill-Toolaufruf für backend-api-engineering. Codex lud die vorhandene Skill-Sammlung und beantwortete den Skill-Auftrag. Llama Chat nutzt read-only Filesystem-Zugriff |
-| 128K, 192K und 256K | PASSED | Cyber-Tiel extrahierte drei Fakten je Test. Reeller 100K-Quellcode im 128K-Profil geprüft. Bei 256K wurden rund 196K Tokens wiederverwendet |
-| LFM-Retrieval bei 128K | FAILED | Technischer Durchlauf abgeschlossen, 0 von 3 gesuchten Fakten im ersten vollständigen Langkontexttest |
-| Coding-Security | PASSED | Defekt im kontrollierten lokalen Quelltext erkannt. Der erste Patch ließ den Randfall fehlender Schlüssel offen |
-| Prosa und Deutsch | PASSED | StyleTune und Gemma QAT lieferten die englische Dialogprobe, QAT beantwortete die deutsche Alltagsprompt |
-| MTP | PASSED | Sidecar und Toolkette lauffähig. Die Gesamtdauer war höher, daher in den Standardprofilen deaktiviert |
-| NVMe und persistenter Slot | PASSED | mmap und Direct I/O verglichen. Nach Speichern, Entladen und Laden wurden 2.663 Tokens aus dem Slotzustand wiederverwendet |
-| Optionale Integrationen | SKIPPED | Vulkan-Benchmark, SearXNG-Instanz, Playwright-MCP, zusätzlicher Gemma-Community-Quant und YOLO-Auto |
-| Vollständiger Systemneustart | SKIPPED | Laufende Desktop-Sitzung, Dienstneustart geprüft |
-| Medienpipelines, Status | PASSED | Audio-Webinterface HTTP 200, Dienstzustände vor und nach dem Setup geprüft. Keine Generierungsprobe ausgelöst |
+| CUDA, CLI tools and bindings | PASSED | CUDA0 on RTX 5070, native sm_120a kernels, no LAN binding of the new router or research service |
+| Official WebUI, KDE launcher and systemd | PASSED | Launcher executed, user services restarted, model selection, chat, text attachment and reopened chat checked in Firefox |
+| Chat search, conversation export and import | PASSED | Test chat found via search, exported as ZIP and imported into a fresh Firefox profile |
+| Router model switch and idle sleep | PASSED | At most one instance, switching between models and sleeping status in the shortened test |
+| Web search, HTML and PDF via MCP | PASSED | DuckDuckGo web search from Firefox after a one-time approval. Read the Python documentation and PDF text from arXiv, test address range rejected |
+| Deep Research | PASSED | Two jobs with two sources read each, including one job through the native router in 39.3 s. Supplementary sources of differing quality require visual inspection |
+| Filesystem, Context7, GitHub | PASSED | Read SKILL.md and a reference, path outside the share rejected. Read the Astro documentation and read-only GitHub release |
+| Hugging Face | PASSED | Anonymous repo search worked in the test. The optional Streamable-HTTP access can be added in the browser when needed |
+| Claude Code and Codex offline | PASSED | Separate Git fixtures edited and independently checked with unit tests. Both clients also confirmed the 128K alias |
+| Skill access | PASSED | Claude used the skill tool call for backend-api-engineering. Codex loaded the existing skill collection and answered the skill task. Llama Chat uses read-only filesystem access |
+| 128K, 192K and 256K | PASSED | Cyber-Tiel extracted three facts per test. Real 100K source code checked in the 128K profile. At 256K around 196K tokens were reused |
+| LFM retrieval at 128K | FAILED | Technical run completed, 0 of 3 searched facts in the first full long-context test |
+| Coding security | PASSED | Defect in the controlled local source code detected. The first patch left the missing-key edge case open |
+| Prose and German | PASSED | StyleTune and Gemma QAT delivered the English dialogue probe, QAT answered the German everyday prompt |
+| MTP | PASSED | Sidecar and tool chain runnable. Total duration was higher, therefore disabled in the standard profiles |
+| NVMe and persistent slot | PASSED | Compared mmap and direct I/O. After save, unload and load, 2,663 tokens were reused from the slot state |
+| Optional integrations | SKIPPED | Vulkan benchmark, SearXNG instance, Playwright-MCP, additional Gemma community quant and YOLO-Auto |
+| Full system reboot | SKIPPED | Running desktop session, service restart verified |
+| Media pipelines, status | PASSED | Audio web interface HTTP 200, service states checked before and after the setup. No generation probe triggered |
 
-### QA der Writing-Integration
+### QA of the Writing Integration
 
-| Prüfung | Status | Ergebnis |
+| Check | Status | Result |
 |---|---|---|
-| Systemkontext und Routing | PASSED | Native `/apply-template`-Tests decken alle vier Profile, alle sechs Modi und beide Sprachreferenzen ab. Vorhandene Benutzer-Systemnachricht bleibt wirksam. |
-| Firefox ohne externes Netz | PASSED | Profilwechsel, Dialog und Audit in der offiziellen WebUI über den lokalen Unix-Socket. Beide Antworten wurden im Chat gerendert. Das Modell gab keine Tool-Aufrufe aus. |
-| Tool-Filter | PASSED | Bei lokalem Schreiben und Audit werden Tool-Beschreibungen ausgeblendet. Im damaligen Test mit `[web]` rendert das Template ausschließlich die angebotenen Such- und Seitenabruf-Tools. Es erkennt sowohl die direkten MCP-Namen als auch die zuvor serverseitig verwendeten Namen. Die lokale Dateinavigationsprobe des Browsers wurde abgewiesen. |
-| Skill-Werkzeuge | PASSED | Alle drei vorhandenen CLI-Tests bestanden in einer temporären Testkopie. Filesystem MCP bietet weiterhin zehn reine Lesewerkzeuge. |
-| Wiederherstellung der Writing-Konfiguration | PASSED | Das Wiederherstellungspaket rendert im Test-Benutzerverzeichnis eine bytegleiche Vorlage aus dem zentralen Skill-Checkout. |
-| Redaktioneller Vergleich | GETESTET | Neun A/B-Paare ergaben Verbesserungen bei einzelnen Texten und weiterhin Fehler bei Umfang und Faktentreue. Siehe [Modellvergleich](MODEL_BENCHMARKS.md#human-writing-mit-gemma-4-12b-styletune). |
+| System context and routing | PASSED | Native `/apply-template` tests cover all four profiles, all six modes and both language references. An existing user system message remains effective. |
+| Firefox without external network | PASSED | Profile switch, dialogue and audit in the official WebUI over the local Unix socket. Both answers rendered in the chat. The model emitted no tool calls. |
+| Tool filter | PASSED | For local writing and audit, tool descriptions are hidden. In the then-current test with `[web]` the template renders exclusively the offered search and page-fetch tools. It recognizes both the direct MCP names and the previously server-side names. The local file navigation probe of the browser was rejected. |
+| Skill tools | PASSED | All three existing CLI tests passed in a temporary test copy. Filesystem MCP still offers ten pure read tools. |
+| Restore of the writing configuration | PASSED | The restore package renders a byte-identical template from the central skill checkout in the test user directory. |
+| Editorial comparison | TESTED | Nine A/B pairs produced improvements in individual texts and still errors in scope and factual fidelity. See [model comparison](MODEL_BENCHMARKS.md#human-writing-with-gemma-4-12b-styletune). |
 
-Die Mitschnitte der Routing- und Firefox-Prüfung liegen für diesen Lauf unter `~/.cache/llama.cpp/writing.hmhXLZBN`. Die Web- und Projekt-CLIs wurden mit lokalen Testdaten geprüft.
+The recordings of the routing and Firefox check for this run are under `~/.cache/llama.cpp/writing.hmhXLZBN`. The web and project CLIs were checked with local test data.
 
-### QA der MCP-Umstellung
+### QA of the MCP Conversion
 
-| Prüfung | Status | Nachweis |
+| Check | Status | Evidence |
 |---|---|---|
-| Einträge aus zentraler Konfiguration | PASSED | Vier Karten mit insgesamt 20 Tools in einem neu angelegten Firefox-Profil am Produktions-Origin. |
-| Websuche und Seitenabruf | PASSED | Tatsächliche Streamable-HTTP-Aufrufe für `search_web` und `read_url` aus einem Chat der installierten WebUI. Treffer und Seiteninhalt aus der offiziellen Python-Dokumentation. |
-| Deep Research | PASSED | Job aus der WebUI gestartet. `deep_research_status` meldete `completed` und lieferte eine Quelle aus der offiziellen Python-Dokumentation. |
-| Context7 und GitHub | PASSED | `resolve-library-id` und `query-docs` lieferten Astro-Dokumentation. `get_latest_release` lieferte die Upstream-Release-Daten von llama.cpp. |
-| Skill-Sammlung | PASSED | `read_text_file` lieferte das echte Human-Writing-SKILL.md. Das Modell wandte die Regel für maximal zwei Überarbeitungsschritte an. Der direkte MCP-Test wies einen Pfad außerhalb der Freigabe ab. |
-| Writing | PASSED | Dialog und Audit mit StyleTune in Firefox. Das Systemtemplate lädt die Skill-Regeln automatisch. In der Prompt-Probe wurden die direkten Werkzeugnamen nur mit `[web]` angeboten. |
-| Tool-Freigaben | PASSED | Vor den geprüften MCP-Aufrufen erschien **Allow once**. Im UI-Test wurde jede Freigabe einzeln erteilt. |
-| HTTP-Grenzen des Gateways | PASSED | Erlaubter WebUI-Origin HTTP 200. Fremder Browser-Origin HTTP 403 und fremder Host-Header HTTP 421. |
-| Neustart der Dienste | PASSED | Alle drei Benutzerdienste wurden neu gestartet. Der reguläre Firefox zeigte beim Wiedereinstieg am KDE-Origin die vier verbundenen Einträge. |
-| Browser-Neustart | PASSED | Ein persistentes Firefox-Testprofil wurde geschlossen und nach dem Dienstneustart neu geöffnet. Die vier Einträge blieben gespeichert und verbanden sich erneut. |
+| Entries from central configuration | PASSED | Four cards with 20 tools in total in a newly created Firefox profile on the production origin. |
+| Web search and page fetch | PASSED | Actual Streamable-HTTP calls for `search_web` and `read_url` from a chat of the installed WebUI. Hits and page content from the official Python documentation. |
+| Deep Research | PASSED | Job started from the WebUI. `deep_research_status` reported `completed` and delivered a source from the official Python documentation. |
+| Context7 and GitHub | PASSED | `resolve-library-id` and `query-docs` delivered Astro documentation. `get_latest_release` delivered the upstream release data of llama.cpp. |
+| Skill collection | PASSED | `read_text_file` delivered the real Human-Writing SKILL.md. The model applied the rule of at most two revision steps. The direct MCP test rejected a path outside the share. |
+| Writing | PASSED | Dialogue and audit with StyleTune in Firefox. The system template loads the skill rules automatically. In the prompt probe the direct tool names were offered only with `[web]`. |
+| Tool approvals | PASSED | **Allow once** appeared before the checked MCP calls. In the UI test every approval was granted individually. |
+| Gateway HTTP boundaries | PASSED | Allowed WebUI origin HTTP 200. Foreign browser origin HTTP 403 and foreign host header HTTP 421. |
+| Restart of the services | PASSED | All three user services were restarted. On re-entry at the KDE origin the regular Firefox showed the four connected entries. |
+| Browser restart | PASSED | A persistent Firefox test profile was closed and reopened after the service restart. The four entries remained stored and reconnected. |
 
-Die ausführlichen Tool-Ergebnisse der Firefox-Automation liegen für diesen Lauf unter `~/.cache/llama.cpp/mcp-menu.7I318ZkC`. Die Migration im regulären Browser hat nur MCP-Einträge über die vorhandene Oberfläche ergänzt.
+The detailed tool results of the Firefox automation for this run are under `~/.cache/llama.cpp/mcp-menu.7I318ZkC`. The migration in the regular browser only added MCP entries via the existing interface.
 
-Historische Medienmessungen bleiben im Wiederherstellungspaket unter `benchmarks/results/media-mcp.json`. Atelier und Game Audio Forge laufen als eigenständige Projekte.
+Historical media measurements stay in the restore package under `benchmarks/results/media-mcp.json`. Atelier and Game Audio Forge run as standalone projects.

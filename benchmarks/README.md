@@ -1,24 +1,24 @@
 # Benchmarks
 
-Die [Auswertung](../docs/MODEL_BENCHMARKS.md) dokumentiert Hardware, Modellwahl, Testbedingungen und Grenzen der ursprünglichen Messreihe vom 18. November 2026.
+The [evaluation](../docs/MODEL_BENCHMARKS.md) documents the hardware, model choices, test conditions, and limits of the original measurement series of 18 November 2026.
 
-| Dateien in [results/](results/) | Inhalt |
+| Files in [results/](results/) | Content |
 |---|---|
-| `bench-*.json`, `*.stderr`, `*.csv` | Offizieller `llama-bench`, Zeit und Peak-RSS aus GNU time sowie Gerätewerte aus `nvidia-smi` |
-| `context-*.jsonl` | Repositoriumsähnliche Testprompts, Prompt- und Decode-Raten, Latenz, Cache-Wiederverwendung und Retrieval |
-| `qa-real-repo.json`, `qa-slot-final.jsonl` | Metriken des 100K-Quellcodetests und Test des Speicherns und Ladens eines Slots |
-| `qa-*-tools.json`, `coding-*.time` | Tool-Erfolgsstatus und Laufzeit der getrennten Coding-Aufgaben |
-| `human-writing-ab.json` | Neun gepaarte Writing-Aufgaben mit identischen Prompts, Textausgaben, Timing und Linter-Befunden |
-| `media-mcp.json` | Drei Atelier-PNGs mit Seeds, Laufzeiten und Transport sowie technische WAV-Analyse für sechs GAF-Aufträge |
-| `final-cleanup.json` | Cyber-Tiel-Abnahme mit den beiden lokalen CLI-Clients sowie die neuen Research-, Tool- und Writing-Prüfungen |
-| `advanced-performance.json` | Neue Baseline, A/B-Vergleiche, Cache-Zähler und Prozess- sowie GPU-Messwerte |
-| `follow-up.json` | Voller 256K-Kalt-/Warmlauf, Deep-Research-Synthese, vier Writing-Szenen und getrennte Faktenprüfung |
+| `bench-*.json`, `*.stderr`, `*.csv` | Official `llama-bench`, time and peak RSS from GNU time, device values from `nvidia-smi` |
+| `context-*.jsonl` | Repository-like test prompts, prompt and decode rates, latency, cache reuse, and retrieval |
+| `qa-real-repo.json`, `qa-slot-final.jsonl` | Metrics of the 100K source-code test and the test of saving and loading a slot |
+| `qa-*-tools.json`, `coding-*.time` | Tool success status and runtime of the separate coding tasks |
+| `human-writing-ab.json` | Nine paired writing tasks with identical prompts, text outputs, timing, and linter findings |
+| `media-mcp.json` | Three Atelier PNGs with seeds, runtimes, and transport, plus technical WAV analysis for six GAF tasks |
+| `final-cleanup.json` | Cyber-Tiel acceptance with the two local CLI clients plus the new research, tool, and writing checks |
+| `advanced-performance.json` | New baseline, A/B comparisons, cache counters, and process and GPU measurements |
+| `follow-up.json` | Full 256K cold/warm run, deep-research synthesis, four writing scenes, and separate fact checking |
 
-Absolute lokale Home-Pfade wurden normalisiert. Vom realen Repository-Test sind nur Status und Messwerte enthalten. Die ursprünglichen vollständigen Agententraces bleiben auf dem Laptop.
+Absolute local home paths were normalized. Of the real repository test, only status and measurements are included. The original full agent traces remain on the laptop.
 
-## Kurzbenchmark wiederholen
+## Repeat the short benchmark
 
-Die GPU sollte genügend freien VRAM haben. Schließe einen laufenden Chat ab und beende bei Bedarf den llama.cpp-Benutzerdienst vor dem direkten Benchmark. Die Messungen für große Modelle verwendeten zeitweise das Fedora-Leistungsprofil. Halte beim Vergleichen Energieprofil, GPU-Auslastung, Modell und Parameter fest.
+The GPU should have enough free VRAM. Finish a running chat and, if needed, stop the llama.cpp user service before the direct benchmark. The measurements for large models temporarily used the Fedora performance profile. When comparing, record the energy profile, GPU utilization, model, and parameters.
 
 ```bash
 mkdir -p "$HOME/llama-bench-neu"
@@ -26,11 +26,11 @@ mkdir -p "$HOME/llama-bench-neu"
   "$HOME/models/gguf/Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf" -p 8192,16384 -n 128 -r 2
 ```
 
-Die Option `-p` misst Prefill und `-n` Decode separat. Für Decode nach einem gefüllten Kontext den Router-Test verwenden. Das Skript lässt vorhandene Ausgabedateien unangetastet.
+The `-p` option measures prefill and `-n` measures decode separately. For decode after a filled context, use the router test. The script leaves existing output files untouched.
 
-## Langkontext wiederholen
+## Repeat the long-context test
 
-Starte dafür den Router. Der Test lädt das gewählte Profil und belegt dessen einzigen Modellslot. Die Eingabe besteht aus generiertem Python-Quellcode mit drei bekannten Fakten. `--reuse-prefix` prüft zusätzlich wiederverwendete Prompt-Tokens in den aufeinanderfolgenden Läufen.
+Start the router for this. The test loads the selected profile and occupies its single model slot. The input consists of generated Python source code with three known facts. `--reuse-prefix` additionally checks reused prompt tokens across consecutive runs.
 
 ```bash
 mkdir -p "$HOME/llama-bench-neu"
@@ -39,15 +39,15 @@ python3 benchmarks/bench-context.py coding-long-256k 8192 16384 32768 65536 1310
   --structured --reuse-prefix --fixed-prefix-modules 20 | tee "$HOME/llama-bench-neu/context-256k.jsonl"
 ```
 
-Die Retrieval-Spalte prüft, ob drei erwartete Werte in der Antwort vorkommen. Für Coding-Qualität zählen zusätzlich der reale Repository-Test, die beiden Agentenaufgaben und deren Unit Tests.
+The retrieval column checks whether three expected values appear in the answer. For coding quality, the real repository test, the two agent tasks, and their unit tests also count.
 
-`--cache-prompt` aktiviert die serverseitige Wiederverwendung bei gleichbleibender Position der gesuchten Fakten. Für einen Kalt-/Warm-Vergleich lade das Profil frisch und wiederhole genau dieselbe Eingabe.
+`--cache-prompt` activates server-side reuse when the position of the searched facts stays the same. For a cold/warm comparison, load the profile fresh and repeat exactly the same input.
 
 ```bash
 python3 benchmarks/bench-context.py coding-long-256k 253952 --structured --repeat 2 --cache-prompt
 ```
 
-Die drei 8K-Baselines verwenden denselben Aufruf ohne `--reuse-prefix` und mit genau einem Zielwert. Warte jeweils auf das Ende des Aufrufs, bevor der Router zum nächsten Modell wechselt.
+The three 8K baselines use the same call without `--reuse-prefix` and with exactly one target value. Wait for each call to finish before the router switches to the next model.
 
 ```bash
 for profile in coding-long-256k research creative-writing; do
@@ -55,9 +55,9 @@ for profile in coding-long-256k research creative-writing; do
 done
 ```
 
-## Temporäre Router-Vergleiche wiederholen
+## Repeat the temporary router comparisons
 
-Der Produktionsrouter muss während des Vergleichs frei von geladenen Modellen sein. Warte laufende Chats und Research-Aufträge ab und entlade das aktuelle Modell im Modellmenü. Der Benchmark startet einen temporären Benutzerdienst auf `127.0.0.1:18083` und beendet ihn nach dem Test. Der Testlauf bricht ab, wenn der Produktionsrouter wieder ein Modell lädt.
+The production router must have no loaded models during the comparison. Wait for running chats and research jobs to finish and unload the current model in the model menu. The benchmark starts a temporary user service on `127.0.0.1:18083` and stops it after the test. The test run aborts if the production router loads a model again.
 
 ```bash
 ./benchmarks/run-perf-case.sh "$HOME/llama-perf-neu" thp-a1 coding-long-256k A prefix,48
@@ -66,4 +66,4 @@ Der Produktionsrouter muss während des Vergleichs frei von geladenen Modellen s
 ./benchmarks/run-perf-case.sh "$HOME/llama-perf-neu" cold256 coding-long-256k A context,253952
 ```
 
-`A` übernimmt die glibc-Umgebung des Produktionsrouters. `B` setzt zusätzlich `glibc.malloc.hugetlb=1` und übernimmt die übrigen Tunables. Um eine frühere Ausgangskonfiguration zu reproduzieren, setze `LLAMA_PERF_PRESETS` auf die gesicherte `models.ini`. Verwende pro Durchlauf eine eigene ID. Die JSONL-Dateien enthalten Antwortqualität, Cache-Tokens, Latenz und Prozessdaten. `gpu.csv` enthält die während des gesamten Falls gemessenen Gerätewerte. [Auswertung und Rollback](../docs/PERFORMANCE_OPTIMIZATION.md)
+`A` takes over the glibc environment of the production router. `B` additionally sets `glibc.malloc.hugetlb=1` and takes over the remaining tunables. To reproduce an earlier baseline configuration, set `LLAMA_PERF_PRESETS` to the saved `models.ini`. Use a separate ID per run. The JSONL files contain response quality, cache tokens, latency, and process data. `gpu.csv` contains the device values measured over the entire case. [Evaluation and rollback](../docs/PERFORMANCE_OPTIMIZATION.md)

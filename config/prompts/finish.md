@@ -1,7 +1,7 @@
-Wrap-up pass. Steps: 1) open tasks prüfen, 2) relevante Tests ausführen,
-3) nur NEUE Fehler beheben, 4) git diff gegen Arbeitsstand kontrollieren,
-5) Security-relevante Änderungen prüfen, 6) Doku/Doku-Drift prüfen,
-7) Akzeptanzkriterien der Aufgabe verifizieren, 8) offene Einschränkungen
-benennen. Kein git push, kein Deployment, keine destruktiven Git-Ops.
-Bestehende Skills (testing-qa, ultimate-code-review, security) liefern die
-Prüfkriterien; keine eigenen Regelwerke erfinden.
+Wrap-up pass. Steps: 1) check open tasks, 2) run relevant tests,
+3) fix only NEW errors, 4) review git diff against the working state,
+5) check security-relevant changes, 6) check docs/documentation drift,
+7) verify the acceptance criteria of the task, 8) name open limitations.
+No git push, no deployment, no destructive git ops.
+Existing skills (testing-qa, ultimate-code-review, security) provide the
+review criteria; do not invent your own rulebooks.

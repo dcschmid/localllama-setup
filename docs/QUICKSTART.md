@@ -1,19 +1,19 @@
-# llama.cpp auf dem Framework Laptop 16
+# llama.cpp on the Framework Laptop 16
 
-1. Im KDE-Anwendungsmenü **llama.cpp** öffnen. Der Starter startet den Benutzerdienst und öffnet [Llama Chat](http://127.0.0.1:8080).
-2. Im Chat unten das Modell wählen. **research** ist für den Alltag, Dokumente, Websuche und Deep Research. **coding-long-256k** öffnet Cyber-Tiel. **creative-writing** ist für Geschichten und Dialoge. Das Modell lädt beim ersten Zugriff.
-3. Für Textdokumente **+** und **Add files** wählen. Die Unterhaltung im Chatverlauf wieder öffnen oder im Einstellungsmenü **Import/Export** verwenden.
-4. Öffne **MCP Servers** über den MCP-Eintrag in der Seitenleiste. Dort stehen **Websearch & Deep Research**, **Context7**, **GitHub** und **Skill-Sammlung (read-only)**. [MCP Servers öffnen](http://127.0.0.1:8080/#/mcp-servers)
-5. Wähle im Chat **research** und bei Bedarf unter **+ → Tools** den gewünschten MCP-Server. Beispielauftrag `Suche mit search_web nach der offiziellen Python-Dokumentation zu Decimal. Gib die URL aus dem Tool-Ergebnis an.` Bestätige den einzelnen Aufruf mit **Allow once**. Für Deep Research wähle **deep-research**, starte `deep_research` und frage anschließend mit `deep_research_status` und der Job-ID nach. Das Profil verwendet dieselbe Gemma-Datei mit einem kürzeren Denkbudget für die Synthese.
-6. Die Skill-Sammlung kannst du mit `read_text_file` lesen lassen. Beispiel `Lies das Human-Writing-SKILL.md aus unserer lokalen Skill-Sammlung und nenne die Regel für Überarbeitungsschritte.` Die Writing-Profile laden ihre Human-Writing-Regeln auch automatisch beim Schreiben.
+1. Open **llama.cpp** in the KDE application menu. The starter launches the user service and opens [Llama Chat](http://127.0.0.1:8080).
+2. Pick the model at the bottom of the chat. **research** is for everyday work, documents, web search, and deep research. **coding-long-256k** opens Cyber-Tiel. **creative-writing** is for stories and dialogue. The model loads on first access.
+3. For text documents, choose **+** and **Add files**. Reopen a conversation from the chat history, or use **Import/Export** in the settings menu.
+4. Open **MCP Servers** via the MCP entry in the sidebar. It lists **Websearch & Deep Research**, **Context7**, **GitHub**, and **Skill-Sammlung (read-only)**. [Open MCP Servers](http://127.0.0.1:8080/#/mcp-servers)
+5. Select **research** in the chat and, if needed, the desired MCP server under **+ → Tools**. Example task `Suche mit search_web nach der offiziellen Python-Dokumentation zu Decimal. Gib die URL aus dem Tool-Ergebnis an.` Confirm a single call with **Allow once**. For Deep Research, choose **deep-research**, start the job with `deep_research`, then poll it with `deep_research_status` and the job ID. The profile uses the same Gemma file with a shorter thinking budget for the synthesis.
+6. You can have the skill collection read with `read_text_file`. Example `Lies das Human-Writing-SKILL.md aus unserer lokalen Skill-Sammlung und nenne die Regel für Überarbeitungsschritte.` The writing profiles load their Human-Writing rules automatically while writing.
 
-Wähle in einem wieder geöffneten Chat bei Bedarf ein vorhandenes Profil. Der KDE-Starter verwendet immer `http://127.0.0.1:8080`. Nimm diese Adresse für den Zugriff auf dieselben Chats, MCP-Einträge und Freigaben.
+In a reopened chat, select an existing profile if needed. The KDE starter always uses `http://127.0.0.1:8080`. Use this address to reach the same chats, MCP entries, and approvals.
 
-## Schreiben mit StyleTune
+## Writing with StyleTune
 
-Wähle in einem neuen Chat unten **creative-writing**, **human-writing**, **human-rewrite** oder **human-audit**. Diese Profile verwenden dieselbe StyleTune-Datei und laden den Human-Writing-Skill automatisch. Für eine Geschichte oder Szene passt **creative-writing**. Für Blogartikel, Reviews und Devlogs passt **human-writing**. **human-rewrite** bearbeitet vorhandenen Text. **human-audit** liefert Befunde.
+In a new chat, pick **creative-writing**, **human-writing**, **human-rewrite**, or **human-audit** at the bottom. These profiles use the same StyleTune file and load the Human-Writing skill automatically. **creative-writing** fits stories or scenes. **human-writing** fits blog posts, reviews, and devlogs. **human-rewrite** edits existing text. **human-audit** returns findings.
 
-Schreib den Auftrag in die erste Zeile und setze den Ausgangstext oder die Stilproben darunter. Optionale Tags am Anfang steuern Sprache, Modus oder Genre ausdrücklich.
+Put the task on the first line and the source text or style samples below it. Optional tags at the start explicitly control language, mode, or genre.
 
 - `[en] [fiction] Write a Riff Racers paddock scene from Cleo's point of view.`
 - `[de] [editorial] Schreibe einen Blogartikel aus diesen drei Beobachtungen.`
@@ -23,34 +23,34 @@ Schreib den Auftrag in die erste Zeile und setze den Ausgangstext oder die Stilp
 - `[website-audit] Prüfe diese HTML-Auszüge oder diesen Auditbericht.`
 - `[website-rewrite] Erstelle Ersatzvorschläge für die freigegebenen Textstellen.`
 
-Normales Schreiben und Prüfen von eingefügtem Text laufen offline. Für einen konkreten Abruf beginne mit `[web]`, „Recherchiere im Web“ oder „Verwende ausdrücklich unseren Websearch MCP“. Aktiviere bei Bedarf das vorhandene Websearch-Werkzeug unter **+ → Tools → Websearch & Deep Research**. Für die zusätzliche Text-Linter-Prüfung mit einer gespeicherten Datei steht der Befehl in [SETUP.md](SETUP.md#human-writing-in-der-webui).
+Regular writing and checking of pasted text run offline. For an actual retrieval, start with `[web]`, „Recherchiere im Web" or „Verwende ausdrücklich unseren Websearch MCP". Enable the existing Websearch tool under **+ → Tools → Websearch & Deep Research** if needed. The command for the additional text-linter check with a saved file is in [SETUP.md](SETUP.md#human-writing-in-the-webui).
 
-### Sachtexte aus Quellen
+### Fact sheets from sources
 
-1. Erstelle im Profil **research** ein Faktenblatt. Beispielauftrag `Sammle nur Belege zur Fragestellung. Liste pro Fakt eine ID, die genaue Aussage, den Quellenausschnitt und die URL. Markiere Widersprüche und fehlende Belege. Schreibe noch keinen Artikel.` Für Devlogs und andere interne Themen kannst du bestätigte Notizen, Testergebnisse oder Textauszüge selbst als Faktenblatt einfügen.
-2. Wechsle zu **human-writing**. Füge das Faktenblatt unter `[fakten] [de] Schreibe aus F1, F2 usw. Setze zu jeder Tatsachenbehauptung die passende F-ID. Wenn die Belege kurz sind, darf der Text kürzer ausfallen.` ein. Wiederhole `[fakten]` bei quellengebundenen Folgeaufträgen.
-3. Prüfe den Entwurf in einem separaten **research**-Chat. Gib dem Modell das Faktenblatt und den Entwurf. Frage nach unbelegten Aussagen, Sinnverschiebungen und Beobachtungen, die der Autor nur abgeleitet hat. Lass beanstandete Stellen mit **human-rewrite** gezielt kürzen. Bei wichtigen Aussagen prüfe die Originalquelle.
+1. Create a fact sheet in the **research** profile. Example task `Sammle nur Belege zur Fragestellung. Liste pro Fakt eine ID, die genaue Aussage, den Quellenausschnitt und die URL. Markiere Widersprüche und fehlende Belege. Schreibe noch keinen Artikel.` For devlogs and other internal topics, you can paste confirmed notes, test results, or text excerpts yourself as the fact sheet.
+2. Switch to **human-writing**. Paste the fact sheet under `[fakten] [de] Schreibe aus F1, F2 usw. Setze zu jeder Tatsachenbehauptung die passende F-ID. Wenn die Belege kurz sind, darf der Text kürzer ausfallen.` Repeat `[fakten]` for follow-up tasks bound to sources.
+3. Review the draft in a separate **research** chat. Give the model the fact sheet and the draft. Ask for unbacked claims, shifts in meaning, and observations the author only inferred. Have **human-rewrite** trim the flagged passages on purpose. For important claims, check the original source.
 
-### Geschichten mit Wortvorgabe
+### Stories with a word target
 
-Teile eine Geschichte mit Zielgröße 1.200 Wörter in vier Szenen mit je etwa 300 Wörtern. Gib StyleTune pro Anfrage den nächsten Handlungsschritt, die vorherige Szene und die gewünschten Figurenstimmen. Zähle anschließend die Wörter im zusammengefügten Text. Wenn ein Abschnitt zu kurz ist, ergänze einen konkreten Handlungsschritt an dieser Stelle.
+Split a story with a 1,200-word target into four scenes of about 300 words each. Give StyleTune the next plot step, the previous scene, and the desired character voices per request. Then count the words in the assembled text. If a section comes up short, add a concrete plot step at that spot.
 
-## Lokales Coding
+## Local coding
 
-Beide Befehle starten **Coding Long 256K** mit Cyber-Tiel. Das Kontextfenster umfasst 262.144 Tokens und die Ausgabevorgabe beträgt 8.192 Tokens. In Claude zeigt `/context` die Belegung, `/status` den lokalen Server und `/autocompact` den eingestellten Fensterwert. [Messung und Rollback](PERFORMANCE_OPTIMIZATION.md)
+Both commands start **Coding Long 256K** with Cyber-Tiel. The context window covers 262,144 tokens and the output target is 8,192 tokens. In Claude, `/context` shows the usage, `/status` the local server, and `/autocompact` the configured window value. [Measurement and rollback](PERFORMANCE_OPTIMIZATION.md)
 
 ```bash
 claude-local
 codex-local
 ```
 
-Lange Anhänge lassen sich auf mehrere Eingaben verteilen. Für Folgefragen behältst du das Gespräch im selben Profil. Beim Entladen verliert der Router den gespeicherten Prompt-Zustand.
+Long attachments can be spread across multiple inputs. Keep follow-up questions in the same conversation. On unload, the router loses the stored prompt state.
 
-Research und Inference lassen sich einzeln kontrollieren:
+Research and inference can be controlled individually:
 
 ```bash
 systemctl --user status llama-cpp.service llama-cpp-research.service llama-cpp-mcp.service
 systemctl --user stop llama-cpp.service
 ```
 
-Ein erneuter Start über das Anwendungsmenü bringt die Oberfläche zurück. Details stehen in [SETUP.md](SETUP.md) und [MODEL_BENCHMARKS.md](MODEL_BENCHMARKS.md).
+Starting again from the application menu brings the interface back. Details are in [SETUP.md](SETUP.md) and [MODEL_BENCHMARKS.md](MODEL_BENCHMARKS.md).
