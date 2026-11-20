@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.11-permissions - Pi autonomy: Build as the standard mode
+
+- config/permission-mode.json.in: pi-permission-modes profile rendered on
+  install to ~/.pi/agent/permission-mode/permission-mode.json — defaultMode
+  build; autonomous file/bash/tool/skill work inside the project, OS sandbox
+  on, denyRead masks ssh/gnupg/aws/netrc/browser/cloud/pi-auth, skills
+  read-only, network allowlist (npm/PyPI/GitHub/crates/localhost), push and
+  destructive git stay ask, plan approval switches to build.
+- libexec/pi-sandbox: mount ~/.pi-lens writable (pi-lens state); bwrap
+  nesting verified on Fedora (allowNestedUserNamespaces in the mode profile).
+- setup.sh renders the profile on install (existing kept), doctor checks
+  defaultMode==build; unit tests 10/10, --dry-run clean.
+- policy matrix 24/24 deterministic (allow/ask/deny per surface incl. bash
+  AST rules); headless inference roundtrip through router verified.
+
 ## 2026.11-pi-ext - Pi extensions, templates, context record
 
 - manifest config/pi-manifest.json: pi-lens 4.5.1, pi-permission-modes 2.7.2,

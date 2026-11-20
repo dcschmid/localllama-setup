@@ -1,0 +1,132 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wynainfo/pi-permission-modes/main/schemas/permission-mode.schema.json",
+  "$comment": "localllma-setup Pi permission modes (pi-permission-modes 2.7.2). Build is the standard start mode: autonomous inside the project, OS sandbox stays on, credentials masked, network allowlisted. Plan and Default stay selectable; YOLO is never the default. Reviewed 2026-11-20.",
+  "acknowledgeDefaults": "2.7.2",
+  "defaultMode": "build",
+  "cycleOrder": ["default", "plan", "build", "yolo"],
+  "plan": { "approveMode": "build" },
+  "modes": {
+    "build": {
+      "label": "Build",
+      "color": "accent",
+      "sandbox": {
+        "enabled": true,
+        "writable": true,
+        "allowWrite": [".", "/tmp/pi", "~/.pi-lens"],
+        "denyWrite": [],
+        "denyRead": [
+          "~/.ssh",
+          "~/.aws",
+          "~/.gnupg",
+          "~/.netrc",
+          "~/.git-credentials",
+          "~/.pypirc",
+          "~/.gem/credentials",
+          "~/.vault-token",
+          "~/.password-store",
+          "~/.pi/agent/auth.json",
+          "~/.pi/agent/oauth.json",
+          "~/.config/gcloud",
+          "~/.config/azure",
+          "~/.mozilla",
+          "~/.config/google-chrome",
+          "~/.config/chromium"
+        ],
+        "network": {
+          "allowedDomains": [
+            "npmjs.org",
+            "*.npmjs.org",
+            "registry.npmjs.org",
+            "registry.yarnpkg.com",
+            "pypi.org",
+            "*.pypi.org",
+            "files.pythonhosted.org",
+            "github.com",
+            "*.github.com",
+            "api.github.com",
+            "raw.githubusercontent.com",
+            "objects.githubusercontent.com",
+            "crates.io",
+            "static.crates.io",
+            "localhost"
+          ],
+          "deniedDomains": []
+        },
+        "linux": { "allowNestedUserNamespaces": true }
+      },
+      "permission": {
+        "path": {
+          "*": "allow",
+          "~/.ssh": "deny",
+          "~/.ssh/**": "deny",
+          "~/.aws": "deny",
+          "~/.aws/**": "deny",
+          "~/.gnupg": "deny",
+          "~/.gnupg/**": "deny",
+          "~/.netrc": "deny",
+          "~/.git-credentials": "deny",
+          "~/.pypirc": "deny",
+          "~/.gem/credentials": "deny",
+          "~/.vault-token": "deny",
+          "~/.password-store": "deny",
+          "~/.password-store/**": "deny",
+          "~/.config/gcloud": "deny",
+          "~/.config/gcloud/**": "deny",
+          "~/.config/azure": "deny",
+          "~/.config/azure/**": "deny",
+          "~/.mozilla": "deny",
+          "~/.mozilla/**": "deny",
+          "~/.config/google-chrome": "deny",
+          "~/.config/google-chrome/**": "deny",
+          "~/.config/chromium": "deny",
+          "~/.config/chromium/**": "deny",
+          "~/.pi/agent/auth.json": "deny",
+          "~/.pi/agent/oauth.json": "deny"
+        },
+        "external_directory": {
+          "*": "ask",
+          "@SKILLS@": "allow",
+          "@SKILLS@/**": "allow"
+        },
+        "read": "allow",
+        "grep": "allow",
+        "find": "allow",
+        "ls": "allow",
+        "write": {
+          "*": "allow",
+          "@SKILLS@": "deny",
+          "@SKILLS@/**": "deny"
+        },
+        "edit": {
+          "*": "allow",
+          "@SKILLS@": "deny",
+          "@SKILLS@/**": "deny"
+        },
+        "bash": {
+          "*": "allow",
+          "sudo*": "deny",
+          "su *": "deny",
+          "doas*": "deny",
+          "pkexec*": "deny",
+          "runuser*": "deny",
+          "git push*": "ask",
+          "git reset --hard*": "ask",
+          "git clean*": "ask",
+          "git rebase*": "ask",
+          "git filter-branch*": "ask",
+          "npm publish*": "ask",
+          "twine upload*": "ask"
+        },
+        "web_search": "allow",
+        "tool": {
+          "*": "allow",
+          "mcp__*": "ask",
+          "mcp__websearch__*": "allow",
+          "mcp__context7__*": "allow",
+          "mcp__github__*": "allow"
+        },
+        "skill": "allow"
+      }
+    }
+  }
+}

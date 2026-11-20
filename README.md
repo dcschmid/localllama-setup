@@ -105,8 +105,10 @@ Production values come from measured series, not defaults: 2048/1024 batch,
 
 User units, loopback binding, 0700 runtime dirs, `--offline` router,
 bwrap project sandbox for Pi (project write, skills read, credentials
-hidden, no sudo, no auto push). Secrets (gh token via `gh auth token` at
-runtime, HF tokens) never enter git, logs, or generated configs.
+hidden, no sudo, no auto push). Pi starts in Build mode: autonomous inside
+the project, sandbox and credential masks stay on, pushes and destructive
+git prompt. Secrets (gh token via `gh auth token` at runtime, HF tokens)
+never enter git, logs, or generated configs.
 
 ## Operations
 

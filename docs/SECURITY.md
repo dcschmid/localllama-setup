@@ -7,6 +7,16 @@
   state; skills read-only; SSH/AWS hidden behind tmpfs; PID namespace; host
   filesystem read-only; loopback kept for router/MCP; no sudo, no automatic
   pushes, no destructive git defaults.
+- pi-permission-modes (`~/.pi/agent/permission-mode/permission-mode.json`,
+  installed from `config/permission-mode.json.in`): Build is the standard
+  start mode — autonomous file/bash/tool work inside the project with the OS
+  sandbox still on; reads free, skills read-only; out-of-project paths,
+  credential files (ssh/gnupg/aws/browser/cloud-agent/pi auth), and
+  privilege escalation stay blocked or prompt; network limited to an
+  allowlist (npm/PyPI/GitHub/crates + localhost), unknown hosts prompt;
+  `git push`/`git reset --hard`/`git clean`/`npm publish`/`twine upload`
+  prompt for an explicit decision. Plan and Default remain selectable,
+  YOLO is never the default. The same profile renders on fresh installs.
 - Gateway enforces browser origin and host header; websearch keeps its own
   network namespace and filter rules; github MCP read-only.
 - Offline coding works without internet; research and dependency downloads

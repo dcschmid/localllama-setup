@@ -42,6 +42,17 @@ jq -r '.promptTemplates[]' config/pi.json.in | while read -r t; do
     [[ -f config/prompts/$t.md ]] || exit 1
 done && ok "prompt templates complete" || no "prompt templates missing"
 
+# 5c. permission-mode template renders and carries the build-first policy
+sed "s|@SKILLS@|$home/skills|g" config/permission-mode.json.in > "$home/pm.json"
+jq -e '.defaultMode == "build" and .cycleOrder[0] == "default"
+       and .modes.build.sandbox.enabled == true
+       and (.modes.build.sandbox.denyRead | index("~/.ssh"))
+       and (.modes.build.permission.bash | has("sudo*"))
+       and (.modes.build.permission.external_directory
+            | .["@SKILLS@"] == null and .["'"$home"'/skills"] == "allow")' \
+    "$home/pm.json" >/dev/null \
+    && ok "permission-mode template renders" || no "permission-mode template"
+
 # 6. backup/restore roundtrip on scratch HOME
 home2=$(mktemp -d); mkdir -p "$home2/.config/llama.cpp" "$home2/.pi/agent" "$home2/.config/systemd/user"
 echo 'x=1' > "$home2/.config/llama.cpp/models.ini"; echo '{}' > "$home2/.pi/agent/settings.json"

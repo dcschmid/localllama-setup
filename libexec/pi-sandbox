@@ -2,6 +2,7 @@
 # Pi in einer Sandbox: schreibend nur das aktuelle Projekt, lesend Skills und
 # Pi-Konfiguration, kein Zugriff auf SSH-Schluessel, Browserprofile oder
 # Cloud-Zugangsdaten. Netzwerk bleibt fuer Loopback erhalten (Router und MCP).
+# pi-lens schreibt Zustand nach ~/.pi-lens (erforderlich fuer Code-Intelligenz).
 set -euo pipefail
 
 project=$PWD
@@ -19,6 +20,7 @@ exec /usr/bin/bwrap \
     --bind "$project" "$project" \
     --ro-bind "$skills" "$skills" \
     --bind "$agentdir" "$agentdir" \
+    --bind "$HOME/.pi-lens" "$HOME/.pi-lens" \
     --bind "$run" "$run" \
     --tmpfs "$HOME/.ssh" \
     --tmpfs "$HOME/.aws" \

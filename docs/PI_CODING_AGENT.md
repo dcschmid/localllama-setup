@@ -74,9 +74,13 @@ The `llama.cpp` KDE launcher keeps the WebUI (research/writing) independent of P
 
 `pi-sandbox` (bwrap): writable = project directory + Pi agent state, skills
 read-only, SSH/AWS hidden behind tmpfs, no sudo, no auto pushes; loopback to
-router and MCP stays. Without the sandbox the regular Pi rights apply inside
-the project. The router never downloads models (`--offline`) and WebUI rights
-are unchanged.
+router and MCP stays. pi-permission-modes renders Build as the standard
+start mode: file, bash, tool, and skill work inside the project runs
+without prompts; out-of-project paths, credentials, unknown network hosts,
+and pushes/destructive git still prompt. Plan and Default stay selectable;
+YOLO is never the default. Without the sandbox the regular Pi rights apply
+inside the project. The router never downloads models (`--offline`) and
+WebUI rights are unchanged.
 
 ## Performance (inherited measurements)
 

@@ -438,6 +438,21 @@ PY
         fi
     done
 
+    # pi-permission-modes: Build as the standard start mode, sandbox stays on,
+    # credentials masked, network allowlisted (config/permission-mode.json.in)
+    if [[ -f $pi_dir/permission-mode/permission-mode.json ]]; then
+        skip 'permission-mode.json (existing kept)'
+    else
+        mkdir -p "$pi_dir/permission-mode"
+        /usr/bin/sed "s|@SKILLS@|$skills|g" "$src/config/permission-mode.json.in" \
+            > "$stage_pi/permission-mode.json" \
+            || fail 'permission-mode template render failed'
+        jq -e . "$stage_pi/permission-mode.json" >/dev/null \
+            || fail "permission-mode.json render invalid"
+        install_file 644 "$stage_pi/permission-mode.json" \
+            "$pi_dir/permission-mode/permission-mode.json"
+    fi
+
     # pinned Pi extensions: manifest is the single install source; no auto-updates
     local m=$src/config/pi-manifest.json name ver status
     [[ -f $m ]] || fail 'config/pi-manifest.json missing'
@@ -515,6 +530,12 @@ doctor() {
         ls "$pdir"/prompts/*.md >/dev/null 2>&1 \
             && printf 'prompt templates: %s\n' "$(ls "$pdir"/prompts/*.md | wc -l)" \
             || { printf 'prompt templates missing\n'; rc=1; }
+        local pm=$pdir/permission-mode/permission-mode.json
+        if [[ -f $pm ]] && jq -e '.defaultMode == "build"' "$pm" >/dev/null 2>&1; then
+            printf 'permission modes: build default, sandbox on\n'
+        else
+            printf 'permission modes: missing or defaultMode not build\n'; rc=1
+        fi
     fi
     local l
     for l in typescript-language-server pyright ruff shellcheck rust-analyzer; do
