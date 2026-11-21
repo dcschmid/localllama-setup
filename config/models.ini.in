@@ -74,3 +74,86 @@ cache-type-v = q8_0
 reasoning = off
 chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
 chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}
+
+# Coding candidates (opt-in evaluation profile, see packages/models-coding-candidates.tsv).
+# ./setup.sh install --coding-candidates provides the GGUF files. Native 262144
+# context per evaluation brief; the auto-fit placement from [*] keeps the RTX 5070
+# at its 1 GiB headroom and places KV plus oversized tensors on host RAM.
+# MoE models keep their experts on the CPU (measured LFM2.5 baseline).
+
+[candidate-k2-horizon]
+model = @HOME@/models/gguf/K2-Horizon-7B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 16384
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+temperature = 1.0
+top-p = 0.95
+reasoning-effort = high
+
+[candidate-mellum]
+model = @HOME@/models/gguf/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 16384
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+cpu-moe = true
+temperature = 0.6
+top-p = 0.95
+top-k = 20
+
+[candidate-lfm8]
+model = @HOME@/models/gguf/LFM2.5-8B-A1B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+cpu-moe = true
+temperature = 0.2
+top-k = 80
+repeat-penalty = 1.05
+
+[candidate-lfm24]
+model = @HOME@/models/gguf/LFM2.5-24B-A2B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+cpu-moe = true
+temperature = 0.2
+top-k = 80
+repeat-penalty = 1.05
+
+[candidate-ornith]
+model = @HOME@/models/gguf/Ornith-1.5-9B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 16384
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+temperature = 0.6
+top-p = 0.95
+top-k = 20
+min-p = 0.0
+
+[candidate-kat]
+model = @HOME@/models/gguf/Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 16384
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+cpu-moe = true
+temperature = 1.0
+top-p = 0.95
+top-k = 20

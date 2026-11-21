@@ -85,6 +85,7 @@ fallback, no other harnesses. Pinned extension set, prompt templates
 [docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md),
 [docs/PI_CODING_AGENT.md](docs/PI_CODING_AGENT.md).
 
+[Coding candidates](docs/CODING_CANDIDATES.md) ·
 ## WebUI, MCP, skills
 
 WebUI is the server-native Llama Chat on :8080 with four MCP entries (websearch,

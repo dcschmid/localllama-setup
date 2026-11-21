@@ -21,6 +21,8 @@ Commands
 
 Install options
   --download-models   download missing GGUF files (up to 37.1 GB)
+  --coding-candidates install or update the six opt-in coding candidate models
+                      (packages/models-coding-candidates.tsv, about 60.5 GB)
   --download-cuda     download the official CUDA 12.8 runtime archive
   --cuda-lib-dir DIR  take the three CUDA 12 libraries from DIR (backup path)
   --dry-run           print planned changes, validate, write nothing
@@ -38,6 +40,7 @@ fail() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
 
 cmd=install
 arg=
+coding_candidates=false
 download_models=false
 download_cuda=false
 cuda_lib_dir=
@@ -47,6 +50,7 @@ while (( $# )); do
         install|update|repair|doctor|status|test|benchmark|backup|restore) cmd=$1 ;;
         uninstall) cmd=uninstall ;;
         --download-models) download_models=true ;;
+        --coding-candidates) coding_candidates=true ;;
         --download-cuda) download_cuda=true ;;
         --cuda-lib-dir)
             (( $# >= 2 )) || fail 'missing path after --cuda-lib-dir'
@@ -141,6 +145,7 @@ archive() {
 }
 
 model_rows() { tail -n +2 "$src/packages/models.tsv"; }
+candidates_rows() { tail -n +2 "$src/packages/models-coding-candidates.tsv"; }
 
 unpack() {
     local name=$1 dest=$2 strip=$3
@@ -499,6 +504,83 @@ PY
     log 'install complete - run ./setup.sh test for acceptance'
 }
 
+# ---- coding candidates (opt-in evaluation profile, about 60.5 GB) -----------
+# ./setup.sh install --coding-candidates is the only path that fetches these
+# files; the default one-click install never touches them. Re-running reuses
+# valid GGUF files and resumes interrupted downloads via fetch().
+
+install_coding_candidates() {
+    hardware_report
+    if ! $DRY; then mkdir -p -- "$cache" "$models"; fi
+
+    local name repo revision bytes sha _rest missing=0 want=0
+    while IFS=$'\t' read -r name repo revision bytes sha _rest; do
+        [[ $name == filename ]] && continue
+        if [[ -f $models/$name ]]; then
+            hash_ok "$models/$name" "$sha" || fail "SHA-256 mismatch: $models/$name"
+            log "reuse $name"
+            continue
+        fi
+        missing=$((missing + 1)); want=$((want + bytes))
+    done < <(candidates_rows)
+
+    if (( missing > 0 )) && ! $DRY; then
+        local avail
+        avail=$(df -kB --output=avail -- "$models" | tail -1 | tr -d ' ')
+        (( avail * 1024 > want + 4294967296 )) ||
+            fail "not enough space below ${avail} KiB for $missing candidate files (about $((want / 1073741824)) GiB plus 4 GiB headroom)"
+    fi
+
+    # The candidate presets ship inside config/models.ini.in. Replace the
+    # managed router configuration like install_doc does: keep one backup, then
+    # write. The running router reloads its preset list after the downloads.
+    if ! $DRY; then
+        local stage rendered
+        stage=$(mktemp -d)
+        rendered=$stage/models.ini
+        sed "s|@HOME@|$HOME|g" "$src/config/models.ini.in" > "$rendered"
+        mkdir -p -- "$cfg"
+        if [[ -e $cfg/models.ini ]] && ! cmp -s "$rendered" "$cfg/models.ini"; then
+            mkdir -p -- "$state/backups"
+            cp -a -- "$cfg/models.ini" "$state/backups/models.ini.$(date +%s)"
+            install -m 600 -- "$rendered" "$cfg/models.ini"
+            log 'router preset file updated (previous copy kept in the setup state)'
+        elif [[ ! -e $cfg/models.ini ]]; then
+            install -m 600 -- "$rendered" "$cfg/models.ini"
+        fi
+        rm -rf -- "$stage"
+    fi
+
+    while IFS=$'\t' read -r name repo revision bytes sha _rest; do
+        [[ $name == filename ]] && continue
+        [[ -f $models/$name ]] && continue
+        log "verify $name"
+        fetch "$models/$name" "$sha" "https://huggingface.co/$repo/resolve/$revision/$name" "$bytes"
+    done < <(candidates_rows)
+
+    if ! $DRY && curl -fsS --max-time 5 "$router/health" >/dev/null 2>&1; then
+        curl -fsS --max-time 20 "$router/models?reload=1" >/dev/null &&
+            log 'router preset list reloaded' || warn 'preset reload failed; restart llama-cpp.service'
+    fi
+    log 'coding candidates ready - select a preset id in Pi, e.g. candidate-k2-horizon'
+}
+
+candidates_doctor() {
+    local present=0 name repo revision sha _rest
+    while IFS=$'\t' read -r name repo revision sha _rest; do
+        [[ $name == filename ]] && continue
+        [[ -f $models/$name ]] && present=$((present + 1))
+    done < <(candidates_rows)
+    printf 'coding candidates: %s/6 GGUF files in %s\n' "$present" "$models"
+    if (( present == 6 )) && curl -qfsS --max-time 5 "$router/models" 2>/dev/null |
+        jq -e '(.data // []) as $ids | ["candidate-k2-horizon","candidate-mellum","candidate-lfm8",
+               "candidate-lfm24","candidate-ornith","candidate-kat"] | . - ($ids | map(.id)) | length == 0' >/dev/null; then
+        printf 'PASS six candidate presets registered on the router\n'
+    elif (( present == 6 )); then
+        printf 'WARN candidate presets not registered; reload with %s/models?reload=1 or restart llama-cpp.service\n' "$router"
+    fi
+}
+
 # ---- read-only commands -----------------------------------------------------
 
 unit_state() { systemctl --user is-active "$1" 2>/dev/null || true; }
@@ -533,6 +615,7 @@ doctor() {
         local pm=$pdir/permission-mode/permission-mode.json
         if [[ -f $pm ]] && jq -e '.defaultMode == "build"' "$pm" >/dev/null 2>&1; then
             printf 'permission modes: build default, sandbox on\n'
+    candidates_doctor
         else
             printf 'permission modes: missing or defaultMode not build\n'; rc=1
         fi

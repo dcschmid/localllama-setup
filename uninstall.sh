@@ -12,6 +12,8 @@ Modelle, Download-Caches, Browserdaten und Medienexporte bleiben standardmäßig
 
 --dry-run        Geplante Schritte anzeigen.
 --remove-models  Zusätzlich die Modellpfade aus packages/models.tsv entfernen.
+--remove-candidates Nur die Coding-Kandidaten aus packages/models-coding-candidates.tsv
+                   entfernen (Produktionsmodelle bleiben erhalten).
 HELP
 }
 
@@ -19,10 +21,12 @@ fail() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
 
 dry_run=false
 remove_models=false
+remove_candidates=false
 for option in "$@"; do
     case "$option" in
         --dry-run) dry_run=true ;;
         --remove-models) remove_models=true ;;
+        --remove-candidates) remove_candidates=true ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fail "Unbekannte Option: $option" ;;
     esac
@@ -113,6 +117,23 @@ if $remove_models; then
         fi
         if [[ -L $path.partial || -f $path.partial ]]; then weights+=("$path.partial"); fi
     done < "$src/packages/models.tsv"
+fi
+if $remove_candidates; then
+    while IFS=$'\t' read -r name _repo _revision size _hash _rest; do
+        [[ $name != filename ]] || continue
+        [[ $name =~ ^[a-zA-Z0-9._-]+\.gguf$ ]] || fail "Ungültiger Modelldateiname: $name"
+        path=$models/$name
+        if [[ -L $path ]]; then
+            weights+=("$path")
+        elif [[ -f $path ]]; then
+            if [[ $(stat -c %s -- "$path") == "$size" ]]; then
+                weights+=("$path")
+            else
+                printf 'Abweichende Dateigröße, Kandidat bleibt erhalten: %s\n' "$path" >&2
+            fi
+        fi
+        if [[ -L $path.partial || -f $path.partial ]]; then weights+=("$path.partial"); fi
+    done < "$src/packages/models-coding-candidates.tsv"
 fi
 
 if (( ${#units[@]} )); then
