@@ -32,6 +32,19 @@ batch-size = 2048
 ubatch-size = 1024
 reasoning-budget = 128
 
+[coding-research-26b]
+model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
+ctx-size = 262144
+n-predict = 8192
+batch-size = 2048
+ubatch-size = 1024
+cache-type-k = q4_0
+cache-type-v = q4_0
+cpu-moe = true
+temperature = 1.0
+top-p = 0.95
+top-k = 64
+
 [coding-cyber-tiel-35b]
 model = @HOME@/models/gguf/Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf
 ctx-size = 262144

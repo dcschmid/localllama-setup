@@ -1,29 +1,201 @@
 #!/usr/bin/env bash
-# Pi in einer Sandbox: schreibend nur das aktuelle Projekt, lesend Skills und
-# Pi-Konfiguration, kein Zugriff auf SSH-Schluessel, Browserprofile oder
-# Cloud-Zugangsdaten. Netzwerk bleibt fuer Loopback erhalten (Router und MCP).
-# pi-lens schreibt Zustand nach ~/.pi-lens (erforderlich fuer Code-Intelligenz).
+# Launch the pinned official Pi CLI inside a project-scoped OS sandbox.
 set -euo pipefail
+umask 077
 
-project=$PWD
-run=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-skills=$HOME/dev/github/skillset/skills
-agentdir=$HOME/.pi/agent
-pi_bin=$(command -v pi)
+die() { printf 'Pi sandbox: %s\n' "$*" >&2; exit 1; }
 
-exec /usr/bin/bwrap \
-    --die-with-parent \
-    --unshare-pid \
-    --ro-bind / / \
-    --dev /dev \
-    --proc /proc \
-    --bind "$project" "$project" \
-    --ro-bind "$skills" "$skills" \
-    --bind "$agentdir" "$agentdir" \
-    --bind "$HOME/.pi-lens" "$HOME/.pi-lens" \
-    --bind "$run" "$run" \
-    --tmpfs "$HOME/.ssh" \
-    --tmpfs "$HOME/.aws" \
-    --setenv PI_SANDBOX 1 \
-    --setenv PI_CODING_AGENT_DIR "$agentdir" \
-    "$pi_bin" "$@"
+host_home=$(realpath -e -- "$HOME")
+project=$(pwd -P)
+opt=$host_home/.local/opt/llama.cpp
+harness=$opt/pi-harness
+if [[ $# == 1 && ( $1 == --version || $1 == -v ) ]]; then
+    exec jq -er '.version' "$harness/node_modules/@earendil-works/pi-coding-agent/package.json"
+fi
+case "$project/" in
+    "$host_home"/[!.]*/|/tmp/[!.]*/|/var/tmp/[!.]*/) ;;
+    *) die 'start pi from an explicitly selected project under your home, /tmp or /var/tmp' ;;
+esac
+node_dir=$(realpath -e -- "$opt/node")
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+router=$runtime/llama-cpp/server.sock
+skills=${LLAMA_SETUP_SKILLS:-$host_home/dev/github/skillset/skills}
+agent=${LLAMA_SETUP_PI_DIR:-$host_home/.pi/agent}
+libexec=$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")
+mcp=false
+if [[ ${1:-} == --with-mcp ]]; then mcp=true; shift; fi
+if [[ ${1:-} == mcp ]]; then
+    [[ $# == 2 && $2 == list ]] || die 'use /mcp in a Pi session to manage MCP'
+    $mcp || die 'use pi --with-mcp mcp list to inspect the configured MCP servers'
+fi
+[[ -x $harness/node_modules/.bin/pi && -x $node_dir/bin/node ]] || die 'run setup.sh repair to install the pinned harness'
+[[ -r $harness/pi-config.json && -r $libexec/pi-router.py && -S $router ]] || die 'managed configuration or llama.cpp socket is missing'
+[[ -d $skills ]] || die "shared skills directory missing: $skills"
+agent=$(realpath -e -- "$agent")
+skills=$(realpath -e -- "$skills")
+for protected in "$agent" "$skills" "$harness" "$node_dir" "$runtime"; do
+    [[ $protected/ != "$project/"* && $project/ != "$protected/"* ]] ||
+        die 'the project must be separate from Pi configuration, tools, skills and session storage'
+done
+# Explicit project selection cannot include private or installer-managed roots.
+case "$project/" in
+    "$host_home"/.*/|"$host_home"/models/*|"$runtime"/*) die 'select a development project' ;;
+esac
+
+key=$(printf %s "$project" | sha256sum)
+state=$host_home/.local/state/localllma-setup/pi-projects/${key%% *}
+mkdir -p -- "$state/home" "$state/agent" "$state/home/.pi-lens"
+private=$(mktemp -d /tmp/llama-pi.XXXXXXXX)
+case "$private/" in "$project/"*) die 'choose a specific project subdirectory' ;; esac
+relay=
+cleanup() {
+    if [[ -n $relay ]]; then kill "$relay" 2>/dev/null || true; fi
+    rm -rf -- "$private"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Host credentials, model caches and unrelated project sessions never enter
+# this environment. The defaults from the installation scope are read each run.
+settings=$agent/settings.json
+[[ -f $settings ]] || settings=/dev/null
+jq -s --arg skills "$skills" --slurpfile config "$harness/pi-config.json" '
+    (.[0] // {}) | {
+      theme, editorPadding, defaultThinkingLevel, hideThinkingBlock,
+      collapseChangelog, showHardwareCursor
+    } | with_entries(select(.value != null)) + {
+      packages: $config[0].packages,
+      skills: [$skills], enableSkillCommands: true,
+      defaultProvider: "llama.cpp", defaultModel: "coding-cyber-tiel-35b",
+      enabledModels: ["llama.cpp/coding-cyber-tiel-35b",
+        "llama.cpp/coding-research-26b", "llama.cpp/coding-phai-256k",
+        "llama.cpp/coding-mellum-12b", "llama.cpp/coding-lfm-24b",
+        "llama.cpp/coding-ornith-9b", "llama.cpp/coding-kat-35b"],
+      compaction: $config[0].compaction
+    }' "$settings" > "$private/settings.json"
+jq -n '{"llama.cpp":{type:"api_key",key:"local",env:{LLAMA_BASE_URL:"http://127.0.0.1:8080"}}}' > "$private/auth.json"
+# Pi 1.5.2 does not fetch a cold provider catalog in offline mode.
+# Production model plus the six coding candidates; limits mirror the router
+# presets (config/models.ini.in) and the relay allowlist (pi-router.py).
+jq -n --slurpfile cfg "$harness/pi-config.json" '
+  $cfg[0] as $c |
+  def base: {
+    api: "openai-completions", baseUrl: ($c.routerUrl + "/v1"), input: ["text"],
+    cost: {input:0,output:0,cacheRead:0,cacheWrite:0},
+    reasoning: true, thinkingLevelMap: {off:"off",medium:"medium"},
+    compat: {
+      supportsStore:false, supportsDeveloperRole:false, supportsReasoningEffort:false,
+      supportsUsageInStreaming:true, supportsStrictMode:false, maxTokensField:"max_tokens",
+      thinkingFormat:"qwen-chat-template"
+    }
+  };
+  {"llama.cpp": {models: (
+    [{id:$c.defaultModel, name:$c.defaultModel, provider:$c.defaultProvider,
+      contextWindow:$c.contextTokens, maxTokens:$c.outputTokens} + base] +
+    [{id:"coding-research-26b",  provider:$c.defaultProvider, contextWindow:262144, maxTokens:8192},
+     {id:"coding-phai-256k",     provider:$c.defaultProvider, contextWindow:262144, maxTokens:8192},
+     {id:"coding-mellum-12b",    provider:$c.defaultProvider, contextWindow:131072, maxTokens:16384},
+     {id:"coding-lfm-24b",     provider:$c.defaultProvider, contextWindow:131072, maxTokens:8192},
+     {id:"coding-ornith-9b",    provider:$c.defaultProvider, contextWindow:262144, maxTokens:16384},
+     {id:"coding-kat-35b",       provider:$c.defaultProvider, contextWindow:262144, maxTokens:16384}]
+    | map(. + base)
+  )}}
+' > "$private/models-store.json"
+if $mcp; then
+    jq '{mcpServers}' "$harness/pi-config.json" > "$private/mcp.json"
+    mcp_args=(--mcp)
+    mcp_ports=(--setenv PI_MCP_PORTS "8642 8643")
+    pi_mcp=()
+else
+    mcp_args=()
+    mcp_ports=()
+    pi_mcp=(--no-mcp)
+fi
+
+mounts=()
+for path in /usr /etc/passwd /etc/group /etc/hosts /etc/nsswitch.conf /etc/localtime /etc/os-release /etc/ld.so.cache /etc/pki /etc/ssl; do
+    [[ ! -e $path ]] || mounts+=(--ro-bind "$path" "$path")
+done
+for program in ruff shellcheck godot; do
+    path=$host_home/.local/bin/$program
+    [[ -f $path ]] || continue
+    real=$(realpath -e -- "$path")
+    case $real in
+        "$host_home"/.local/bin/*|"$host_home"/.local/opt/godot-*/godot)
+            mounts+=(--ro-bind "$real" "/local-bin/$program") ;;
+    esac
+done
+declare -A mounted=()
+for program in typescript-language-server tsc tsserver pyright pyright-langserver; do
+    if ! path=$(command -v "$program"); then continue; fi
+    real=$(realpath -e -- "$path")
+    case "$real" in
+        "$host_home"/.nvm/versions/node/*/lib/node_modules/*/*)
+            modules=${real%%/lib/node_modules/*}/lib/node_modules
+            name=${real#"$modules/"}
+            package=$modules/${name%%/*}
+            if [[ ! -v mounted[$package] ]]; then
+                mounts+=(--ro-bind "$package" "$package")
+                mounted[$package]=1
+            fi
+            mounts+=(--symlink "$real" "/local-bin/$program") ;;
+    esac
+done
+[[ ! -d $agent/prompts ]] || mounts+=(--ro-bind "$agent/prompts" /pi-agent/prompts)
+permission=$agent/permission-mode/permission-mode.json
+[[ -f $permission ]] || die 'permission-mode configuration missing, run setup.sh repair'
+mkdir -p "$state/agent/permission-mode"
+mounts+=(--ro-bind "$permission" /pi-agent/permission-mode/permission-mode.json)
+if $mcp; then mounts+=(--ro-bind "$private/mcp.json" /pi-agent/mcp.json); fi
+
+/usr/bin/python3 -I "$libexec/pi-router.py" "$private/proxy.sock" "$router" "${mcp_args[@]}" &
+relay=$!
+for ((attempt=0; attempt<50; attempt++)); do
+    [[ ! -S $private/proxy.sock ]] || break
+    kill -0 "$relay" 2>/dev/null || die 'coding relay failed to start'
+    sleep .05
+done
+[[ -S $private/proxy.sock ]] || die 'coding relay start timed out'
+
+# --ro-bind /usr supplies system tools and libraries. The synthetic home and
+# agent state are separate for each canonical project path.
+bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --die-with-parent --new-session --clearenv \
+    --dev /dev --proc /proc --tmpfs /tmp --dir /run \
+    --symlink usr/bin /bin --symlink usr/sbin /sbin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+    --bind "$state/home" "$host_home" --bind "$project" "$project" --bind "$state/agent" /pi-agent \
+    --ro-bind "$harness" /pi-runtime --ro-bind "$harness" /pi-agent/npm --ro-bind "$node_dir" /pi-node \
+    --ro-bind "$skills" "$skills" --ro-bind "$private/proxy.sock" /pi-router.sock \
+    --ro-bind "$private/settings.json" /pi-agent/settings.json --ro-bind "$private/auth.json" /pi-agent/auth.json \
+    --ro-bind "$private/models-store.json" /pi-agent/models-store.json \
+    "${mounts[@]}" "${mcp_ports[@]}" --chdir "$project" --setenv HOME "$host_home" --setenv PI_CODING_AGENT_DIR /pi-agent \
+    --setenv PI_SANDBOX 1 --setenv PI_LENS_HOME "$host_home/.pi-lens" \
+    --setenv PI_LENS_DISABLE_TOOL_INSTALL 1 --setenv PI_LENS_DISABLE_LSP_INSTALL 1 \
+    --setenv LLAMA_BASE_URL http://127.0.0.1:8080 \
+    --setenv PATH /pi-node/bin:/local-bin:/usr/bin --setenv LANG "${LANG:-C.UTF-8}" --setenv TERM "${TERM:-xterm-256color}" \
+    --setenv GIT_TERMINAL_PROMPT 0 --setenv npm_config_ignore_scripts true \
+    /usr/bin/bash -c '
+        for port in 8080 ${PI_MCP_PORTS:-}; do
+            /usr/bin/socat -d0 TCP-LISTEN:$port,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:/pi-router.sock &
+        done
+        for ((attempt=0; attempt<50; attempt++)); do
+            if /usr/bin/curl -qfsS --max-time 1 http://127.0.0.1:8080/health >/dev/null 2>&1; then
+                if [[ ${1:-} == mcp ]]; then
+                    exec /pi-runtime/node_modules/.bin/pi "$@"
+                fi
+                # Keep the production default, but honour a caller-provided
+                # model selection such as pi --model coding-kat-35b.
+                model_args=(--model coding-cyber-tiel-35b)
+                for ((index=1; index<=$#; index++)); do
+                    arg=${!index}
+                    [[ $arg == --model || $arg == -m || $arg == --model=* ]] && model_args=()
+                done
+                exec /pi-runtime/node_modules/.bin/pi --provider llama.cpp "${model_args[@]}" \
+                    --offline --no-opengrep --no-typos --no-zizmor \
+                    --append-system-prompt /pi-runtime/pi-workflow.md "$@"
+            fi
+            sleep .05
+        done
+        printf "%s\n" "Pi sandbox: llama.cpp relay is unavailable" >&2
+        exit 1
+    ' pi "${pi_mcp[@]}" "$@"
