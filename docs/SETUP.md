@@ -23,10 +23,10 @@ The seven active profiles use three GGUF files. The SHA-256 checksums are in the
 |---|---|---:|
 | `research` | Gemma 4 26B A4B IT QAT Q4_0 | 32K |
 | `deep-research` | Gemma 4 26B A4B IT QAT Q4_0, 128 thinking tokens per request | 32K |
-| `coding-long-256k` | Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus | 256K |
+| `coding-cyber-tiel-35b` | Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus | 256K |
 | `creative-writing`, `human-writing`, `human-rewrite`, `human-audit` | Gemma 4 12B StyleTune Q4_K_M | 16K |
 
-Cyber-Tiel is loaded via `coding-long-256k` with 262,144 tokens, 2,048/1,024 batch/microbatch and Q4_0 for K and V. The server default for the output is 8,192 tokens. The profiles use mmap, CUDA with a 1,024 MiB target reserve and Flash Attention. The router loads at most one model process. MTP is off. [Performance measurement and rollback](PERFORMANCE_OPTIMIZATION.md)
+Cyber-Tiel is loaded via `coding-cyber-tiel-35b` with 262,144 tokens, 2,048/1,024 batch/microbatch and Q4_0 for K and V. The server default for the output is 8,192 tokens. The profiles use mmap, CUDA with a 1,024 MiB target reserve and Flash Attention. The router loads at most one model process. MTP is off. [Performance measurement and rollback](PERFORMANCE_OPTIMIZATION.md)
 
 - `llama-webui` starts the user services on demand and opens the browser.
 - `llama-webui --check` checks the inference service without opening a browser.

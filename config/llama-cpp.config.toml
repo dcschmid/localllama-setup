@@ -1,4 +1,4 @@
-model = "coding-long-256k"
+model = "coding-cyber-tiel-35b"
 model_provider = "llamacpp"
 model_reasoning_effort = "low"
 web_search = "disabled"

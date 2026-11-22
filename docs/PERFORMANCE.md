@@ -4,7 +4,7 @@ All values are measured, not assumed; raw series and methodology in
 [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) (historical
 record) and [BENCHMARKS.md](BENCHMARKS.md).
 
-Production (`coding-long-256k`, Cyber-Tiel 35B-A3B, RTX 5070 8 GiB):
+Production (`coding-cyber-tiel-35b`, Cyber-Tiel 35B-A3B, RTX 5070 8 GiB):
 
 | Knob | Value | Evidence |
 |---|---|---|

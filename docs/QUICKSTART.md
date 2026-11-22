@@ -1,7 +1,7 @@
 # llama.cpp on the Framework Laptop 16
 
 1. Open **llama.cpp** in the KDE application menu. The starter launches the user service and opens [Llama Chat](http://127.0.0.1:8080).
-2. Pick the model at the bottom of the chat. **research** is for everyday work, documents, web search, and deep research. **coding-long-256k** opens Cyber-Tiel. **creative-writing** is for stories and dialogue. The model loads on first access.
+2. Pick the model at the bottom of the chat. **research** is for everyday work, documents, web search, and deep research. **coding-cyber-tiel-35b** opens Cyber-Tiel. **creative-writing** is for stories and dialogue. The model loads on first access.
 3. For text documents, choose **+** and **Add files**. Reopen a conversation from the chat history, or use **Import/Export** in the settings menu.
 4. Open **MCP Servers** via the MCP entry in the sidebar. It lists **Websearch & Deep Research**, **Context7**, **GitHub**, and **Skill-Sammlung (read-only)**. [Open MCP Servers](http://127.0.0.1:8080/#/mcp-servers)
 5. Select **research** in the chat and, if needed, the desired MCP server under **+ → Tools**. Example task `Suche mit search_web nach der offiziellen Python-Dokumentation zu Decimal. Gib die URL aus dem Tool-Ergebnis an.` Confirm a single call with **Allow once**. For Deep Research, choose **deep-research**, start the job with `deep_research`, then poll it with `deep_research_status` and the job ID. The profile uses the same Gemma file with a shorter thinking budget for the synthesis.

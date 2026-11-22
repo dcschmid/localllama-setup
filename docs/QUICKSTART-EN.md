@@ -9,7 +9,7 @@ systemctl --user start llama-cpp.service
 cd ~/dev/github/my-project && pi # coding on Cyber-Tiel
 ```
 
-- `research` for chat/research, `coding-long-256k` for coding (Pi default),
+- `research` for chat/research, `coding-cyber-tiel-35b` for coding (Pi default),
   `creative-writing`/`human-writing` for prose in the WebUI.
 - In the WebUI: pick the profile at the bottom, MCP entries under **MCP
   Servers** (websearch, context7, github, skills read-only), approve each

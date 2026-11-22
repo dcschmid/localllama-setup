@@ -1,0 +1,63 @@
+{
+  "model": "Phai-A1-35B-1M-MTP.MXFP4_MOE",
+  "preset": "coding-phai-256k",
+  "engine": "llama.cpp b12628 (8a97fa98a)",
+  "date": "2026-11-22",
+  "harness": "benchmarks/bench-context.py",
+  "runs": [
+    {
+      "context": 8192,
+      "input_tokens": 7641,
+      "retrieval": "3/3",
+      "prefill_tps": 645.0,
+      "decode_tps": 33.1,
+      "ttft_s": 11.9,
+      "wall_s": 14.6
+    },
+    {
+      "context": 32768,
+      "input_tokens": 32256,
+      "retrieval": "3/3",
+      "prefill_tps": 672.7,
+      "decode_tps": 16.8,
+      "ttft_s": 48.0,
+      "wall_s": 54.2
+    },
+    {
+      "context": 65536,
+      "input_tokens": 64828,
+      "retrieval": "3/3",
+      "prefill_tps": 550.2,
+      "decode_tps": 12.9,
+      "ttft_s": 118.0,
+      "wall_s": 126.2
+    },
+    {
+      "context": 131072,
+      "input_tokens": 130461,
+      "retrieval": "3/3",
+      "prefill_tps": 522.1,
+      "decode_tps": 11.1,
+      "ttft_s": 250.1,
+      "wall_s": 258.8
+    },
+    {
+      "context": 196608,
+      "input_tokens": 196101,
+      "retrieval": "3/3",
+      "prefill_tps": 521.4,
+      "decode_tps": 8.5,
+      "ttft_s": 715.5,
+      "wall_s": 726.5
+    },
+    {
+      "context": 262144,
+      "input_tokens": 261498,
+      "retrieval": "3/3",
+      "prefill_tps": 468.7,
+      "decode_tps": 6.7,
+      "ttft_s": 1084.6,
+      "wall_s": 1096.9
+    }
+  ]
+}

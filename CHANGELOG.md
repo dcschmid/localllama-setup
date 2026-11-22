@@ -1,4 +1,42 @@
 # Changelog
+## 2026.11-phai - Phai-A1-35B-1M joins the coding track on b12628
+
+- coding-phai-256k: Phai-A1 35B A3B 1M, MXFP4_MOE with embedded MTP weights
+  (prithivMLmods/Phai-A1-35B-1M-MTP-Repacked rev a3c7b4d8, apache-2.0,
+  sha256 a59ab81d…, 20.26 GB). Native 262144, n-predict 8192, cpu-moe, Q4_0
+  KV, sampler temp 1.0/top-p 0.95/top-k 20. Preset, TSV (five candidates,
+  about 70 GB), router allowlist, Pi store/enabledModels, doctor, tests.
+- Engine bump llama.cpp b12503 -> b12628 (commit 8a97fa98a, CUDA 12.8 build,
+  SHA-256 pinned, current link switched, b12503 kept for rollback): needed
+  for --spec-type draft-mtp; MXFP4 CUDA kernels load verified.
+- Measured: router cold 28.9/24.2 t/s prefill/decode, VRAM 5197 MiB;
+  retrieval 3/3 at 8K/32K/64K/128K; MTP A/B (n=512, 16K) 37.0 vs 39.2 t/s -
+  no gain at temp 1.0, MTP stays off in the preset. Native MoE expert cache
+  flags absent in b12628 (documented BLOCKED upstream-side).
+
+## 2026.11-presets - Self-describing preset ids and native context ceilings
+
+- Preset ids now carry model family and size: coding-cyber-tiel-35b (was
+  coding-long-256k), coding-mellum-12b, coding-lfm-24b, coding-ornith-9b,
+  coding-kat-35b (were candidate-*); production research/writing profile
+  names stay stable (they share names with the research subnet, services,
+  and the human-writing skill path). Renamed across presets, router, sandbox,
+  manifests, doctor, tests, benchmarks, and docs.
+- Presets now cap at each model's native context ceiling instead of a flat
+  262144: Mellum2.1 and LFM2.5-24B are 131072 by model card (the old presets
+  overran the trained length); qwen35moe (Cyber-Tiel, KAT-Coder) and
+  Ornith-1.5 keep 262144. Router allowlist, Pi model store, manifest, and
+  tests follow.
+
+## 2026.11-candidates-slim - Coding candidate track trimmed to four models
+
+- Dropped candidate-k2-horizon (K2 Horizon 7B) and candidate-lfm8 (LFM2.5 8B
+  A1B) from the evaluation track: presets (config/models.ini.in), manifest
+  rows (packages/models-coding-candidates.tsv, now 49.8 GB), router allowlist
+  (libexec/pi-router.py), Pi model store/enabledModels (libexec/pi-sandbox),
+  doctor counts (setup.sh) and tests. Mellum, LFM2.5 24B, Ornith and
+  KAT-Coder remain; production models and profiles untouched.
+
 
 ## 2026.11-permissions - Pi autonomy: Build as the standard mode
 

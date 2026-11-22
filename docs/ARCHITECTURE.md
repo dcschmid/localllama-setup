@@ -4,13 +4,13 @@ Three models, one router, one agent. Everything runs as user services on
 loopback; no platform installs, no cloud fallback.
 
 ```
-                 llama.cpp b12503 router  127.0.0.1:8080 + $XDG_RUNTIME_DIR/llama-cpp/server.sock
+                 llama.cpp b12628 router  127.0.0.1:8080 + $XDG_RUNTIME_DIR/llama-cpp/server.sock
                  one model loaded, autoload off, --offline, preset models.ini
-                 profiles: research | deep-research | coding-long-256k | 4 writing
+                 profiles: research | deep-research | coding-cyber-tiel-35b | 4 writing
                       ^                                   ^
                       | llama.cpp provider                | native Llama Chat (WebUI)
                  Pi 1.5.2  (~/.local/opt/pi, cfg ~/.pi/agent)
-                 default coding-long-256k, skills from shared collection
+                 default coding-cyber-tiel-35b, skills from shared collection
                  sandbox: pi-sandbox (bwrap)
                       |
    MCP: websearch :8642  +  gateway :8643 (context7, github, skills-fs)

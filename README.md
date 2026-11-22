@@ -9,12 +9,12 @@ repeated runs are idempotent and resumable.
 ## Architecture
 
 ```
-llama.cpp b12503 (official CUDA build)         127.0.0.1:8080  +  unix socket
+llama.cpp b12628 (official CUDA build)         127.0.0.1:8080  +  unix socket
   router, one model at a time, autoload off
-  profiles: research | deep-research | coding-long-256k | 4x writing
+  profiles: research | deep-research | coding-cyber-tiel-35b | 4x writing
   WebUI (Llama Chat, native)                     same port
 Pi 1.5.2 (coding agent)  ── llama.cpp provider ──► router
-  default model coding-long-256k (Cyber-Tiel), 262K ctx, 8K out
+  default model coding-cyber-tiel-35b (Cyber-Tiel), 262K ctx, 8K out
   skills: ~/dev/github/skillset/skills (native discovery, shared)
   pi-sandbox (bwrap): project write, skills read, no credentials
 MCP: websearch+deep research :8642 ─┐
@@ -65,7 +65,7 @@ above only; everything else runs as the user.
 
 | Model | Role | File | License |
 |---|---|---|---|
-| Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus V2.1 | coding (Pi, coding-long-256k) | `Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf` | MIT |
+| Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus V2.1 | coding (Pi, coding-cyber-tiel-35b) | `Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf` | MIT |
 | Gemma 4 26B A4B QAT Q4_0 | research, deep research, chat | `gemma-4-26B_q4_0-it.gguf` | apache-2.0 |
 | Gemma 4 12B StyleTune Q4_K_M | story writer (dense exception) | `Gemma-4-12B-StyleTune.Q4_K_M.gguf` | apache-2.0 |
 

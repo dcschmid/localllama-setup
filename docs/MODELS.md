@@ -16,7 +16,7 @@ jinja for Gemma; writing profiles render the Human-Writing skill through
 `config/writing/render.py` at service start.
 
 Router profiles: `research`, `deep-research` (128 think tokens),
-`coding-long-256k` (the only coding profile - no 32K/64K/128K/192K siblings;
+`coding-cyber-tiel-35b` (the only coding profile - no 32K/64K/128K/192K siblings;
 those lengths only appear as benchmark workloads inside the 256K slot), and
 `creative-writing`, `human-writing`, `human-rewrite`, `human-audit`.
 

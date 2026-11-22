@@ -11,7 +11,7 @@
   ],
   "native": {
     "codemode": "provided via pi-lens bundle; allowed for read-heavy multi-call work, disabled for parallel LLM fanout",
-    "compaction": "enabled native: reserve 39322, keepRecent 20000 on 262144 coding-long-256k",
+    "compaction": "enabled native: reserve 39322, keepRecent 20000 on 262144 coding-cyber-tiel-35b",
     "promptTemplates": "~/.pi/agent/prompts/{finish,review,fix-ci,finish-docs}.md -> reference skills, never duplicate them",
     "skills": "~/dev/github/skillset/skills (read-only, central source of truth)",
     "mcp": [ "websearch 127.0.0.1:8642/mcp", "gateway 127.0.0.1:8643 (context7, github read-only, skills)" ]

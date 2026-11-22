@@ -4,7 +4,7 @@ Measurement series from November 18 and 19, 2026. Tested on a Framework Laptop 1
 
 ## Baseline State
 
-The production router uses `models-max = 1`. Starting values are 12 decode and 12 batch threads, 512/256 batch/microbatch, automatic CUDA placement with a 1.024 MiB reserve, Flash Attention, mmap, and a 512 MiB prompt cache. The coding profiles from 64K up use 1.024/512 and Q4_0 K/V. The 32K and writing profiles use Q8_0 K/V. The installed build provides up to 32 context checkpoints per slot and a default minimum spacing of 8.192 tokens. The spacing matters when older checkpoints are evicted. [Upstream server options b12503](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md)
+The production router uses `models-max = 1`. Starting values are 12 decode and 12 batch threads, 512/256 batch/microbatch, automatic CUDA placement with a 1.024 MiB reserve, Flash Attention, mmap, and a 512 MiB prompt cache. The coding profiles from 64K up use 1.024/512 and Q4_0 K/V. The 32K and writing profiles use Q8_0 K/V. The installed build provides up to 32 context checkpoints per slot and a default minimum spacing of 8.192 tokens. The spacing matters when older checkpoints are evicted. [Upstream server options b12503](https://github.com/ggml-org/llama.cpp/blob/b12628/tools/server/README.md)
 
 The Ryzen AI 9 HX 370 has 12 physical cores and 24 logical CPUs. The topology reports two L3 groups with four and eight physical cores respectively. CPUs 0–11 cover one thread per core. Linux reports about 46,8 GiB of usable RAM with a high amount of pre-existing ZRAM usage. The benchmarks record process swap separately. Regular starts ran under the `low-power` power profile.
 
@@ -206,7 +206,7 @@ The median of the sampled all-core clock values was 2,36 and 3,30 GHz respective
 | `coding-long-128k` | 2.048 / 1.024 | 1.024 MiB | Q4_0 |
 | `research`, `deep-research` | 2.048 / 1.024 | 512 MiB | Q8_0 |
 | `coding-long-64k`, `coding-long-192k` | 1.024 / 512 | 512 MiB | Q4_0 |
-| `coding-long-256k` | 2.048 / 1.024 | 512 MiB | Q4_0 |
+| `coding-cyber-tiel-35b` | 2.048 / 1.024 | 512 MiB | Q4_0 |
 | The four StyleTune profiles | 512 / 256 | 512 MiB | Q8_0 |
 
 | Optimization | Baseline | Optimized | Change | Quality | Decision |
@@ -255,7 +255,7 @@ The KDE launcher opened the installed WebUI in regular Firefox. There, the MCP m
 
 ## Follow-Up Measurement for 256K, Deep Research, and StyleTune
 
-In the 256K profile, a cold prompt with 65.006 new tokens was compared at unchanged Q4_0 K/V quantization. For this MoE type, a larger microbatch can batch calls across the CPU-GPU boundary better. The published comparison on a 16-GiB GPU served as a test hint. [Upstream options](https://github.com/ggml-org/llama.cpp/blob/b12503/tools/server/README.md) · [Published Qwen MoE measurement](https://github.com/ggml-org/llama.cpp/discussions/28363)
+In the 256K profile, a cold prompt with 65.006 new tokens was compared at unchanged Q4_0 K/V quantization. For this MoE type, a larger microbatch can batch calls across the CPU-GPU boundary better. The published comparison on a 16-GiB GPU served as a test hint. [Upstream options](https://github.com/ggml-org/llama.cpp/blob/b12628/tools/server/README.md) · [Published Qwen MoE measurement](https://github.com/ggml-org/llama.cpp/discussions/28363)
 
 | Batch / microbatch | Prefill | Decode | First token | Total | Retrieval |
 |---|---:|---:|---:|---:|---:|
@@ -280,7 +280,7 @@ For the music text, the four sourced details were provided as F1–F4. StyleTune
 
 ## Coding Long 256K
 
-The router loads Cyber-Tiel in a 262.144-token slot under the model ID `coding-long-256k`. Short prompts occupy only their actually used part of the window. Research, Deep Research, and the four writing presets together with Coding make seven router entries for three GGUF files.
+The router loads Cyber-Tiel in a 262.144-token slot under the model ID `coding-cyber-tiel-35b`. Short prompts occupy only their actually used part of the window. Research, Deep Research, and the four writing presets together with Coding make seven router entries for three GGUF files.
 
 ### Client Context and Auto-Compaction
 

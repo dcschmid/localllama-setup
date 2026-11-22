@@ -399,6 +399,7 @@ PY
         install_file 644 "$src/units/$n" "$unitsdir/$n"
     done
     for n in llama-github-mcp llama-research pi-sandbox; do
+    for n in llama-github-mcp llama-research; do
         install_file 755 "$src/libexec/$n" "$HOME/.local/libexec/$n"
     done
     install_file 755 "$src/libexec/llama-webui" "$HOME/.local/bin/llama-webui"
@@ -499,6 +500,7 @@ PY
         systemctl --user daemon-reload
         systemctl --user restart llama-cpp.service
         systemctl --user start llama-cpp-mcp.service llama-cpp-research.service
+        systemctl --user start llama-cpp.service llama-cpp-mcp.service llama-cpp-research.service
     fi
     if [[ -d $cfg/pi-legacy || -d $cfg/claude ]]; then : ; fi
     log 'install complete - run ./setup.sh test for acceptance'
@@ -562,7 +564,7 @@ install_coding_candidates() {
         curl -fsS --max-time 20 "$router/models?reload=1" >/dev/null &&
             log 'router preset list reloaded' || warn 'preset reload failed; restart llama-cpp.service'
     fi
-    log 'coding candidates ready - select a preset id in Pi, e.g. candidate-k2-horizon'
+    log 'coding candidates ready - select a preset id in Pi, e.g. coding-mellum-12b'
 }
 
 candidates_doctor() {
@@ -571,12 +573,12 @@ candidates_doctor() {
         [[ $name == filename ]] && continue
         [[ -f $models/$name ]] && present=$((present + 1))
     done < <(candidates_rows)
-    printf 'coding candidates: %s/6 GGUF files in %s\n' "$present" "$models"
-    if (( present == 6 )) && curl -qfsS --max-time 5 "$router/models" 2>/dev/null |
-        jq -e '(.data // []) as $ids | ["candidate-k2-horizon","candidate-mellum","candidate-lfm8",
-               "candidate-lfm24","candidate-ornith","candidate-kat"] | . - ($ids | map(.id)) | length == 0' >/dev/null; then
-        printf 'PASS six candidate presets registered on the router\n'
-    elif (( present == 6 )); then
+    printf 'coding candidates: %s/5 GGUF files in %s\n' "$present" "$models"
+    if (( present == 5 )) && curl -qfsS --max-time 5 "$router/models" 2>/dev/null |
+        jq -e '(.data // []) as $ids | ["coding-phai-256k","coding-mellum-12b",
+               "coding-lfm-24b","coding-ornith-9b","coding-kat-35b"] | . - ($ids | map(.id)) | length == 0' >/dev/null; then
+        printf 'PASS five candidate presets registered on the router\n'
+    elif (( present == 5 )); then
         printf 'WARN candidate presets not registered; reload with %s/models?reload=1 or restart llama-cpp.service\n' "$router"
     fi
 }
@@ -663,6 +665,8 @@ acceptance_test() {
 benchmarks() {
     [[ $# == 0 ]] || exec bash "$src/benchmarks/$1"
     exec bash "$src/benchmarks/run.sh"
+        jq -e 'any(.data[]; .id=="research") and any(.data[]; .id=="creative-writing")' >/dev/null ||
+        { echo 'FAIL research/writing profiles missing'; rc=1; }
 }
 
 backup_cmd() {

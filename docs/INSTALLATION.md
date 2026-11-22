@@ -6,7 +6,7 @@ after any interruption (each phase re-validates before touching anything):
 1. hardware detection + tested-range warnings (RAM/VRAM/threads/distro/arch)
 2. dependency checks (curl jq python3 jq uv nvidia-smi socat bwrap pasta nft
    setpriv xdg-open node npm >= 22.19), driver probe
-3. llama.cpp b12503 CUDA build unpack (archive cache, SHA-256 gate),
+3. llama.cpp b12628 CUDA build unpack (archive cache, SHA-256 gate),
    CUDA0 verification via `--list-devices`
 4. model gate: GGUFs must exist or come via `--download-models` (pinned
    revision, resumable, checksum before rename)
