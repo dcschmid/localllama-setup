@@ -173,7 +173,23 @@ install_file() {
         cmp -s -- "$source" "$target" || fail "existing file differs: $target"
     else
         if $DRY; then log "plan: install $target"; return 0; fi
-        install -m "$mode" -- "$source" "$target"
+        install -m "$mode" -- "$source" -- "$target"
+    fi
+}
+
+# The managed router preset file follows the repository; keep one backup on
+# change instead of aborting like install_file (the candidate track does the same).
+sync_models_ini() {
+    local source=$1 target=$2
+    if $DRY; then log "plan: sync $target"; return 0; fi
+    if [[ -e $target ]] && ! cmp -s -- "$source" "$target"; then
+        mkdir -p -- "$state/backups"
+        cp -a -- "$target" "$state/backups/models.ini.$(date +%s)"
+        install -m 600 -- "$source" "$target"
+        log 'router preset file updated (previous copy kept in the setup state)'
+    elif [[ ! -e $target ]]; then
+        mkdir -p -- "${target%/*}"
+        install -m 600 -- "$source" "$target"
     fi
 }
 
@@ -386,7 +402,7 @@ for name, data in (("mcp.json", config), ("ui.json", ui)):
 PY
 
     mkdir -p -- "$cfg" "$unitsdir" "$HOME/.local/bin" "$HOME/.local/libexec" "$HOME/.local/share/applications"
-    install_file 600 "$stage/models.ini" "$cfg/models.ini"
+    sync_models_ini "$stage/models.ini" "$cfg/models.ini"
     install_file 600 "$stage/mcp.json" "$cfg/mcp.json"
     install_file 600 "$stage/ui.json" "$cfg/ui.json"
     install_file 600 "$src/config/research.nft" "$cfg/research.nft"
