@@ -15,17 +15,19 @@ jinja = true
 
 [research]
 model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
-ctx-size = 32768
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 batch-size = 2048
 ubatch-size = 1024
 
 [deep-research]
 model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
-ctx-size = 32768
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 batch-size = 2048
 ubatch-size = 1024
 reasoning-budget = 128
@@ -41,36 +43,40 @@ cache-type-v = q4_0
 
 [creative-writing]
 model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 16384
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 reasoning = off
 chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
 chat-template-kwargs = {"writing_mode":"generate","writing_genre":"fiction"}
 
 [human-writing]
 model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 16384
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 reasoning = off
 chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
 chat-template-kwargs = {"writing_mode":"generate","writing_genre":"editorial"}
 
 [human-rewrite]
 model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 16384
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 reasoning = off
 chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
 chat-template-kwargs = {"writing_mode":"rewrite","writing_genre":"editorial"}
 
 [human-audit]
 model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 16384
-cache-type-k = q8_0
-cache-type-v = q8_0
+ctx-size = 262144
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
 reasoning = off
 chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
 chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}
@@ -82,12 +88,9 @@ chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}
 # and places KV plus oversized tensors on host RAM. MoE models keep their experts
 # on the CPU (measured LFM2.5 baseline).
 
-[candidate-k2-horizon]
-model = @HOME@/models/gguf/K2-Horizon-7B-Q4_K_M.gguf
 [coding-phai-256k]
 model = @HOME@/models/gguf/Phai-A1-35B-1M-MTP.MXFP4_MOE.gguf
 ctx-size = 262144
-n-predict = 16384
 n-predict = 8192
 batch-size = 2048
 ubatch-size = 1024
@@ -96,12 +99,11 @@ cache-type-v = q4_0
 cpu-moe = true
 temperature = 1.0
 top-p = 0.95
-reasoning-effort = high
 top-k = 20
 
 [coding-mellum-12b]
 model = @HOME@/models/gguf/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
-ctx-size = 262144
+ctx-size = 131072
 n-predict = 16384
 batch-size = 2048
 ubatch-size = 1024
@@ -111,19 +113,6 @@ cpu-moe = true
 temperature = 0.6
 top-p = 0.95
 top-k = 20
-
-[candidate-lfm8]
-model = @HOME@/models/gguf/LFM2.5-8B-A1B-Q4_K_M.gguf
-ctx-size = 262144
-n-predict = 8192
-batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
-cpu-moe = true
-temperature = 0.2
-top-k = 80
-repeat-penalty = 1.05
 
 [coding-lfm-24b]
 model = @HOME@/models/gguf/LFM2.5-24B-A2B-Q4_K_M.gguf

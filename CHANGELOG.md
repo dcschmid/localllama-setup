@@ -1,4 +1,13 @@
 # Changelog
+## 2026.11-gemma256 - Production profiles at the native 256K ceiling
+
+- research, deep-research, creative-writing, human-writing/-rewrite/-audit:
+  ctx 32768/16384 -> 262144, KV q8_0 -> q4_0, n-predict 8192 (Gemma 4 states
+  256K for medium sizes; auto-fit keeps the 5070 in budget - measured 6573
+  MiB research / 6553 MiB writing at load, no OOM).
+- setup.sh: models.ini becomes a managed-synced file (backup on change like
+  the candidate track) instead of aborting with "existing file differs".
+
 ## 2026.11-phai - Phai-A1-35B-1M joins the coding track on b12628
 
 - coding-phai-256k: Phai-A1 35B A3B 1M, MXFP4_MOE with embedded MTP weights
@@ -37,6 +46,31 @@
   doctor counts (setup.sh) and tests. Mellum, LFM2.5 24B, Ornith and
   KAT-Coder remain; production models and profiles untouched.
 
+## 2026.11-candidates - Coding candidate track for the six-model Pi comparison
+
+- packages/models-coding-candidates.tsv: six pinned coding candidates (K2 Horizon
+  7B, Mellum 2.1 12B A2.5B Thinking, LFM2.5 8B A1B, LFM2.5 24B A2B, Ornith 1.5
+  9B, KAT-Coder V2.5 Dev 35B A3B), Q4_K_M, revisions/sizes/SHA-256 pinned from
+  the HF API (2026-11-21), 60.5 GB total; production models and profiles intact.
+- setup.sh install --coding-candidates: idempotent fetch (reuse, resume,
+  SHA-256, headroom check), preset sync with backup, router preset reload;
+  doctor reports candidate files + preset registration.
+- uninstall.sh --remove-candidates: removes only the candidate GGUFs.
+- config/models.ini.in: six candidate presets, native 262144 context per
+  evaluation brief, Q4_0 KV, per-model samplers, cpu-moe for the MoE models.
+- libexec/pi-router.py: model allowlist with per-id context/output limits;
+  catalog filter and output caps follow the selected model.
+- libexec/pi-sandbox: seven-entry offline model store (production + six
+  candidates), enabledModels covers all ids, `pi --model candidate-…` and
+  /model selection, coding-long-256k default unchanged.
+- tests/pi-router.py: candidate limit and allowlist regressions (8/8).
+- new docs: CODING_CANDIDATES.md (install, presets, Pi, MXFP4 gate, rollback).
+- smoke A-F 2026-11-21, all six PASS incl. tool-call emit/roundtrip, reasoning
+  separation, context recall, model switching without OOM; warm decode/prefill
+  t/s and VRAM: k2 13.7/38.7 6510MiB, mellum 26.7/42.5 4854, lfm8 52.1/72.6
+  4434, lfm24 30.0/46.9 5196, ornith 13.3/24.5 6430, kat 28.7/45.8 6392
+  (auto-fit placement, 262144 preset, KV on host; tests/pi-sandbox.ts allowlist
+  now covers the seven coding models, 11/11 probe flags true).
 
 ## 2026.11-permissions - Pi autonomy: Build as the standard mode
 
