@@ -684,7 +684,7 @@ class Handler(BaseHTTPRequestHandler):
                          " VALUES(?,?,?,?,?,?,?)",
                          (job_id, "image", None, "waiting_gpu",
                           json.dumps({"request": request, "meta": meta,
-                                      "deadline": time.monotonic() + wait_s}), now(), now()))
+                                      "deadline": time.time() + wait_s}), now(), now()))
             db().commit()
         gpu_log("image", request.get("model", "moss"), "enqueue", "waiting_gpu")
         return self._json({"job": {"id": job_id, "status": "waiting_gpu"}}, 202)
