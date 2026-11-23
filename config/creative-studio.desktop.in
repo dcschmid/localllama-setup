@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Local Creative Studio
+Comment=Lokales Schreiben, Recherche, Bilder, Game Ideas
+Exec=@HOME@/.local/bin/creative-studio
+Icon=applications-graphics
+Terminal=false
+Categories=Utility;Development;

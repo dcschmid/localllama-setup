@@ -94,6 +94,19 @@ Skills are read from the shared collection at runtime — no copies, no
 database. Writing profiles render the Human-Writing skill into the system
 context via `config/writing/render.py`.
 
+## Local Creative Studio (optional, opt-in)
+
+`./setup.sh creative-studio install` puts a writing/research/image/GDD studio
+on `127.0.0.1:8700` (Astro UI + stdlib backend, `libexec/llama-creative-studio`)
+on top of the existing router, image service and skills — separate UI, never a
+replacement for :8080, Pi or the coding profiles. Single GPU queue: image jobs
+wait for a real VRAM slot, LLM calls serialize through the router, jobs and
+documents persist in `~/.local/share/creative-studio` (backup/restore/uninstall
+keep data unless `--purge-data`). Lifecycle and gates:
+`./setup.sh creative-studio {update|status|doctor|test|backup|restore|uninstall}`,
+details in `docs/creative-studio/README.md`. Base install stays fully functional
+without it.
+
 ## Performance
 
 Production values come from measured series, not defaults: 2048/1024 batch,

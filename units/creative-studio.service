@@ -1,0 +1,22 @@
+[Unit]
+Description=Local Creative Studio (UI + job coordinator, loopback only)
+After=llama-cpp.service
+Wants=llama-cpp.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/libexec/llama-creative-studio serve
+Environment=CREATIVE_STUDIO_WEB=%h/.local/share/creative-studio/web
+Restart=on-failure
+RestartSec=3
+MemoryHigh=2G
+MemoryMax=4G
+TasksMax=64
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/creative-studio %h/.config/creative-studio %h/.local/state/creative-studio
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,27 @@
+---
+import '../styles/global.css';
+interface Props { title?: string }
+const { title = 'Local Creative Studio' } = Astro.props;
+---
+<!doctype html>
+<html lang="de" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content="Lokales Creative Studio: Chat, Stories, Recherche, Bilder — 127.0.0.1 only." />
+  <script is:inline>
+    // theme + lang before paint (no FOUC); stored locally, never sent anywhere
+    (() => {
+      const t = localStorage.getItem('cs-theme') ||
+        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = t;
+      document.documentElement.lang = localStorage.getItem('cs-lang') === 'en' ? 'en' : 'de';
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Zum Inhalt springen</a>
+  <slot />
+</body>
+</html>

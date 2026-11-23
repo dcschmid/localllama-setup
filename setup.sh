@@ -18,6 +18,8 @@ Commands
   benchmark  run the reproducible benchmark scripts in benchmarks/
   backup     versioned backup of managed configs into ~/.local/state/localllma-setup
   restore    restore a previous backup after validation
+  creative-studio {install|update|serve|status|doctor|test|backup|restore|uninstall}
+             optional Local Creative Studio (127.0.0.1:8700, user data is kept)
 
 Install options
   --download-models   download missing GGUF files (up to 37.1 GB)
@@ -49,6 +51,9 @@ while (( $# )); do
     case $1 in
         install|update|repair|doctor|status|test|benchmark|backup|restore) cmd=$1 ;;
         uninstall) cmd=uninstall ;;
+        creative-studio)
+            src=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+            exec python3 "$src/libexec/llama-creative-studio" "${@:2}" ;;
         --download-models) download_models=true ;;
         --coding-candidates) coding_candidates=true ;;
         --download-cuda) download_cuda=true ;;

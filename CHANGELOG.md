@@ -1,4 +1,16 @@
 # Changelog
+## 2026.11-studio - Local Creative Studio (opt-in) on the existing stack
+
+- `libexec/llama-creative-studio` + `packages/creative-studio/web`: writing,
+  deep research, image queue and game-design studio on 127.0.0.1:8700 —
+  separate UI over the router/image-service/skills, base install unaffected.
+- lifecycle over `./setup.sh creative-studio …` (install/update/serve/status/
+  doctor/test/backup/restore/uninstall, data kept by default), systemd user
+  unit + KDE starter; research dossiers land in the Recherche project, worker
+  failures now settle as `failed` (no retry loop).
+- `tests/creative-studio.py`: API-contract suite (runs live, no GPU);
+  `tests/unit.sh` stays green untouched.
+
 ## 2026.11-gemma256 - Production profiles at the native 256K ceiling
 
 - research, deep-research, creative-writing, human-writing/-rewrite/-audit:

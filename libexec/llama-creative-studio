@@ -1,0 +1,1157 @@
+#!/usr/bin/env python3
+"""Local Creative Studio – stdlib-only backend for localllama-setup.
+
+Single-user local service on 127.0.0.1:8700. Proxies inference to the
+llama.cpp router (:8080), image jobs to local-image-ai-service (:7861),
+research to websearch-mcp (:8642). Never binds off-loopback, never calls
+paid/cloud APIs, starts no second inference engine.
+
+Commands: serve | status | doctor | uninstall [--purge-data]
+"""
+
+import json
+import os
+import re
+import sqlite3
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+APP = "creative-studio"
+ROUTER = os.environ.get("CREATIVE_STUDIO_ROUTER", "http://127.0.0.1:8080")
+IMAGES = os.environ.get("CREATIVE_STUDIO_IMAGES", "http://127.0.0.1:7861")
+RESEARCH = os.environ.get("CREATIVE_STUDIO_RESEARCH", "http://127.0.0.1:8642")
+HOST, PORT = "127.0.0.1", int(os.environ.get("CREATIVE_STUDIO_PORT", "8700"))
+DATA = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / APP
+CONF = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / APP
+WEB = Path(os.environ.get(
+    "CREATIVE_STUDIO_WEB",
+    str(DATA / "web") if Path(__file__).resolve().parent.name == "libexec" else
+    str(Path(__file__).resolve().parent.parent / "packages" / "creative-studio" / "web" / "dist")))
+STUDIO_ALIASES = ("research", "deep-research", "creative-writing",
+                  "human-writing", "human-rewrite", "human-audit")
+SKILLS = Path(os.environ.get("LLAMA_SETUP_SKILLS",
+                             str(Path.home() / "dev/github/skillset/skills")))
+
+
+def skill_version() -> str:
+    """Version the human-writing skill declares in its own SKILL.md."""
+    try:
+        head = (SKILLS / "human-writing" / "SKILL.md").read_text(encoding="utf-8")[:2000]
+        for line in head.splitlines():
+            if "version" in line and ":" in line:
+                return line.split(":", 1)[1].strip().strip('"\'')
+    except OSError:
+        pass
+    return "unknown"
+MIGRATIONS = (
+    """
+    CREATE TABLE projects(id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'custom', lang TEXT NOT NULL DEFAULT 'de',
+      description TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]',
+      meta TEXT NOT NULL DEFAULT '{}', created REAL, updated REAL);
+    CREATE TABLE documents(id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'doc',
+      body TEXT NOT NULL DEFAULT '', lang TEXT, status TEXT NOT NULL DEFAULT 'draft',
+      version INTEGER NOT NULL DEFAULT 1, created REAL, updated REAL);
+    CREATE TABLE doc_versions(id TEXT PRIMARY KEY, document_id TEXT NOT NULL,
+      version INTEGER NOT NULL, body TEXT NOT NULL, note TEXT DEFAULT '',
+      origin TEXT DEFAULT 'user', created REAL);
+    CREATE TABLE sessions(id TEXT PRIMARY KEY, project_id TEXT,
+      title TEXT DEFAULT '', model TEXT, created REAL);
+    CREATE TABLE messages(id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+      role TEXT NOT NULL, content TEXT NOT NULL, meta TEXT DEFAULT '{}',
+      created REAL);
+    CREATE TABLE memories(id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+      kind TEXT NOT NULL, key TEXT NOT NULL, body TEXT NOT NULL,
+      created REAL, UNIQUE(project_id, kind, key));
+    CREATE TABLE jobs(id TEXT PRIMARY KEY, service TEXT NOT NULL,
+      external_id TEXT, state TEXT NOT NULL, payload TEXT DEFAULT '{}',
+      result TEXT, created REAL, updated REAL);
+    CREATE TABLE gpu_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL,
+      service TEXT, alias TEXT, event TEXT, detail TEXT);
+    CREATE VIRTUAL TABLE documents_fts USING fts5(title, body,
+      document_id UNINDEXED, kind UNINDEXED, tokenize='porter unicode61');
+    """,
+)
+_lock = threading.RLock()          # llama.cpp: models-max=1 -> serialize generations
+_dbs = threading.local()
+
+
+def now() -> float:
+    return time.time()
+
+
+def db() -> sqlite3.Connection:
+    conn = getattr(_dbs, "conn", None)
+    if conn is None:
+        DATA.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(DATA / "studio.sqlite3", timeout=15, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
+        _dbs.conn = conn
+    return conn
+
+
+def queue_worker():
+    """Coordinator loop: submit queued image jobs once the GPU slot is real
+    (llama.cpp sleeping releases VRAM only after sleep-idle), sync states,
+    and expire waits honestly. Survives studio restarts via SQLite."""
+    while True:
+        try:
+            for row in db().execute("SELECT * FROM jobs WHERE service='image'"
+                                    " AND state IN ('waiting_gpu','queued')").fetchall():
+                payload = jload(row["payload"], {})
+                req, deadline = payload.get("request", {}), payload.get("deadline", 0)
+                if time.monotonic() > deadline:
+                    db().execute("UPDATE jobs SET state='failed', result=?, updated=?"
+                                 " WHERE id=?", (json.dumps({"error": "gpu_wait_timeout"}),
+                                                 now(), row["id"]))
+                    db().commit()
+                    gpu_log("image", "-", "timeout", row["id"])
+                    continue
+                if row["state"] == "waiting_gpu":
+                    free, _ = gpu_free()
+                    if not free:
+                        continue
+                    try:
+                        status, doc = http_json(IMAGES + "/studio/api/jobs", "POST",
+                                                req, timeout=30)
+                        if doc.get("id"):
+                            db().execute("UPDATE jobs SET external_id=?, state=?, updated=?"
+                                         " WHERE id=?", (doc["id"], doc.get("status", "queued"),
+                                                         now(), row["id"]))
+                            db().commit()
+                            gpu_log("image", req.get("model", "?"), "submit", doc["id"])
+                    except Exception:
+                        pass  # service cold/down: retry next tick
+                elif row["external_id"]:
+                    try:
+                        _, up = http_json(IMAGES + "/studio/api/jobs/" + row["external_id"],
+                                          timeout=8)
+                        if up.get("status") in ("completed", "failed", "cancelled"):
+                            db().execute("UPDATE jobs SET state=?, result=?, updated=?"
+                                         " WHERE id=?", (up["status"], json.dumps(up),
+                                                         now(), row["id"]))
+                            db().commit()
+                    except Exception:
+                        pass
+            db().commit()
+        except Exception:
+            pass
+        time.sleep(1.0)
+
+
+def migrate() -> None:
+    conn = db()
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_version(v INTEGER)")
+    row = conn.execute("SELECT max(v) AS v FROM schema_version").fetchone()
+    have = row["v"] or 0
+    for idx in range(have, len(MIGRATIONS)):
+        conn.executescript(MIGRATIONS[idx])
+        conn.execute("INSERT INTO schema_version VALUES(?)", (idx + 1,))
+    conn.commit()
+
+
+def gpu_log(service, alias, event, detail=""):
+    with _lock:
+        db().execute("INSERT INTO gpu_log(ts,service,alias,event,detail) VALUES(?,?,?,?,?)",
+                     (now(), service, alias, event, detail))
+        db().commit()
+
+
+def gpu_holders() -> list[tuple[int, int]] | None:
+    """[(pid, MiB)] from nvidia-smi ground truth, or None when unreadable.
+    llama.cpp's sleep-idle-seconds keeps VRAM after a model sleeps, so
+    /v1/models loaded-state is NOT a valid free-VRAM signal on this box."""
+    import subprocess
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                              "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=25)
+        if out.returncode != 0:
+            return None
+        rows = []
+        for line in out.stdout.splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                rows.append((int(parts[0]), int(parts[1])))
+        return rows
+    except Exception:
+        return None
+
+
+def gpu_free() -> tuple[bool, str]:
+    """Resource Coordinator preflight for the 8 GB laptop GPU: submit image
+    jobs only into a real slot. llama.cpp holds VRAM while loaded OR sleeping
+    (sleep-idle 900 s); the image service hard-fails against it. Waits
+    instead of preemption — never interrupts a coding or writing session.
+    Fails closed: unreadable nvidia-smi means "occupied", so jobs keep waiting
+    instead of burning a submission the service will reject."""
+    image_backend = 0
+    try:
+        _, health = http_json(IMAGES + "/health", timeout=6)
+        if health.get("busy"):
+            return False, "image service busy"
+        image_backend = int(health.get("backend_pid") or 0)
+    except Exception:
+        pass  # cold service loads its own runtime after submit
+    holders = gpu_holders()
+    if holders is None:
+        return False, "nvidia-smi unreadable"
+    for pid, mib in holders:
+        if pid != image_backend and mib > 1024:
+            return False, f"llama-cpp holds {mib} MiB (pid {pid})"
+    return True, ""
+
+
+def jload(raw, default):
+    try:
+        return json.loads(raw) if raw else default
+    except (json.JSONDecodeError, TypeError):
+        return default
+
+
+def row_json(row, json_cols=()):
+    out = dict(row)
+    for key in json_cols:
+        out[key] = jload(out.get(key), [] if key == "tags" else {})
+    return out
+
+
+def http_json(url, method="GET", body=None, headers=None, timeout=30):
+    req = urllib.request.Request(url, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json",
+                                          **(headers or {})})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.status, json.loads(resp.read().decode() or "{}")
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = APP
+    protocol_version = "HTTP/1.1"
+
+    # ---- plumbing -----------------------------------------------------------
+    def log_message(self, fmt, *args):  # quiet, secrets-safe
+        pass
+
+    def _json(self, obj, code=200):
+        payload = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _body(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > 20 * 1024 * 1024:
+            raise ValueError("body too large")
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    def _path(self):
+        raw = self.path.split("?", 1)[0]
+        return [p for p in raw.split("/") if p]
+
+    def _query(self):
+        qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+        return dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
+
+    # ---- static -------------------------------------------------------------
+    def _static(self, rel):
+        rel = "index.html" if rel in ("", "/") else rel.lstrip("/")
+        base = WEB.resolve()
+        target = (base / rel).resolve()
+        if not str(target).startswith(str(base)):
+            return self._json({"error": "not_found"}, 404)
+        if not target.is_file():
+            target = base / "index.html"          # SPA fallback for sections
+            if not target.is_file():
+                return self._json({"error": "web_not_built",
+                                   "hint": "npm --prefix packages/creative-studio/web run build"}, 503)
+        ctype = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                 ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
+                 ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2",
+                 ".webmanifest": "application/manifest+json"}.get(target.suffix, "application/octet-stream")
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    # ---- upstream proxies ---------------------------------------------------
+    def _chat_stream(self, payload, persist):
+        req = urllib.request.Request(ROUTER + "/v1/chat/completions",
+                                     data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with _lock:
+            gpu_log("llm", payload.get("model", "?"), "acquire", "stream")
+            try:
+                upstream = urllib.request.urlopen(req, timeout=900)
+            except Exception as exc:
+                gpu_log("llm", payload.get("model", "?"), "error", str(exc)[:200])
+                return self._json({"error": "router_unreachable", "detail": str(exc)[:300]}, 502)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            collected = []
+            try:
+                for line in upstream:
+                    self.wfile.write(b"%x\r\n" % len(line) + line + b"\r\n")
+                    self.wfile.flush()
+                    text = line.decode(errors="replace").strip()
+                    if text.startswith("data: ") and text != "data: [DONE]":
+                        try:
+                            for ch in json.loads(text[6:]).get("choices", []):
+                                delta = (ch.get("delta") or {}).get("content")
+                                if delta:
+                                    collected.append(delta)
+                        except json.JSONDecodeError:
+                            pass
+                self.wfile.write(b"0\r\n\r\n")
+            except (BrokenPipeError, ConnectionResetError):
+                pass           # client left; assistant text kept as-is, no retry
+            finally:
+                upstream.close()
+                gpu_log("llm", payload.get("model", "?"), "release", "stream")
+        if persist and collected:
+            session_id, role = persist
+            with _lock:
+                db().execute("INSERT INTO messages(id,session_id,role,content,meta,created) VALUES(?,?,?,?,?,?)",
+                             (uuid.uuid4().hex, session_id, role, "".join(collected),
+                              json.dumps({"model": payload.get("model")}), now()))
+                db().commit()
+
+    def _image_api(self, path, method="GET", body=None):
+        status, doc = http_json(IMAGES + path, method, body, timeout=60)
+        return self._json(doc, status)
+
+    # ---- routes -------------------------------------------------------------
+    def do_GET(self):
+        parts = self._path()
+        if not parts or parts[0] != "api":
+            return self._static(self.path)
+        return self._get(parts[1:])
+
+    def do_POST(self):
+        if self._path()[:1] != ["api"]:
+            return self._json({"error": "not_found"}, 404)
+        return self._post(self._path()[1:])
+
+    def _get(self, parts):
+        conn = db()
+        if parts == ["health"]:
+            return self._json({"ok": True, "app": APP})
+        if parts == ["status"]:
+            def probe(url, name):
+                try:
+                    status, _ = http_json(url, timeout=5)
+                    return {"service": name, "ok": status == 200}
+                except Exception as exc:
+                    return {"service": name, "ok": False, "error": str(exc)[:120]}
+            return self._json({
+                "app": APP, "data_dir": str(DATA),
+                "upstream": [probe(ROUTER + "/health", "llama-cpp-router"),
+                             probe(IMAGES + "/health", "local-image-ai"),
+                             probe(RESEARCH + "/healthz", "websearch-mcp")],
+                "aliases": list(STUDIO_ALIASES)})
+        if parts == ["projects"]:
+            rows = conn.execute("SELECT * FROM projects ORDER BY updated DESC").fetchall()
+            return self._json([row_json(r, ("tags", "meta")) for r in rows])
+        if len(parts) == 2 and parts[0] == "projects":
+            row = conn.execute("SELECT * FROM projects WHERE id=?", (parts[1],)).fetchone()
+            if not row:
+                return self._json({"error": "project_not_found"}, 404)
+            docs = conn.execute("SELECT id,title,kind,status,version,updated FROM documents"
+                                " WHERE project_id=? ORDER BY updated DESC", (parts[1],)).fetchall()
+            return self._json({**row_json(row, ("tags", "meta")), "documents": [dict(d) for d in docs]})
+        if len(parts) == 2 and parts[0] == "documents":
+            row = conn.execute("SELECT * FROM documents WHERE id=?", (parts[1],)).fetchone()
+            return self._json(row_json(row) if row else {"error": "document_not_found"},
+                              200 if row else 404)
+        if len(parts) == 3 and parts[0] == "documents" and parts[2] == "versions":
+            rows = conn.execute("SELECT id,version,note,origin,created FROM doc_versions"
+                                " WHERE document_id=? ORDER BY version DESC", (parts[1],)).fetchall()
+            return self._json([dict(r) for r in rows])
+        if parts == ["sessions"]:
+            rows = conn.execute("SELECT * FROM sessions ORDER BY created DESC LIMIT 200").fetchall()
+            return self._json([dict(r) for r in rows])
+        if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "messages":
+            rows = conn.execute("SELECT * FROM messages WHERE session_id=?"
+                                " ORDER BY created LIMIT 500", (parts[1],)).fetchall()
+            return self._json([row_json(r, ("meta",)) for r in rows])
+        if parts[:1] == ["search"]:
+            term = self._query().get("q", "")
+            rows = conn.execute("SELECT document_id,title,kind,snippet(documents_fts,1,'<b>','</b>','…',12)"
+                                " AS hit FROM documents_fts WHERE documents_fts MATCH ? LIMIT 50",
+                                (term,)).fetchall()
+            return self._json([dict(r) for r in rows])
+        if parts[:1] == ["images"] and len(parts) == 3 and parts[1] == "files":
+            return self._image_bytes("/studio/api/files/" + parts[2])
+        if parts[:1] == ["images"] and len(parts) >= 2 and parts[1] == "gallery":
+            return self._image_api("/studio/api/gallery")
+        if parts[:1] == ["images"] and len(parts) == 3 and parts[1] == "jobs":
+            row = db().execute("SELECT * FROM jobs WHERE id=?", (parts[2],)).fetchone()
+            if row:  # studio queue view (waiting_gpu has no upstream id yet)
+                if row["external_id"] and row["state"] not in (
+                        "completed", "failed", "cancelled"):
+                    try:
+                        _, up = http_json(IMAGES + "/studio/api/jobs/" + row["external_id"], timeout=8)
+                        if up.get("status"):
+                            db().execute("UPDATE jobs SET state=?, result=?, updated=? WHERE id=?",
+                                         (up["status"], json.dumps(up), now(), row["id"]))
+                            db().commit()
+                            return self._json(up)
+                    except Exception:
+                        pass
+                doc = {"id": row["id"], "status": row["state"], "created": row["created"],
+                       "queued_request": jload(row["payload"], {})}
+                if row["result"]:
+                    doc.update(jload(row["result"], {}))
+                return self._json(doc)
+            return self._image_api("/studio/api/jobs/" + parts[2])
+        if parts[:1] == ["images"] and len(parts) == 2 and parts[1] == "jobs":
+            rows = conn.execute("SELECT * FROM jobs WHERE service='image' ORDER BY created DESC LIMIT 100").fetchall()
+            return self._json([row_json(r, ("payload",)) for r in rows])
+        if len(parts) >= 2 and parts[0] == "projects" and parts[2:3] == ["memories"]:
+            rows = conn.execute("SELECT kind,key,body,created FROM memories WHERE project_id=?"
+                                " ORDER BY kind,key", (parts[1],)).fetchall()
+            return self._json([dict(r) for r in rows])
+        if parts == ["voices"]:
+            rows = conn.execute("SELECT kind,key,body FROM memories WHERE kind='voice-profile'"
+                                " ORDER BY created DESC").fetchall()
+            return self._json([dict(r) for r in rows])
+        if len(parts) == 3 and parts[0] == "projects" and parts[2:3] == ["decisions"]:
+            rows = conn.execute("SELECT body FROM memories WHERE project_id=?"
+                                " AND kind='decision' ORDER BY created", (parts[1],)).fetchall()
+            return self._json([jload(r["body"], {}) for r in rows])
+        if len(parts) == 2 and parts[0] == "research":
+            row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='research'",
+                               (parts[1],)).fetchone()
+            if not row:
+                return self._json({"error": "research_not_found"}, 404)
+            return self._json({"id": row["id"], "status": row["state"],
+                               "checkpoint": jload(row["payload"], {}),
+                               "result": jload(row["result"], {}) if row["result"] else {}})
+        if parts[:1] == ["catalog"]:
+            try:
+                status, doc = http_json(IMAGES + "/studio/api/catalog", timeout=15)
+                return self._json({"image_catalog": doc if status == 200 else None,
+                                   "models": doc.get("models") if isinstance(doc, dict) else None,
+                                   "presets": doc.get("presets"), "recipes": doc.get("recipes"),
+                                   "aliases": list(STUDIO_ALIASES), "router": ROUTER})
+            except Exception as exc:
+                return self._json({"error": "catalog_unavailable", "detail": str(exc)[:200]}, 502)
+        return self._json({"error": "not_found"}, 404)
+
+    def _post(self, parts):
+        conn = db()
+        try:
+            body = self._body()
+        except ValueError as exc:
+            return self._json({"error": "bad_request", "detail": str(exc)[:200]}, 400)
+        if parts == ["chat"]:
+            return self._chat(body)
+        if parts[:1] == ["projects"] and len(parts) == 1:
+            pid = uuid.uuid4().hex
+            conn.execute("INSERT INTO projects(id,name,kind,lang,description,tags,meta,created,updated)"
+                         " VALUES(?,?,?,?,?,?,?,?,?)",
+                         (pid, body.get("name") or "Projekt", body.get("kind") or "custom",
+                          body.get("lang") or "de", body.get("description") or "",
+                          json.dumps(body.get("tags") or []), json.dumps(body.get("meta") or {}),
+                          now(), now()))
+            conn.commit()
+            return self._json({"id": pid}, 201)
+        if parts[:2] == ["documents", ] and len(parts) == 1:
+            did = uuid.uuid4().hex
+            conn.execute("INSERT INTO documents(id,project_id,title,kind,body,lang,created,updated)"
+                         " VALUES(?,?,?,?,?,?,?,?)",
+                         (did, body["project_id"], body.get("title") or "", body.get("kind") or "doc",
+                          body.get("body") or "", body.get("lang"), now(), now()))
+            conn.execute("INSERT INTO documents_fts(title,body,document_id,kind) VALUES(?,?,?,?)",
+                         (body.get("title") or "", body.get("body") or "", did,
+                          body.get("kind") or "doc"))
+            conn.commit()
+            return self._json({"id": did}, 201)
+        if parts[:1] == ["documents"] and len(parts) == 2:          # edit: new version
+            did = parts[1]
+            row = conn.execute("SELECT * FROM documents WHERE id=?", (did,)).fetchone()
+            if not row:
+                return self._json({"error": "document_not_found"}, 404)
+            conn.execute("INSERT INTO doc_versions(id,document_id,version,body,note,origin,created)"
+                         " VALUES(?,?,?,?,?,?,?)",
+                         (uuid.uuid4().hex, did, row["version"], row["body"],
+                          body.get("note", ""), "user", now()))
+            conn.execute("UPDATE documents SET body=?,title=?,lang=?,version=version+1,updated=?"
+                         " WHERE id=?", (body.get("body", row["body"]),
+                                         body.get("title", row["title"]),
+                                         body.get("lang") or row["lang"], now(), did))
+            conn.execute("DELETE FROM documents_fts WHERE document_id=?", (did,))
+            merged = conn.execute("SELECT title,body,kind FROM documents WHERE id=?", (did,)).fetchone()
+            conn.execute("INSERT INTO documents_fts(title,body,document_id,kind) VALUES(?,?,?,?)",
+                         (merged["title"], merged["body"], did, merged["kind"]))
+            conn.commit()
+            return self._json({"id": did, "version": row["version"] + 1})
+        if parts[:1] == ["sessions"] and len(parts) == 1:
+            sid = uuid.uuid4().hex
+            conn.execute("INSERT INTO sessions(id,project_id,title,model,created) VALUES(?,?,?,?,?)",
+                         (sid, body.get("project_id"), body.get("title") or "",
+                          body.get("model"), now()))
+            conn.commit()
+            return self._json({"id": sid}, 201)
+        if parts[:1] == ["images"] and parts[1:2] == ["generate"]:
+            return self._image_generate(body)
+        if parts[:1] == ["images"] and parts[1:2] == ["regen"]:
+            return self._image_regen(body)
+        if parts == ["memories"]:
+            pid = body["project_id"]
+            db().execute("INSERT INTO memories(id,project_id,kind,key,body,created)"
+                         " VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,kind,key)"
+                         " DO UPDATE SET body=excluded.body",
+                         (uuid.uuid4().hex, pid, body["kind"], body["key"],
+                          body["body"], now()))
+            db().commit()
+            return self._json({"ok": True})
+        if parts == ["voices"]:
+            pid = body["project_id"]
+            db().execute("INSERT INTO memories(id,project_id,kind,key,body,created)"
+                         " VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,kind,key)"
+                         " DO UPDATE SET body=excluded.body",
+                         (uuid.uuid4().hex, pid, "voice-profile", body.get("name") or "default",
+                          body.get("body", ""), now()))
+            db().commit()
+            return self._json({"ok": True})
+        if parts == ["lint"]:
+            return self._lint(body)
+        if parts == ["write"]:
+            return self._write_stream(body, "generate")
+        if parts == ["research"]:
+            return self._research(body)
+        if len(parts) == 3 and parts[0] == "research" and parts[2] in ("pause", "resume"):
+            row = db().execute("SELECT * FROM jobs WHERE id=? AND service='research'",
+                               (parts[1],)).fetchone()
+            if not row:
+                return self._json({"error": "research_not_found"}, 404)
+            payload = jload(row["payload"], {})
+            payload["paused"] = parts[2] == "pause"
+            db().execute("UPDATE jobs SET payload=?, updated=? WHERE id=?",
+                         (json.dumps(payload), now(), parts[1]))
+            db().commit()
+            return self._json({"ok": True, "paused": payload["paused"]})
+        if parts == ["export"]:
+            return self._export(body)
+        if parts == ["decisions"]:
+            return self._decision(body)
+        if parts == ["gdd"]:
+            return self._gdd(body)
+        return self._json({"error": "not_found"}, 404)
+
+    # ---- astro export (md/mdx, files[] payloads; no writes outside studio) --
+    def _export(self, body):
+        row = db().execute("SELECT * FROM documents WHERE id=?",
+                           (body.get("doc_id", ""),)).fetchone()
+        if not row:
+            return self._json({"error": "document_not_found"}, 404)
+        fmt = "mdx" if body.get("format") == "mdx" else "md"
+        slug = re.sub(r"[^a-z0-9-]", "-", (body.get("slug") or row["title"]
+                                           or "beitrag").lower()).strip("-")[:60] or "beitrag"
+        fm = {"title": row["title"], "description": body.get("description", "")[:500],
+              "date": body.get("date") or time.strftime("%Y-%m-%d"),
+              "lang": row["lang"] or "de", "tags": body.get("tags") or [],
+              **({k: body[k] for k in ("hero", "seo_title", "seo_description")
+                  if body.get(k)})}
+        fm = {k: v for k, v in fm.items() if v not in ("", [], None)}
+        body_md = row["body"]
+        files = [{"path": f"{slug}/index.{fmt}",
+                  "content": "---\n" + "\n".join(
+                      f"{k}: {v!r}" if isinstance(v, str) else
+                      f"{k}: {json.dumps(v, ensure_ascii=False)}"
+                      for k, v in fm.items()) + "\n---\n\n" + body_md}]
+        images = []
+        for m in re.finditer(r"!\[[^\]]*\]\((/api/images/files/([0-9a-f]{8,64}))\)", body_md):
+            img_id = m.group(2)
+            try:
+                req = urllib.request.Request(IMAGES + "/studio/api/files/" + img_id,
+                                             headers={"Accept": "image/png"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    png = resp.read()
+                import base64
+                files.append({"path": f"{slug}/images/{img_id}.png",
+                              "base64": base64.b64encode(png).decode(),
+                              "content_type": "image/png"})
+                images.append(img_id)
+                body_md = body_md.replace(m.group(1), f"images/{img_id}.png")
+                files[0]["content"] = files[0]["content"].replace(
+                    m.group(1), f"images/{img_id}.png")
+            except Exception as exc:
+                return self._json({"error": "image_export_failed",
+                                   "detail": str(exc)[:160], "image_id": img_id}, 502)
+        coll = body.get("collection")
+        if coll:
+            files[0]["path"] = f"src/content/{coll}/{slug}.{'mdx' if fmt == 'mdx' else 'md'}"
+        return self._json({"slug": slug, "format": fmt, "files": files,
+                           "images": images, "frontmatter": fm,
+                           "note": "Dateien werden nicht automatisch geschrieben —"
+                                   " Zielpfad und Überschreiben entscheidet der Nutzer."})
+
+    # ---- human-writing: skill files + lint + guided writing ------------------
+    def _lint(self, body):
+        text = body.get("text") or ""
+        lang = "en" if body.get("lang") == "en" else "de"
+        if len(text.encode()) > 400_000:
+            return self._json({"error": "text too large"}, 400)
+        import subprocess
+        try:
+            out = subprocess.run(
+                [sys.executable, str(SKILLS / "human-writing" / "scripts" / "lint_text.py"),
+                 "-", "--lang", lang, "--format", "json"],
+                input=text.encode(), capture_output=True, timeout=60)
+            doc = json.loads(out.stdout.decode() or "{}")
+            doc["skill_version"] = skill_version()
+            return self._json(doc, 200 if out.returncode in (0, 1) else 502)
+        except Exception as exc:
+            return self._json({"error": "lint_failed", "detail": str(exc)[:200]}, 502)
+
+    def _write_stream(self, body, default_mode):
+        """Guided writing: bible-selective context, tag-prefixed first line,
+        creative-writing alias carries the human-writing template."""
+        doc_id = body.get("doc_id")
+        doc = db().execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone() if doc_id else None
+        pid = body.get("project_id") or (doc["project_id"] if doc else None)
+        lang = "en" if body.get("lang") == "en" else "de"
+        mode = body.get("mode") or default_mode
+        tag = f"[{lang}]" + {"generate": "[generate]", "rewrite": "[rewrite]",
+                             "audit": "[audit]"}.get(mode, "[generate]")
+        ctx = []
+        if pid:
+            for r in db().execute("SELECT kind,key,body FROM memories WHERE project_id=?"
+                                  " AND kind IN ('character','place','plot','timeline','continuity','bible')"
+                                  " ORDER BY kind LIMIT 24", (pid,)):
+                ctx.append(f"{r['kind']}:{r['key']}: {r['body'][:300]}")
+            voice = db().execute("SELECT body FROM memories WHERE project_id=?"
+                                 " AND kind='voice-profile' ORDER BY created DESC LIMIT 1", (pid,)).fetchone()
+            if voice:
+                ctx.append(f"voice-profile: {voice['body'][:600]}")
+        instruction = (body.get("instruction") or "").strip()
+        base = doc["body"] if doc else ""
+        user = " ".join([tag] + ([f"Kontext: {' | '.join(ctx[:20])}"] if ctx and mode == "generate" else [])
+                        + [instruction or (f"Text: {base}" if mode != "generate" else "")]).strip()
+        payload = {"model": body.get("model") or "creative-writing",
+                   "messages": [{"role": "user", "content": user[:180_000]}],
+                   "stream": True}
+        return self._chat_stream(payload, None)
+
+    # ---- handlers -----------------------------------------------------------
+    def _chat(self, body):
+        model = body.get("model", "research")
+        if model not in STUDIO_ALIASES:
+            return self._json({"error": "unknown_alias", "allowed": list(STUDIO_ALIASES)}, 400)
+        messages = body.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return self._json({"error": "messages_required"}, 400)
+        persist = (body.get("session_id"), "assistant") if body.get("session_id") else None
+        payload = {"model": model, "messages": messages, "stream": True,
+                   **({"chat_template_kwargs": body["chat_template_kwargs"]}
+                      if body.get("chat_template_kwargs") else {})}
+        if persist:
+            with _lock:
+                db().execute("INSERT INTO messages(id,session_id,role,content,meta,created) VALUES(?,?,?,?,?,?)",
+                             (uuid.uuid4().hex, persist[0], "user",
+                              messages[-1].get("content", ""), json.dumps({"model": model}), now()))
+                db().commit()
+        return self._chat_stream(payload, persist)
+
+    def _image_generate(self, body):
+        request = {k: body[k] for k in
+                   ("recipe", "subject", "quality", "prompt", "model", "size", "seed",
+                    "preset", "aspect_ratio", "mode", "image_id", "mask_id")
+                   if k in body}
+        meta = {k: body[k] for k in ("project_id", "document_id", "alt", "title") if k in body}
+        wait_s = max(30, min(int(body.get("wait_gpu_seconds", 1200)), 3600))
+        job_id = uuid.uuid4().hex
+        with _lock:
+            db().execute("INSERT INTO jobs(id,service,external_id,state,payload,created,updated)"
+                         " VALUES(?,?,?,?,?,?,?)",
+                         (job_id, "image", None, "waiting_gpu",
+                          json.dumps({"request": request, "meta": meta,
+                                      "deadline": time.monotonic() + wait_s}), now(), now()))
+            db().commit()
+        gpu_log("image", request.get("model", "moss"), "enqueue", "waiting_gpu")
+        return self._json({"job": {"id": job_id, "status": "waiting_gpu"}}, 202)
+
+    def _image_bytes(self, path):
+        try:
+            req = urllib.request.Request(IMAGES + path, headers={"Accept": "image/png"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+        except Exception as exc:
+            return self._json({"error": "image_bytes_failed", "detail": str(exc)[:200]}, 502)
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _image_regen(self, body):
+        """Regenerate from a stored gallery image: replay its exact request.
+        Seed is stable only within one runtime version (recipe_version check
+        stays with the image service fingerprint)."""
+        image_id = body.get("image_id") or ""
+        try:
+            status, meta = http_json(IMAGES + "/studio/api/gallery/" + image_id, timeout=15)
+        except Exception as exc:
+            return self._json({"error": "gallery_lookup_failed", "detail": str(exc)[:200]}, 502)
+        if status != 200 or not isinstance(meta.get("request"), dict):
+            return self._json({"error": "image_not_found"}, 404)
+        return self._image_generate({**meta["request"], **{
+            k: body[k] for k in ("project_id", "document_id", "alt", "title") if k in body}})
+
+    # ---- deep research (zero-cost, sandboxed, checkpointed) ------------------
+    def _research(self, body):
+        rid = uuid.uuid4().hex
+        depth = {"quick": (1, 2), "deep": (3, 5), "extended": (6, 10)}.get(
+            body.get("mode", "deep"), (3, 5))
+        with _lock:
+            db().execute("INSERT INTO jobs(id,service,external_id,state,payload,created,updated)"
+                         " VALUES(?,?,?,?,?,?,?)",
+                         (rid, "research", None, "running",
+                          json.dumps({"question": body.get("question", "")[:2000],
+                                      "project_id": body.get("project_id"),
+                                      "rounds": depth[0], "max_followups": depth[1],
+                                      "done_rounds": 0, "facts": [], "sources": [],
+                                      "open": [], "contradictions": [], "queries": [],
+                                      "budget_deadline": time.time()
+                                      + float(body.get("budget_minutes", 30)) * 60}),
+                          now(), now()))
+            db().commit()
+        gpu_log("research", "deep-research", "enqueue", rid)
+        return self._json({"id": rid, "status": "running"}, 202)
+
+    def _decision(self, body):
+        """Game Idea Lab decision log: memories kind='decision' keeps every
+        design call reversible; status flow Idee→Diskussion→Vorgeschlagen→
+        Beschlossen→Verworfen|Später prüfen."""
+        pid, key = body["project_id"], body.get("key") or uuid.uuid4().hex[:8]
+        old = db().execute("SELECT body FROM memories WHERE project_id=? AND"
+                           " kind='decision' AND key=?", (pid, key)).fetchone()
+        history = jload(old["body"], {"history": []}) if old else {"history": []}
+        entry = {"key": key, "title": body.get("title", "")[:300],
+                 "status": body.get("status", "idee"),
+                 "options": body.get("options", []), "rationale": body.get("rationale", "")[:2000],
+                 "engine": body.get("engine", ""), "history": history["history"] + [
+                     {"at": now(), "status": history.get("status", "idee"),
+                      "note": (old["body"][:400] if old else "")}][-20:]}
+        db().execute("INSERT INTO memories(id,project_id,kind,key,body,created)"
+                     " VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,kind,key)"
+                     " DO UPDATE SET body=excluded.body",
+                     (uuid.uuid4().hex, pid, "decision", key, json.dumps(entry), now()))
+        db().commit()
+        return self._json({"ok": True, "decision": entry})
+
+    def _decisions(self, pid):
+        rows = db().execute("SELECT body FROM memories WHERE project_id=?"
+                            " AND kind='decision' ORDER BY created", (pid,)).fetchall()
+        return self._json([jload(r["body"], {}) for r in rows])
+
+    def _gdd(self, body):
+        """Game Design Document assembled from decisions + bible + documents."""
+        pid = body["project_id"]
+        decisions = [jload(r["body"], {}) for r in db().execute(
+            "SELECT body FROM memories WHERE project_id=? AND kind='decision'"
+            " ORDER BY created", (pid,))]
+        bible = [dict(r) for r in db().execute(
+            "SELECT kind,key,body FROM memories WHERE project_id=?"
+            " AND kind!='decision'", (pid,))]
+        project = db().execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
+        status_label = {"idee": "Idee", "diskussion": "In Diskussion",
+                        "vorgeschlagen": "Vorgeschlagen", "beschlossen": "Beschlossen",
+                        "verworfen": "Verworfen", "spaeter": "Später prüfen"}
+        lines = [f"# Game Design Document — {project['name'] if project else pid}",
+                 "", "## Entscheidungen", ""]
+        for d in decisions:
+            lines.append(f"- **{d.get('title', d.get('key'))}** → "
+                         f"{status_label.get(d.get('status'), d.get('status'))}"
+                         + (f" — {d['rationale']}" if d.get("rationale") else ""))
+            if d.get("options"):
+                lines.append("  - Optionen: " + "; ".join(map(str, d["options"])))
+        lines += ["", "## Projektnotizen", ""]
+        for m in bible:
+            lines.append(f"- **{m['kind']}:{m['key']}** — {m['body'][:400]}")
+        docs = db().execute("SELECT title,body FROM documents WHERE project_id=?"
+                            " ORDER BY created", (pid,)).fetchall()
+        if docs:
+            lines += ["", "## Dokumente", ""]
+            for d in docs:
+                lines.append(f"### {d['title']}\n\n{d['body'][:6000]}")
+        md = "\n".join(lines)
+        return self._json({"gdd": md, "count": len(decisions),
+                           "note": "Export-Payload; Schreiben entscheidet der Nutzer."})
+
+
+def research_mcp(method, tool=None, arguments=None, rid=None, timeout=120):
+    """Call the sandboxed websearch-mcp (:8642). URLs/answers from the web are
+    untrusted data: returned as text only, never evaluated here. Responses are
+    SSE-framed JSON-RPC; a session is required."""
+    sid = None
+    init = urllib.request.Request(RESEARCH + "/mcp",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                         "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                                    "clientInfo": {"name": APP, "version": "0"}}}).encode(),
+        headers={"Content-Type": "application/json",
+                 "Accept": "application/json, text/event-stream"})
+    with urllib.request.urlopen(init, timeout=timeout) as resp:
+        sid = resp.headers.get("Mcp-Session-Id") or resp.headers.get("mcp-session-id")
+
+    def rpc(payload):
+        req = urllib.request.Request(RESEARCH + "/mcp", json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json",
+                     "Accept": "application/json, text/event-stream",
+                     **({"Mcp-Session-Id": sid} if sid else {})})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            m = re.search(r"data: (\{.*\})", r.read().decode())
+            return json.loads(m.group(1)) if m else {}
+    rpc({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    if method == "tools/call":
+        res = rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                   "params": {"name": tool, "arguments": arguments}})
+        texts = [c.get("text", "") for c in res.get("result", {}).get("content", [])
+                 if c.get("type") == "text"]
+        try:
+            return [json.loads(t) for t in texts if t.startswith("{")] or texts
+        except json.JSONDecodeError:
+            return texts
+    return {}
+
+
+def research_worker():
+    """Autonomous loop: plan -> discover -> extract -> verify -> gap analysis ->
+    follow-up, with dedup of queries, stall detection, checkpoints, budgets."""
+    while True:
+        rows = []
+        with _lock:
+            rows = db().execute("SELECT * FROM jobs WHERE service='research'"
+                                " AND state='running'").fetchall()
+        for row in rows:
+            try:
+                research_step(row)
+            except Exception as exc:
+                with _lock:
+                    db().execute("UPDATE jobs SET state='failed', result=?, updated=?"
+                                 " WHERE id=? AND state='running'",
+                                 (json.dumps({"error": str(exc)[:200]}), now(), row["id"]))
+                    db().commit()
+        time.sleep(1.0)
+
+
+def research_step(row):
+    payload = jload(row["payload"], {})
+    rid = row["id"]
+
+    def checkpoint(**updates):
+        payload.update(updates)
+        with _lock:
+            db().execute("UPDATE jobs SET payload=?, updated=? WHERE id=?",
+                         (json.dumps(payload), now(), rid))
+            db().commit()
+
+    def llm(prompt, timeout=180):
+        req = urllib.request.Request(ROUTER + "/v1/chat/completions",
+            data=json.dumps({"model": "deep-research", "stream": False,
+                             "messages": [{"role": "user", "content": prompt[:120_000]}]}).encode(),
+            headers={"Content-Type": "application/json"})
+        with _lock:
+            gpu_log("llm", "deep-research", "acquire", "research")
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read()).get("choices", [{}])[0].get("message", {}).get("content", "")
+            finally:
+                gpu_log("llm", "deep-research", "release", "research")
+
+    if payload.get("paused"):
+        return
+    if payload.get("paused") is False:
+        checkpoint(paused=None)
+    rounds, done = payload.get("rounds", 3), payload.get("done_rounds", 0)
+    question = payload["question"]
+    if done >= rounds or time.time() > payload.get("budget_deadline", time.time() + 3600):
+        dossier = llm("Fasse die Recherche als strukturiertes Dossier zusammen"
+                      " (Zusammenfassung, verifizierte Fakten mit Quellen, offene Fragen,"
+                      " Widersprüche, weitere Ansätze). Frage: " + question
+                      + "\nFakten: " + json.dumps(payload.get("facts", []))[:6000]
+                      + "\nQuellen: " + json.dumps(payload.get("sources", []))[:3000]
+                      + "\nOffen: " + json.dumps(payload.get("open", []))[:1500]
+                      + "\nWidersprüche: " + json.dumps(payload.get("contradictions", []))[:1500])
+        did = uuid.uuid4().hex
+        with _lock:
+            pid = payload.get("project_id")
+            if not pid:
+                row_ = db().execute("SELECT id FROM projects WHERE name='Recherche'"
+                                    " LIMIT 1").fetchone()
+                pid = row_["id"] if row_ else uuid.uuid4().hex
+                if not row_:
+                    db().execute("INSERT INTO projects(id,name,kind,lang,description,meta,"
+                                 "created,updated) VALUES(?,?,?,?,?,?,?,?)",
+                                 (pid, "Recherche", "custom", "de",
+                                  "Dossiers der Deep-Research-Pipeline", "{}", now(), now()))
+            db().execute("INSERT INTO documents(id,project_id,title,kind,body,lang,status,version,created,updated)"
+                         " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                         (did, pid, "Dossier: " + question[:80],
+                          "dossier", dossier, "de", "final", 1, now(), now()))
+            db().commit()
+        with _lock:
+            db().execute("UPDATE jobs SET state='completed', result=?, updated=? WHERE id=?",
+                         (json.dumps({"document_id": did}), now(), rid))
+            db().commit()
+        gpu_log("research", "-", "complete", rid)
+        return
+    subq = payload.get("subquestions") or [q.strip(" 0123456789.)-*") for q in re.split(
+        r"\n", llm("Formuliere 3-5 getrennte Teilfragen für: " + question))
+        if "?" in q and len(q.strip()) > 12]
+    subq = [s for s in subq if s][:5] or [question]
+    checkpoint(subquestions=subq)
+    gap = payload.get("gap_round") or 0
+    todo = subq[done % len(subq)] if gap == 0 else (payload.get("open") or [question])[0]
+    variants = [v.strip() for v in llm(
+        "Nenne 2 verschiedene Suchbegriff-Varianten (Synonyme, evtl. englisch)"
+        " für die Teilfrage. Nur die Varianten, eine pro Zeile: " + todo)
+        .splitlines() if v.strip()][:2] or [todo]
+    for q in variants:
+        if q in payload.get("queries", []):
+            continue  # no repeated identical searches
+        payload.setdefault("queries", []).append(q)
+        try:
+            hits = research_mcp("tools/call", "search_web", {"query": q, "limit": 4})
+        except Exception:
+            continue
+        for item in (hits[0] if hits and isinstance(hits[0], dict) else {}):
+            pass
+        results = (hits[0].get("results") if hits and isinstance(hits[0], dict) else []) or []
+        src = None
+        for r in results[:2]:
+            url = r.get("url", "")
+            if not url.startswith("http"):
+                continue
+            try:
+                page = research_mcp("tools/call", "read_url", {"url": url})
+            except Exception:
+                continue
+            data = page[0] if page and isinstance(page[0], dict) else {"text": str(page[:1])}
+            body = (data.get("text") or data.get("markdown") or "")[:6000]
+            extract = llm("Extrahiere 1-3 konkrete Fakten (mit Jahreszahlen/Zahlen),"
+                          " nur aus dem Quelltext, keine Spekulation. Kurz, je Fakt eine Zeile"
+                          " mit URL-Markierung [Q]. Quelle: " + url + "\n\n" +
+                          "<<<UNTRUSTED_WEB_DATA>>>\n" + body[:5000] + "\n<<<END>>>"
+                          "  Frage: " + todo)
+            for line in (extract or "").splitlines():
+                line = line.strip(" -•0123456789.)")
+                if len(line) > 24 and "[Q]" not in str(payload.get("facts")[-1:]):
+                    payload.setdefault("facts", []).append(
+                        {"fact": line[:600], "url": url, "round": done + 1})
+                    src = url
+                    payload["facts"] = payload["facts"][-60:]
+            if src and src not in [s.get("url") for s in payload.get("sources", [])]:
+                payload.setdefault("sources", []).append(
+                    {"url": src, "title": (results[0].get("title") or "")[:200]
+                     if results else "", "retrieved": now()})
+        checkpoint(done_rounds=done + 1, facts=payload.get("facts"),
+                   sources=payload.get("sources"), queries=payload.get("queries"))
+    verify = llm("Prüfe die Faktenliste auf Lücken und Widersprüche zur Frage " + question
+                 + ". Antworte mit: OPEN: <eine wichtigste offene Teilfrage>"
+                 " und CONTRA: <Widerspruch oder leer>. Fakten: "
+                 + json.dumps(payload.get("facts", [])[-25:])[:5000])
+    opens = re.findall(r"OPEN:\s*(.+)", verify or "")
+    contras = re.findall(r"CONTRA:\s*(.+)", verify or "")
+    new_open = [o.strip()[:300] for o in opens if o.strip()]
+    stall = new_open and new_open == payload.get("open")
+    checkpoint(open=new_open[:6] + ([q] if not new_open and done == 0 else []),
+               contradictions=(payload.get("contradictions", [])
+                               + [c.strip()[:400] for c in contras if c.strip()])[:20],
+               gap_round=done + 1 if new_open and not stall else 0,
+               done_rounds=done + 1)
+
+
+# ---- service management -----------------------------------------------------
+UNIT = "creative-studio.service"
+STATE = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / APP
+
+
+def unit_installed() -> bool:
+    return (Path.home() / ".config/systemd/user" / UNIT).is_file()
+
+
+def cmd_serve():
+    DATA.mkdir(parents=True, exist_ok=True)
+    CONF.mkdir(parents=True, exist_ok=True)
+    migrate()
+    threading.Thread(target=queue_worker, daemon=True, name="gpu-queue").start()
+    threading.Thread(target=research_worker, daemon=True, name="research").start()
+    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"{APP} listening http://{HOST}:{PORT} data={DATA}")
+    sys.stdout.flush()
+    httpd.serve_forever()
+
+
+def cmd_status():
+    try:
+        _, doc = http_json(f"http://{HOST}:{PORT}/api/status", timeout=5)
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+    except Exception:
+        print(f"{APP}: not running (unit installed={unit_installed()})")
+
+
+def cmd_doctor():
+    ok = True
+    for name, probe in (("router /health", ROUTER + "/health"),
+                        ("image /health", IMAGES + "/health"),
+                        ("research /healthz", RESEARCH + "/healthz"),
+                        ("studio /api/health", f"http://{HOST}:{PORT}/api/health")):
+        try:
+            status, _ = http_json(probe, timeout=5)
+            print(f"ok   {name} -> {status}")
+        except Exception as exc:
+            ok = False
+            print(f"fail {name} -> {str(exc)[:120]}")
+    print(f"ok   unit-file -> {'installed' if unit_installed() else 'not installed (serve from repo for now)'}")
+    print(f"ok   data -> {DATA} ({'exists' if DATA.is_dir() else 'not yet created'})")
+    print(f"{'doctor ok' if ok else 'doctor: failures above'}")
+    sys.exit(0 if ok else 1)
+
+
+LOCKFILE = Path.home() / ".local/opt/llama.cpp/.creative-studio.lock"
+
+
+def cmd_install() -> None:
+    """Idempotent lifecycle entry (also `update`). Never touches llama.cpp,
+    image service, Pi, or existing user data."""
+    import fcntl
+    import shutil
+    LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCKFILE, "w") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit("creative-studio: another lifecycle run is active")
+        src = Path(__file__).resolve().parent.parent
+        for d in (DATA, CONF, STATE, WEB.parent):
+            d.mkdir(parents=True, exist_ok=True)
+        migrate()
+        dist = src / "packages/creative-studio/web/dist"
+        if dist.is_dir() and WEB != dist.resolve():
+            import shutil
+            if WEB.exists():
+                shutil.rmtree(WEB)
+            shutil.copytree(dist, WEB)
+            print(f"web -> {WEB}")
+        units = Path.home() / ".config/systemd/user"
+        unit_src = src / "units" / UNIT
+        if unit_src.is_file() and units.is_dir():
+            (units / UNIT).write_text(unit_src.read_text(encoding="utf-8").replace(
+                "%h", str(Path.home())))
+            print(f"unit -> {units / UNIT} (daemon-reload + enable when you want autostart)")
+        launcher_src = src / "libexec" / "creative-studio"
+        if launcher_src.is_file():
+            target = Path.home() / ".local/bin/creative-studio"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(launcher_src, target)
+            target.chmod(0o755)
+        desktop_src = src / "config" / "creative-studio.desktop.in"
+        if desktop_src.is_file():
+            apps = Path.home() / ".local/share/applications"
+            apps.mkdir(parents=True, exist_ok=True)
+            (apps / "creative-studio.desktop").write_text(
+                desktop_src.read_text(encoding="utf-8").replace("@HOME@", str(Path.home())),
+                encoding="utf-8")
+        backend = Path.home() / ".local/libexec"
+        backend.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).resolve(), backend / "llama-creative-studio")
+        print(f"installed (repeatable): data {DATA}, state {STATE}")
+
+
+def cmd_backup():
+    import shutil
+    import tarfile
+    if not DATA.is_dir():
+        sys.exit("nothing to back up yet")
+    backups = STATE / "backups"
+    backups.mkdir(parents=True, exist_ok=True)
+    archive = backups / f"creative-studio-{time.strftime('%Y%m%dT%H%M%S')}.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(DATA, arcname="creative-studio")
+    print(f"backup -> {archive} ({archive.stat().st_size} bytes)")
+    for old in sorted(backups.glob("creative-studio-*.tar.gz"))[:-10]:
+        old.unlink()
+
+
+def cmd_restore(name=""):
+    import shutil
+    import tarfile
+    backups = STATE / "backups"
+    if not name:
+        candidates = sorted(backups.glob("creative-studio-*.tar.gz"))
+        if not candidates:
+            sys.exit("no backups found")
+        name = candidates[-1].name
+    archive = backups / name
+    if not archive.is_file():
+        sys.exit(f"backup missing: {archive}")
+    with tarfile.open(archive) as tar:
+        for member in tar.getmembers():
+            if member.name.startswith("/") or ".." in Path(member.name).parts:
+                sys.exit(f"invalid path in backup: {member.name}")
+        if DATA.exists():
+            shutil.rmtree(DATA)
+        tar.extractall(backups)
+        shutil.move(str(backups / "creative-studio"), DATA)
+    print(f"restored {DATA} from {archive.name}")
+
+
+def cmd_test():
+    import subprocess
+    runner = Path(__file__).resolve().parent.parent / "tests" / "creative-studio.py"
+    if not runner.is_file():
+        sys.exit(f"missing {runner}")
+    sys.exit(subprocess.run([sys.executable, str(runner)]).returncode)
+
+
+def cmd_uninstall(purge=False):
+    import shutil
+    for path in (Path.home() / ".local/bin/creative-studio",
+                 Path.home() / ".local/libexec/llama-creative-studio",
+                 Path.home() / ".config/systemd/user" / UNIT,
+                 Path.home() / ".local/share/applications/creative-studio.desktop"):
+        path.unlink(missing_ok=True)
+        print(f"removed {path}")
+    if purge:
+        for d in (DATA, CONF, STATE):
+            shutil.rmtree(d, ignore_errors=True)
+        print(f"removed {DATA} {CONF} {STATE}")
+    else:
+        print(f"kept user data: {DATA} (restore anytime via backup/restore)")
+
+
+def main():
+    commands = {"serve": cmd_serve, "status": cmd_status, "doctor": cmd_doctor,
+                "install": cmd_install, "update": cmd_install,
+                "backup": cmd_backup, "restore": lambda: cmd_restore(
+                    sys.argv[2] if len(sys.argv) > 2 else ""),
+                "test": cmd_test,
+                "uninstall": lambda: cmd_uninstall("--purge-data" in sys.argv)}
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd not in commands:
+        print(__doc__)
+        sys.exit(2)
+    commands[cmd]()
+
+
+if __name__ == "__main__":
+    main()

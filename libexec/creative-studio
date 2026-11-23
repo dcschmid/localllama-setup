@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Local Creative Studio launcher (KDE starter). Starts the studio unit only —
+# llama.cpp, image service and skills stay untouched when already running.
+set -euo pipefail
+
+url=http://127.0.0.1:8700
+message='Local Creative Studio antwortet nicht. Details: journalctl --user -u creative-studio.service -n 30'
+if systemctl --user start creative-studio.service; then
+    for ((attempt = 0; attempt < 40; attempt++)); do
+        if curl -qfsS --max-time 1 "$url/api/health" >/dev/null 2>&1; then
+            [[ ${1:-} == --check ]] && exit 0
+            xdg-open "$url" && exit 0
+            message="Der Browser konnte $url nicht öffnen."
+            break
+        fi
+        sleep 0.3
+    done
+fi
+
+printf '%s\n' "$message" >&2
+if [[ ${1:-} != --check ]] && command -v kdialog >/dev/null; then
+    kdialog --title 'Local Creative Studio' --error "$message"
+fi
+exit 1
