@@ -1,14 +1,19 @@
 ---
 import Layout from '../layouts/base.astro';
 import { SECTIONS } from '../lib/core';
-const nav = SECTIONS.map((id) => ({ id, label: id }));
+const LABELS: Record<string, string> = {
+  chat: 'Chat', stories: 'Stories', articles: 'Artikel', research: 'Recherche',
+  images: 'Bilder', game: 'Game Lab', library: 'Bibliothek', publish: 'Publish',
+  settings: 'Einstellungen',
+};
+const nav = SECTIONS.map((id) => ({ id, label: LABELS[id] ?? id }));
 ---
 <Layout>
   <div class="shell">
     <header class="topbar">
       <div class="brand">Creative Studio<small>local · 127.0.0.1</small></div>
       <nav class="sections" aria-label="Bereiche">
-        {nav.map(({ id }) => (<button data-section={id} id={`nav-${id}`}>{id}</button>))}
+        {nav.map(({ id, label }) => (<button data-section={id} id={`nav-${id}`}>{label}</button>))}
       </nav>
       <button class="btn" id="toggle-theme" aria-pressed="false">Dunkel</button>
     </header>
@@ -69,12 +74,18 @@ const nav = SECTIONS.map((id) => ({ id, label: id }));
       }
     }
     addEventListener('hashchange', render);
-    document.getElementById('toggle-theme')!.addEventListener('click', (e) => {
+    for (const b of SECTIONS) {
+      b.addEventListener('click', () => { location.hash = b.dataset.section!; });
+    }
+    const themeBtn = document.getElementById('toggle-theme') as HTMLButtonElement;
+    themeBtn.textContent = prefs.theme === 'dark' ? 'Hell' : 'Dunkel';
+    themeBtn.setAttribute('aria-pressed', String(prefs.theme === 'dark'));
+    themeBtn.addEventListener('click', () => {
       const next = prefs.theme === 'dark' ? 'light' : 'dark';
       prefs.theme = next;
       document.documentElement.dataset.theme = next;
-      (e.target as HTMLButtonElement).textContent = next === 'dark' ? 'Hell' : 'Dunkel';
-      (e.target as HTMLButtonElement).setAttribute('aria-pressed', String(next === 'dark'));
+      themeBtn.textContent = next === 'dark' ? 'Hell' : 'Dunkel';
+      themeBtn.setAttribute('aria-pressed', String(next === 'dark'));
     });
     render();
   </script>
