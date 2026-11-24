@@ -103,7 +103,10 @@ export async function renderStories(main: HTMLElement, sidebar: HTMLElement, ins
       openDoc(await api.document((b as HTMLElement).dataset.id!));
     }));
     sidebar.querySelector('#bible')!.textContent = await bibleText() || 'leer — unten Merksätze anlegen';
-    main.innerHTML = `<h1>${esc(p.name)}</h1><p class="muted">Kapitel links öffnen.</p>`;
+    main.innerHTML = `<h1>${esc(p.name)}</h1>
+    <p class="muted"><strong>„+ Kapitel“</strong> links erzeugt ein neues Kapitel,
+    ein Kapitel-Klick öffnet den Editor. Bibelsätze unten merken dem Modell
+    Kernfakten (Namen, Orte, Regeln).</p>`;
   }
 
   async function mount() {
@@ -124,9 +127,10 @@ export async function renderStories(main: HTMLElement, sidebar: HTMLElement, ins
       openProject(projects.find((x: Project) => x.id === (b as HTMLElement).dataset.id)!);
     }));
     main.innerHTML = `<h1>Stories &amp; Romane</h1>
-      <p class="muted">Projekte links. Kapitel entstehen über das Human-Writing-Template
-      (<code>creative-writing</code>), Bibel-Prüfung und Skill-Lint melden Abweichungen,
-      jede Bearbeitung behält die Vorversion.</p>`;
+    <p class="muted"><strong>1.</strong> Projekt links wählen oder anlegen &nbsp;→&nbsp;
+    <strong>2.</strong> „+ Kapitel" oder Kapitel antippen &nbsp;→&nbsp;
+    <strong>3.</strong> im Editor schreiben / generieren / prüfen &nbsp;→&nbsp;
+    <strong>4.</strong> Speichern (jede Änderung = neue Version).</p>`;
   }
   await mount();
 }
