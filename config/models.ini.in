@@ -1,5 +1,15 @@
 version = 1
 
+# Final production layout (2026-11-24 update): exactly two models.
+#   research-code  -> Gemma 4 26B-A4B QAT HauhauCS Balanced (coding/research/Pi)
+#   story          -> UltimateIntent Gemory 26B-A4B (story, articles, human writing)
+# Every preset pins the full 262144-token window with 8192 output tokens and
+# fit=off (no silent context reduction). One model instance at a time; the
+# router unloads the previous model before loading the next (--models-max 1).
+# Legacy profile names (research, deep-research, human-*, creative-writing,
+# coding-*) are kept as API aliases and all resolve to one of the two models,
+# because Open WebUI, the studio, Pi and the starter scripts reference them.
+
 [*]
 parallel = 1
 device = CUDA0
@@ -13,155 +23,235 @@ cache-ram = 512
 sleep-idle-seconds = 900
 jinja = true
 
-[research]
-model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
+# ---------------------------------------------------------------------------
+# Model A: coding, research, agents (HauhauCS Balanced, QAT Q4_K_M)
+# Measured on the RTX 5070 8GB: MoE experts on CPU (cpu-moe), KV q8_0 at the
+# full 262144 window, ubatch 64 keeps prefill buffers inside the VRAM budget
+# with 1-1.5 GiB desktop reserve. --fit off everywhere.
+
+[research-code]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
 ctx-size = 262144
 n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
 batch-size = 2048
-ubatch-size = 1024
-
-[deep-research]
-model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
-ctx-size = 262144
-n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
-batch-size = 2048
-ubatch-size = 1024
-reasoning-budget = 128
-
-[coding-research-26b]
-model = @HOME@/models/gguf/gemma-4-26B_q4_0-it.gguf
-ctx-size = 262144
-n-predict = 8192
-batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
-cpu-moe = true
-temperature = 1.0
-top-p = 0.95
-top-k = 64
-
-[coding-cyber-tiel-35b]
-model = @HOME@/models/gguf/Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf
-ctx-size = 262144
-n-predict = 8192
-batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
-
-[creative-writing]
-model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 262144
-n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
-reasoning = off
-chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
-chat-template-kwargs = {"writing_mode":"generate","writing_genre":"fiction"}
-
-[human-writing]
-model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 262144
-n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
-reasoning = off
-chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
-chat-template-kwargs = {"writing_mode":"generate","writing_genre":"editorial"}
-
-[human-rewrite]
-model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 262144
-n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
-reasoning = off
-chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
-chat-template-kwargs = {"writing_mode":"rewrite","writing_genre":"editorial"}
-
-[human-audit]
-model = @HOME@/models/gguf/Gemma-4-12B-StyleTune.Q4_K_M.gguf
-ctx-size = 262144
-n-predict = 8192
-cache-type-k = q4_0
-cache-type-v = q4_0
-reasoning = off
-chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
-chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}
-
-# Coding candidates (opt-in evaluation profile, see packages/models-coding-candidates.tsv).
-# ./setup.sh install --coding-candidates provides the GGUF files. Each preset runs
-# at the model's native context ceiling (qwen35moe: 262144; Mellum2.1 and LFM2.5:
-# 131072); the auto-fit placement from [*] keeps the RTX 5070 at its 1 GiB headroom
-# and places KV plus oversized tensors on host RAM. MoE models keep their experts
-# on the CPU (measured LFM2.5 baseline).
-
-[coding-phai-256k]
-model = @HOME@/models/gguf/Phai-A1-35B-1M-MTP.MXFP4_MOE.gguf
-ctx-size = 262144
-n-predict = 8192
-batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
-cpu-moe = true
-temperature = 1.0
-top-p = 0.95
-top-k = 20
-
-[coding-mellum-12b]
-model = @HOME@/models/gguf/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
-ctx-size = 131072
-n-predict = 16384
-batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
+ubatch-size = 64
 cpu-moe = true
 temperature = 0.6
-top-p = 0.95
-top-k = 20
+
+[research]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6
+
+[deep-research]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+reasoning-budget = 128
+temperature = 0.6
+
+[coding-research-26b]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6
+
+[coding-cyber-tiel-35b]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6
+
+[coding-phai-256k]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6
+
+[coding-mellum-12b]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6
 
 [coding-lfm-24b]
-model = @HOME@/models/gguf/LFM2.5-24B-A2B-Q4_K_M.gguf
-ctx-size = 131072
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
 n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
 batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
+ubatch-size = 64
 cpu-moe = true
 temperature = 0.2
 top-k = 80
 repeat-penalty = 1.05
 
 [coding-ornith-9b]
-model = @HOME@/models/gguf/Ornith-1.5-9B-Q4_K_M.gguf
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
 ctx-size = 262144
-n-predict = 16384
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
 batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
+ubatch-size = 64
+cpu-moe = true
 temperature = 0.6
-top-p = 0.95
-top-k = 20
-min-p = 0.0
 
 [coding-kat-35b]
-model = @HOME@/models/gguf/Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
 ctx-size = 262144
-n-predict = 16384
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
 batch-size = 2048
-ubatch-size = 1024
-cache-type-k = q4_0
-cache-type-v = q4_0
+ubatch-size = 64
 cpu-moe = true
-temperature = 1.0
+temperature = 0.6
+
+# ---------------------------------------------------------------------------
+# Model B: story, articles, human writing (UltimateIntent Gemory Q4_K_M).
+# Model card: Q4 variants are sampler-sensitive and ship creative defaults;
+# Q4 decodes well around temperature 0.2-0.7, do not force one value on every
+# role. The Gemory chat template and SWA checkpoints stay untouched.
+
+[story]
+model = @HOME@/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.7
 top-p = 0.95
-top-k = 20
+top-k = 64
+
+[creative-writing]
+model = @HOME@/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf
+sleep-idle-seconds = 15
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"generate","writing_genre":"fiction"}
+temperature = 0.7
+top-p = 0.95
+top-k = 64
+
+[human-writing]
+model = @HOME@/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"generate","writing_genre":"editorial"}
+temperature = 0.7
+top-p = 0.95
+top-k = 64
+
+[human-rewrite]
+model = @HOME@/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"rewrite","writing_genre":"editorial"}
+temperature = 0.7
+top-p = 0.95
+top-k = 64
+
+[human-audit]
+model = @HOME@/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+reasoning = off
+chat-template-file = @HOME@/.cache/llama.cpp/writing/gemma4-human-writing.jinja
+chat-template-kwargs = {"writing_mode":"audit","writing_genre":"editorial"}
+temperature = 0.2
+top-p = 0.95
+top-k = 64
+
+# Pi's global models-store (user settings) references coding-long-256k as its
+# default model id; keep it as an alias of the coding model so the installed
+# Pi harness keeps working without touching the user's private store.
+[coding-long-256k]
+model = @HOME@/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+ctx-size = 262144
+n-predict = 8192
+fit = off
+cache-type-k = q8_0
+cache-type-v = q8_0
+batch-size = 2048
+ubatch-size = 64
+cpu-moe = true
+temperature = 0.6

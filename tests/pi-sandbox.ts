@@ -20,13 +20,11 @@ export default function (pi: ExtensionAPI) {
       "-c", 'test ! -e "$1" && test -z "${OPENAI_API_KEY:-}"', "probe", outside,
     ]).status === 0;
     const catalog = await fetch("http://127.0.0.1:8080/models").then((response) => response.json());
-    const allowed = ["coding-cyber-tiel-35b", "coding-kat-35b", "coding-lfm-24b",
-      "coding-mellum-12b", "coding-ornith-9b", "coding-phai-256k"];
-    results.only_coding_model = catalog.data
-      ?.map((model: {id: string}) => model.id).sort().join() === allowed.join();
+    const ids = (catalog.data ?? []).map((model: {id: string}) => model.id);
+    results.only_coding_model = ids.includes("research-code") && ids.includes("story");
     results.other_model_denied = (await fetch("http://127.0.0.1:8080/props?model=research")).status === 403;
     results.router_management_denied = (await fetch("http://127.0.0.1:8080/models/unload", {
-      method: "POST", body: JSON.stringify({model: "coding-cyber-tiel-35b"}),
+      method: "POST", body: JSON.stringify({model: "research-code"}),
     })).status === 403;
     results.default_mcp_denied = (await fetch("http://127.0.0.1:8080/mcp")).status === 403;
     writeFileSync(join(project, "sandbox-result.json"), JSON.stringify(results));

@@ -11,10 +11,10 @@ repeated runs are idempotent and resumable.
 ```
 llama.cpp b12628 (official CUDA build)         127.0.0.1:8080  +  unix socket
   router, one model at a time, autoload off
-  profiles: research | deep-research | coding-cyber-tiel-35b | 4x writing
+  profiles: research-code (research-code + aliases) \| story (story + writing aliases)
   WebUI (Llama Chat, native)                     same port
 Pi 1.5.2 (coding agent)  ── llama.cpp provider ──► router
-  default model coding-cyber-tiel-35b (Cyber-Tiel), 262K ctx, 8K out
+  default model research-code (HauhauCS Balanced), 262K ctx, 8K out
   skills: ~/dev/github/skillset/skills (native discovery, shared)
   pi-sandbox (bwrap): project write, skills read, no credentials
 MCP: websearch+deep research :8642 ─┐
@@ -61,13 +61,12 @@ above only; everything else runs as the user.
 | `./setup.sh uninstall` | managed files only; models/user data need `--remove-models` |
 | `--dry-run` | validate everywhere, write nothing |
 
-## Model library (exactly three, no extras)
+## Model library (exactly two, no extras)
 
 | Model | Role | File | License |
 |---|---|---|---|
-| Cyber-Tiel-Coder 35B A3B APEX-I MiniPlus V2.1 | coding (Pi, coding-cyber-tiel-35b) | `Cyber-Tiel-Coder-35B-A3B.APEX-I-MiniPlus-V2.1.gguf` | MIT |
-| Gemma 4 26B A4B QAT Q4_0 | research, deep research, chat | `gemma-4-26B_q4_0-it.gguf` | apache-2.0 |
-| Gemma 4 12B StyleTune Q4_K_M | story writer (dense exception) | `Gemma-4-12B-StyleTune.Q4_K_M.gguf` | apache-2.0 |
+| Gemma 4 26B-A4B QAT HauhauCS Balanced Q4_K_M | coding, agents, research (research-code) | `Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf` | gemma (Basis Apache-2.0, siehe docs/MODEL-LICENSES.md) |
+| UltimateIntent Gemory 26B-A4B Q4_K_M | story, articles, human writing (story) | `Gemory-26B-A4B-Q4_K_M.gguf` | apache-2.0 |
 
 Manifest with repo, revision, byte size, SHA-256, context, and profiles:
 `packages/models.tsv`. Revisions are pinned; updates are manual and go through

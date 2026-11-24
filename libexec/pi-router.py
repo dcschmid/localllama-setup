@@ -9,19 +9,14 @@ import socketserver
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-MODEL = "coding-cyber-tiel-35b"
-# Allowed model id -> context and output limits. The six coding candidates
-# mirror the router presets in config/models.ini.in; production defaults stay.
-# Each context is the model's native maximum (Mellum2.1 and LFM2.5-24B
-# are 131072; the qwen35moe family runs the full 262144).
+MODEL = "research-code"
+# Allowed model id -> context and output limits. Two production models
+# (research-code = Gemma 4 26B-A4B QAT HauhauCS, story = Gemory 26B-A4B),
+# both at the full 262144-token window with 8192 output tokens. Legacy
+# profile names resolve to the same two weights inside the llama.cpp router.
 MODEL_MODELS = {
-    "coding-cyber-tiel-35b": {"context": 262144, "output": 8192},
-    "coding-research-26b": {"context": 262144, "output": 8192},
-    "coding-phai-256k": {"context": 262144, "output": 8192},
-    "coding-mellum-12b": {"context": 131072, "output": 16384},
-    "coding-lfm-24b": {"context": 131072, "output": 8192},
-    "coding-ornith-9b": {"context": 262144, "output": 16384},
-    "coding-kat-35b": {"context": 262144, "output": 16384},
+    "research-code": {"context": 262144, "output": 8192},
+    "story": {"context": 262144, "output": 8192},
 }
 MAX_BODY = 32 * 1024 * 1024
 MCP_PORTS = {

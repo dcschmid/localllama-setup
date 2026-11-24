@@ -688,6 +688,8 @@ benchmarks() {
     exec bash "$src/benchmarks/run.sh"
         jq -e 'any(.data[]; .id=="research") and any(.data[]; .id=="creative-writing")' >/dev/null ||
         { echo 'FAIL research/writing profiles missing'; rc=1; }
+    python3 "$src/tests/gemma4-profile-check.py" >/dev/null ||
+        { echo 'FAIL two-model profile/hash validation'; rc=1; }
 }
 
 backup_cmd() {

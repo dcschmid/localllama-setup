@@ -31,7 +31,7 @@ if [[ ! -x $executable ]]; then
         exit 1
     }
 fi
-model=coding-cyber-tiel-35b
+model=research-code
 if [[ ${1:-} == --model ]]; then
     if [[ ${2:-} != "$model" ]]; then
         printf 'Lokales Coding verwendet %s.\n' "$model" >&2

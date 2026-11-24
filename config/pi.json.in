@@ -4,7 +4,7 @@
   "agentDir": "@HOME@/.pi/agent",
   "routerUrl": "http://127.0.0.1:8080",
   "defaultProvider": "llama.cpp",
-  "defaultModel": "coding-cyber-tiel-35b",
+  "defaultModel": "research-code",
   "contextTokens": 262144,
   "outputTokens": 8192,
   "compaction": {
