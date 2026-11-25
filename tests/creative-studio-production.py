@@ -6,6 +6,7 @@ import json
 import os
 import re
 import runpy
+import sqlite3
 import struct
 import threading
 import zlib
@@ -41,6 +42,10 @@ def fake_model(lang, role, prompt, tokens, schema=None):
         return json.dumps(value), {"model_id": "fixture", "skill_version": "fixture", "role": role, "skills": skills}, "stop"
     if role == "write":
         return PROSE, {"model_id": "fixture", "role": role}, "stop"
+    if role == "plan" and "[[model-format]]" in prompt:
+        return "not json", {"model_id": "fixture", "alias": "creative-writing", "variant": "Fixture-Q4_K_M.gguf",
+                            "quantization": "Q4_K_M", "role": role, "skills": [
+                                {"name": "human-writing", "version": "1.3.0"}, {"name": "story-writing", "version": "1.0.0"}]}, "stop"
     keys = schema["properties"]
     if "bible" in keys:
         plan = example_plan()
@@ -142,6 +147,221 @@ class Fixture:
         plan = self.change("save-plan", plan=example_plan())
         self.change("approve-plan", version=plan["version"])
         return self.change("start", version=plan["version"], mode=mode)["id"]
+
+
+PLAN_PROOF = {"model_id": "creative-writing", "alias": "creative-writing", "variant": "Fixture-Q4_K_M.gguf", "quantization": "Q4_K_M",
+              "skill_version": "1.3.0", "skills": [{"name": "human-writing", "version": "1.3.0"},
+                                                   {"name": "story-writing", "version": "1.0.0"}]}
+
+
+def three_chapters(plan):
+    return [{**plan["chapters"][0], "title": f"Kapitel {n}", "beats": f"Handlung {n}", "closing": f"Schluss {n}",
+             "minimum": 900, "maximum": 1200} for n in (1, 2, 3)]
+
+
+def planning_model(*, empty_bible=False, outline=None, repair=None, seen=None):
+    """Planning answers for a three-chapter story. `outline` is a (text, finish) pair replacing the outline answer,
+    `repair` maps the requested bible fields to the answer for them."""
+    plan = example_plan()
+
+    def model(lang, role, prompt, tokens, schema=None):
+        keys = schema["properties"] if schema else {}
+        if seen is not None:
+            seen.append((role, tuple(sorted(keys))))
+        if role == "plan" and "bible" in keys:
+            if outline:
+                return outline[0], {**PLAN_PROOF, "role": role}, outline[1]
+            value = {key: plan[key] for key in keys}
+            if empty_bible:
+                value["bible"] = {**value["bible"], **{key: "" for key in ("characters", "world", "locations", "chronology")}}
+            return json.dumps(value), {**PLAN_PROOF, "role": role}, "stop"
+        if role == "plan" and "chapters" in keys:
+            return json.dumps({"chapters": three_chapters(plan)}), {**PLAN_PROOF, "role": role}, "stop"
+        if role == "plan" and set(keys) <= set(production.REQUIRED_BIBLE):
+            answer = repair(keys) if repair else {key: f"Zusammenfassung {key}" for key in keys}
+            return json.dumps(answer), {**PLAN_PROOF, "role": role}, "stop"
+        answer, proof, finish = fake_model(lang, role, prompt, tokens, schema)
+        return answer, {**proof, **PLAN_PROOF, "role": role}, finish
+    return model
+
+
+class PlanningTests(unittest.TestCase):
+    brief = "Eine Geschichte über zwei Rennfahrer und ein verlorenes Rennen."
+
+    def propose(self, f, model, language="de"):
+        f.create()
+        f.worker.call = model
+        return f.change("propose", brief=self.brief, count=3, language=language, minimum=900, maximum=1200)["id"]
+
+    def settle(self, f, identifier, limit=60):
+        for _ in range(limit):
+            row = f.conn.execute("SELECT * FROM jobs WHERE id=?", (identifier,)).fetchone()
+            if row["state"] in ("completed", "failed"):
+                return row
+            with f.conn:
+                f.conn.execute("UPDATE jobs SET result=json_remove(result,'$.next_at') WHERE id=?", (identifier,))
+            f.worker.tick()
+        raise AssertionError(dict(row))
+
+    def result(self, f, identifier):
+        return json.loads(f.conn.execute("SELECT result FROM jobs WHERE id=?", (identifier,)).fetchone()[0])
+
+    def test_german_and_english_three_chapter_plans_use_both_writing_skills(self):
+        for language in ("de", "en"):
+            with self.subTest(language=language), Fixture() as f:
+                identifier = self.propose(f, planning_model(), language)
+                self.assertEqual(production.plan_info(f.conn, f.pid)["stage"], "PLANNING")
+                self.assertEqual(self.settle(f, identifier)["state"], "completed")
+                info = production.plan_info(f.conn, f.pid)
+                self.assertEqual((info["stage"], info["version"], info["plan"]["language"], len(info["plan"]["chapters"])),
+                                 ("PLAN_READY", 1, language, 3))
+                job = info["job"]
+                self.assertEqual(job["skills"], {"human-writing": "1.3.0", "story-writing": "1.0.0"})
+                self.assertEqual(job["model"], {"alias": "creative-writing", "variant": "Fixture-Q4_K_M.gguf", "quantization": "Q4_K_M"})
+                # The step after "Story-Planung liegt vor" is the release of exactly this plan version.
+                f.change("approve-plan", version=info["version"])
+                self.assertEqual(production.plan_info(f.conn, f.pid)["stage"], "PLAN_APPROVED")
+                self.assertEqual(production.plan_info(f.conn, f.pid)["approved"], True)
+
+    def test_installed_skills_resolve_for_the_planning_phase(self):
+        root = Path(os.environ.get("LLAMA_SETUP_SKILLS", Path.home() / "dev/github/skillset/skills"))
+        if not (root / "story-writing/SKILL.md").is_file():
+            self.skipTest("skillset checkout not available")
+        skills = runpy.run_path(str(ROOT / "libexec/creative_studio_skills.py"))
+        for language in ("de", "en"):
+            context = skills["resolve"](root, language, "story", "plan")
+            self.assertEqual(context.versions, {"human-writing": "1.3.0", "story-writing": "1.0.0"})
+            self.assertEqual(sorted(context.rules), sorted([
+                "human-writing/SKILL.md", f"human-writing/references/style-{language}.md", "story-writing/SKILL.md",
+                "story-writing/references/story-bible.md", "story-writing/references/story-planning.md"]))
+            self.assertTrue(all(len(rule["sha256"]) == 64 for item in context.evidence() for rule in item["rules"]))
+
+    def test_validation_errors_name_the_field_and_never_its_content(self):
+        plan = example_plan()
+        cases = (({"bible": {**plan["bible"], "characters": ""}}, "bible.characters", "empty"),
+                 ({"bible": {**plan["bible"], "world": "x" * 1401}}, "bible.world", "too_long"),
+                 ({"visual": {**plan["visual"], "palette": " "}}, "visual.palette", "empty"),
+                 ({"chapters": [{**plan["chapters"][0], "beats": ""}]}, "chapters[1].beats", "empty"),
+                 ({"bible_records": {**plan["bible_records"], "characters": [{"name": "", "role": "x"}]}},
+                  "bible_records.characters[1].name", "empty"))
+        for change, field, reason in cases:
+            with self.subTest(field=field), self.assertRaises(production.PlanFieldError) as caught:
+                production.validate_plan({**plan, **change})
+            self.assertEqual((str(caught.exception), caught.exception.field, caught.exception.reason),
+                             ("story_input_invalid", field, reason))
+
+    def test_empty_bible_fields_are_completed_once_and_nothing_else_is_regenerated(self):
+        seen = []
+        with Fixture() as f:
+            identifier = self.propose(f, planning_model(empty_bible=True, seen=seen))
+            self.assertEqual(self.settle(f, identifier)["state"], "completed")
+            plan = production.plan_info(f.conn, f.pid)["plan"]
+            self.assertEqual(plan["bible"]["characters"], "Zusammenfassung characters")
+            self.assertEqual(plan["bible"]["main_plot"], example_plan()["bible"]["main_plot"])   # valid parts are kept
+            self.assertEqual(sum("bible" in keys for _, keys in seen), 1)
+            self.assertEqual(sum("chapters" in keys for _, keys in seen), 1)
+            repairs = [keys for _, keys in seen if set(keys) <= set(production.REQUIRED_BIBLE)]
+            self.assertEqual(repairs, [("characters", "chronology", "locations", "world")])
+            self.assertEqual(self.result(f, identifier)["repairs"], [{"step": "bible_fields",
+                             "fields": ["characters", "world", "locations", "chronology"]}])
+
+    def test_failed_job_with_empty_bible_resumes_at_the_failed_step(self):
+        """The stored shape of the failed Thunderforge planning: complete outline, empty bible fields, story_input_invalid."""
+        seen = []
+        with Fixture() as f:
+            f.create()
+            f.worker.call = planning_model(seen=seen)
+            base = example_plan()
+            outline = {**{key: base[key] for key in (*production.PLAN, "audience", "subtitle", "visual", "bible_records", "motifs")},
+                       "bible": {**base["bible"], **{key: "" for key in ("characters", "world", "locations", "chronology")}},
+                       "language": "de", "chapters": three_chapters(base)}
+            payload = {"kind": "plan", "brief": self.brief, "count": 3, "language": "de", "minimum": 900, "maximum": 1200,
+                       "visual": {"model": "", "preset": "none", "size": "1024x576", "cover_size": "1024x576"},
+                       "project_id": f.pid, "session_id": f.sid}
+            result = {"step": "planning", "outline": outline, "model_evidence": [{**PLAN_PROOF, "role": "plan"}],
+                      "error": "story_input_invalid", "failure_phase": "planning", "detail": {"exception": "OrganizerError"}}
+            identifier = "c" * 32
+            with f.conn:
+                f.conn.execute("INSERT INTO jobs(id,service,state,payload,result,created,updated) VALUES(?,'production','failed',?,?,1,1)",
+                               (identifier, production.dump(payload), production.dump(result)))
+            self.assertEqual(production.public_job(production.job_state(f.conn, f.pid))["status"], "failed")
+            f.change("retry", job_id=identifier)
+            self.assertEqual(self.settle(f, identifier)["state"], "completed")
+            # Same job, one plan version, and only the missing fields plus the final review were asked of the model.
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='production'").fetchone()[0], 1)
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM story_production_plans").fetchone()[0], 1)
+            self.assertFalse(any("bible" in keys or "chapters" in keys for _, keys in seen), seen)
+            self.assertEqual(production.plan_info(f.conn, f.pid)["stage"], "PLAN_READY")
+
+    def test_unusable_model_answers_fail_with_the_step_and_keep_the_original_answer_private(self):
+        cases = (("not json", "stop", "story_model_format"), ("{", "length", "story_output_truncated"))
+        for answer, finish, code in cases:
+            with self.subTest(code=code), Fixture() as f:
+                seen = []
+                identifier = self.propose(f, planning_model(outline=(answer, finish), seen=seen))
+                row = self.settle(f, identifier)
+                result = json.loads(row["result"])
+                self.assertEqual((row["state"], result["error"], result["detail"]["stage"]), ("failed", code, "outline"))
+                self.assertEqual(len(seen), 3)   # one try and two bounded retries, no endless loop
+                public = production.public_job(row)
+                self.assertEqual(public["retries"]["automatic"], 2)
+                self.assertNotIn("diagnostics", public)
+                self.assertNotIn(answer, [v for v in public.values() if isinstance(v, str)])
+                self.assertFalse(any(isinstance(v, str) and len(answer) > 1 and answer in v for v in public.values()))
+                self.assertNotIn("raw", json.dumps(public))
+                # The failed call names its model and the loaded skills even though no earlier call succeeded.
+                self.assertEqual(public["model"], {"alias": "creative-writing", "variant": "Fixture-Q4_K_M.gguf", "quantization": "Q4_K_M"})
+                self.assertEqual(public["skills"], {"human-writing": "1.3.0", "story-writing": "1.0.0"})
+                self.assertEqual({d["code"] for d in result["diagnostics"]}, {code})
+                self.assertEqual((result["diagnostics"][-1]["raw"], result["diagnostics"][-1]["finish"]), (answer, finish))
+                self.assertEqual(len(result["diagnostics"]), 3)
+
+    def test_model_timeout_is_retried_twice_and_reported_as_unavailable(self):
+        with Fixture() as f:
+            calls = []
+
+            def slow(lang, role, prompt, tokens, schema=None):
+                calls.append(role)
+                raise TimeoutError
+
+            identifier = self.propose(f, slow)
+            row = self.settle(f, identifier)
+            result = json.loads(row["result"])
+            self.assertEqual((row["state"], result["error"], result["detail"]["stage"]), ("failed", "production_upstream_unavailable", "outline"))
+            self.assertEqual(len(calls), 3)
+
+    def test_failed_save_keeps_the_generated_plan_and_the_retry_only_saves(self):
+        seen = []
+        with Fixture() as f:
+            identifier = self.propose(f, planning_model(seen=seen))
+            with mock.patch.object(production, "plan_version", side_effect=sqlite3.OperationalError("disk I/O error")):
+                row = self.settle(f, identifier)
+            result = json.loads(row["result"])
+            self.assertEqual((row["state"], result["error"], result["detail"]["stage"]), ("failed", "production_checkpoint_write", "save"))
+            self.assertEqual(len(result["outline"]["chapters"]), 3)
+            self.assertIn("outline_review", result)
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM story_production_plans").fetchone()[0], 0)
+            before = len(seen)
+            f.change("retry", job_id=identifier)
+            self.assertEqual(self.settle(f, identifier)["state"], "completed")
+            self.assertEqual(len(seen), before)   # no model call was repeated
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM story_production_plans").fetchone()[0], 1)
+
+    def test_retry_after_a_failed_repair_completes_without_rewriting_the_outline(self):
+        seen = []
+        with Fixture() as f:
+            blank = lambda keys: {key: " " for key in keys}
+            identifier = self.propose(f, planning_model(empty_bible=True, repair=blank, seen=seen))
+            row = self.settle(f, identifier)
+            result = json.loads(row["result"])
+            self.assertEqual((row["state"], result["error"], result["detail"]["stage"]), ("failed", "story_model_format", "repair"))
+            self.assertEqual(sum("bible" in keys for _, keys in seen), 1)
+            f.worker.call = planning_model(empty_bible=True, seen=seen)
+            f.change("retry", job_id=identifier)
+            self.assertEqual(self.settle(f, identifier)["state"], "completed")
+            self.assertEqual(sum("bible" in keys for _, keys in seen), 1)   # the outline was not generated again
+            self.assertEqual(sum("chapters" in keys for _, keys in seen), 1)
+            self.assertEqual(production.plan_info(f.conn, f.pid)["plan"]["bible"]["world"], "Zusammenfassung world")
 
 
 class ProductionTests(unittest.TestCase):

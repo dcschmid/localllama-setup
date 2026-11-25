@@ -71,6 +71,18 @@ def fields(keys):
     return {key: STR for key in keys}
 
 
+NONEMPTY = {"type": "string", "minLength": 1}
+REQUIRED_BIBLE = ("characters", "world", "locations", "chronology", "main_plot", "character_knowledge")
+
+
+class PlanFieldError(organizer.OrganizerError):
+    """A plan field failed validation. Carries the field path and the reason, never the content."""
+
+    def __init__(self, code, status, field, reason):
+        super().__init__(code, status)
+        self.field, self.reason = field, reason
+
+
 def array(item, maximum):
     return {"type": "array", "items": item, "maxItems": maximum}
 
@@ -79,11 +91,19 @@ def enum(values):
     return {"type": "string", "enum": list(values)}
 
 
-def clean_group(value, keys, limit=650, *, required=None):
+def clean_group(value, keys, limit=650, *, required=None, path=""):
     if not isinstance(value, dict):
         story.error("production_plan_invalid")
     mandatory = keys if required is None else required
-    return {key: story.clean(value.get(key), 180 if key == "title" else limit, required=key in mandatory) for key in keys}
+    cleaned = {}
+    for key in keys:
+        item, maximum = value.get(key), 180 if key == "title" else limit
+        try:
+            cleaned[key] = story.clean(item, maximum, required=key in mandatory)
+        except organizer.OrganizerError as exc:
+            reason = "missing" if item is None else "type" if not isinstance(item, str) else "too_long" if len(item) > maximum else "empty"
+            raise PlanFieldError(str(exc), exc.status, f"{path}.{key}" if path else key, reason) from exc
+    return cleaned
 
 
 def validate_plan(plan):
@@ -96,8 +116,7 @@ def validate_plan(plan):
     result["language"] = plan.get("language")
     if result["language"] not in ("de", "en"):
         story.error("production_plan_invalid")
-    result["bible"] = clean_group(plan.get("bible"), BIBLE, 1400,
-                                 required=("characters", "world", "locations", "chronology", "main_plot", "character_knowledge"))
+    result["bible"] = clean_group(plan.get("bible"), BIBLE, 1400, required=REQUIRED_BIBLE, path="bible")
     records = plan.get("bible_records", {})
     if not isinstance(records, dict):
         story.error("production_plan_invalid")
@@ -106,8 +125,9 @@ def validate_plan(plan):
         values = records.get(group, [])
         if not isinstance(values, list) or len(values) > 30:
             story.error("production_plan_invalid")
-        result["bible_records"][group] = [clean_group(value, keys, 450, required=keys[:1]) for value in values]
-    result["visual"] = clean_group(plan.get("visual"), VISUAL, 850, required=("style", "palette", "atmosphere"))
+        result["bible_records"][group] = [clean_group(value, keys, 450, required=keys[:1], path=f"bible_records.{group}[{index}]")
+                                          for index, value in enumerate(values, 1)]
+    result["visual"] = clean_group(plan.get("visual"), VISUAL, 850, required=("style", "palette", "atmosphere"), path="visual")
     for key in ("model", "preset", "size", "cover_size"):
         result["visual"][key] = story.clean(plan["visual"].get(key, ""), 80, required=key.endswith("size"))
     if any(not re.fullmatch(r"[1-9]\d{2,3}x[1-9]\d{2,3}", result["visual"][key]) for key in ("size", "cover_size")):
@@ -122,7 +142,7 @@ def validate_plan(plan):
     chapters = []
     seen_titles, seen_beats = set(), set()
     for number, item in enumerate(outline, 1):
-        chapter = clean_group(item, CHAPTER)
+        chapter = clean_group(item, CHAPTER, path=f"chapters[{number}]")
         minimum, maximum = story.bounds(item.get("minimum"), item.get("maximum"))
         if maximum > MAX_CHAPTER_WORDS or (chapter["title"].casefold() in seen_titles
                                          or chapter["beats"].casefold() in seen_beats):
@@ -348,6 +368,13 @@ def public_job(row, *, artifacts=None):
         report["corrections"] = current["corrections"]
     if result.get("last_completed"):
         report["last_completed"] = result["last_completed"]
+    failed = (result.get("diagnostics") or [{}])[-1].get("evidence") if row["state"] == "failed" else None
+    used = failed or (result.get("model_evidence") or current.get("generation") or [None])[-1]
+    if used and used.get("alias"):
+        report["model"] = {key: used.get(key) for key in ("alias", "variant", "quantization")}
+    if failed and not report["skills"]:
+        report["skills"] = proof_skills([failed])
+    report["retries"] = {"automatic": result.get("retry", {}).get("attempt", 0), "manual": len(result.get("quality_events", []))}
     status = row["state"]
     if payload["kind"] == "story":
         manifest = artifact_manifest(row, payload, result)
@@ -601,6 +628,8 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
             result["pause_reason"] = "user"
         if action in ("resume", "retry"):
             payload = json.loads(job["payload"])
+            if payload["kind"] == "plan":
+                result.pop("bible_repairs", None)   # an explicit retry may complete missing bible fields again
             if payload["kind"] == "story":
                 check_checkpoint(conn, pid, payload, result)
                 desired = body.get("plan_version")
@@ -872,6 +901,14 @@ class ProductionWorker:
         return answer, proof
 
     def plan(self, row, payload, result):
+        stage = {"name": "outline"}
+        try:
+            return self._plan_step(row, payload, result, stage)
+        except Exception as exc:
+            exc.stage = stage["name"]   # the failed step, for the job detail and the log
+            raise
+
+    def _plan_step(self, row, payload, result, stage):
         pid = payload["project_id"]
         source = result.get("outline") or payload.get("manual_plan")
         if source is None:
@@ -886,6 +923,8 @@ class ProductionWorker:
                 "Motifs are exact phrases intended to recur, if any. Give useful compact values (one sentence per field). "
                 "Supply structured bible records for the central named figures, significant sites, key timeline anchors, "
                 "the most important discoveries, notable objects with quantities and state, and seeded threads. "
+                "Every story bible field needs its own compact summary in the story language. The structured records add "
+                "detail and do not replace those fields. "
                 "State the intended audience. Use brief phrases in records. "
                 "Write 'unknown' or the corresponding German word when an age or another detail is intentionally unspecified. "
                 f"Preserve the writer's existing decisions.\n\nBrief:\n{payload['brief']}\n\nPrior plan:\n{previous}",
@@ -898,6 +937,7 @@ class ProductionWorker:
             result.update(outline=source, model_evidence=[proof])
             return self.commit(row, result)
         if payload.get("count") and len(source["chapters"]) < payload["count"]:
+            stage["name"] = "chapters"
             start = len(source["chapters"])
             size = min(4, payload["count"] - start)
             overview = {key: source[key] for key in (*PLAN, "bible")}
@@ -918,12 +958,39 @@ class ProductionWorker:
             if not isinstance(response.get("chapters"), list) or len(response["chapters"]) != size:
                 raise PlanError("story_outline_incomplete")
             for index, chapter in enumerate(response["chapters"], start + 1):
-                source["chapters"].append({**clean_group(chapter, CHAPTER), "minimum": payload["minimum"],
+                source["chapters"].append({**clean_group(chapter, CHAPTER, path=f"chapters[{index}]"), "minimum": payload["minimum"],
                                            "maximum": payload["maximum"], "number": index})
             result["model_evidence"].append(proof)
             return self.commit(row, result)
+        stage["name"] = "validate"
+        bible = source.get("bible") if "outline" in result else None
+        gaps = [key for key in REQUIRED_BIBLE if not isinstance(bible.get(key), str) or not bible[key].strip()] if isinstance(bible, dict) else []
+        if gaps and result.get("bible_repairs", 0) < 1:
+            # The model left required story bible fields empty. Complete exactly those from the plan it already
+            # produced, once. Everything that is valid stays; nothing else is regenerated.
+            stage["name"] = "repair"
+            overview = {key: source[key] for key in (*PLAN, "bible")}
+            overview["audience"] = source.get("audience", "")
+            answer, proof = self.ask(source["language"], "plan",
+                f"Complete only these missing story bible fields: {', '.join(gaps)}. Write each in the story language as one "
+                "or two compact sentences. Use only what the plan, the chapter plans and the bible records below already "
+                "state. Do not add events, names, places, secrets or facts. If the plan states nothing for a field, write "
+                "'Nicht festgelegt' (German story) or 'Not specified' (English story) instead of inventing details."
+                "\n\nPLAN\n" + dump(overview) + "\nBIBLE RECORDS\n" + story.snippet(dump(source.get("bible_records", {})), 6000)
+                + "\nCHAPTERS\n" + story.snippet(dump([{"number": c["number"], "title": c["title"], "beats": c["beats"]}
+                                                     for c in source["chapters"]]), 3000),
+                {key: NONEMPTY for key in gaps}, 900)
+            values = {key: answer[key].strip() for key in gaps}
+            if any(not value or len(value) > 1400 for value in values.values()):
+                raise PlanError("story_model_format")
+            source["bible"].update(values)
+            result["bible_repairs"] = result.get("bible_repairs", 0) + 1
+            result.setdefault("repairs", []).append({"step": "bible_fields", "fields": gaps})
+            result.setdefault("model_evidence", []).append(proof)
+            return self.commit(row, result)
         plan = validate_plan(source)
         if "outline_review" not in result:
+            stage["name"] = "review"
             synopsis = {str(c["number"]): {key: c[key] for key in ("title", "beats", "closing")} for c in plan["chapters"]}
             material = dump(synopsis)
             # Review the whole arc for ordinary stories. For very large outlines prioritize the structural summary and boundary chapters.
@@ -947,6 +1014,7 @@ class ProductionWorker:
         if docs and result.get("impact_versions", impact["versions"]) != impact["versions"]:
             raise PlanError("story_context_changed")
         if len(checked) < len(docs):
+            stage["name"] = "impact"
             doc = docs[len(checked)]
             relevant = next((ch for ch in plan["chapters"] if ch["number"] == doc["number"]), None)
             text = doc["body"]
@@ -966,6 +1034,8 @@ class ProductionWorker:
             if offset + 1 == len(windows):
                 result.update(impact_checked=[*checked, doc["id"]], impact_window=0)
             return self.commit(row, result)
+
+        stage["name"] = "save"
 
         def save(conn):
             if impact_sources(conn, pid) != impact["versions"]:
@@ -1925,6 +1995,10 @@ class ProductionWorker:
             retryable = isinstance(exc, (TimeoutError, URLError, ConnectionError))
             code = "production_step_failed"
             detail = {"exception": type(exc).__name__}
+            if getattr(exc, "stage", None):
+                detail["stage"] = exc.stage
+            if isinstance(exc, PlanFieldError):
+                detail.update(field=exc.field, reason=exc.reason)
             if isinstance(exc, HTTPError):
                 retryable = exc.code in RETRY_HTTP
                 code = "image_archive_missing" if phase == "image_archive" and exc.code == 404 else "production_upstream_http"
@@ -1939,6 +2013,11 @@ class ProductionWorker:
                 retryable = code in ("story_model_format", "story_output_truncated", "production_image_evidence")
             elif retryable:
                 code = "production_upstream_unavailable"
+            if (raw := getattr(exc, "raw", None)) is not None:
+                # The original model answer stays in the job record for the diagnosis. It is never part of the public job.
+                result["diagnostics"] = [*result.get("diagnostics", [])[-2:], {
+                    "code": code, "stage": getattr(exc, "stage", None), "finish": getattr(exc, "finish", None),
+                    "chars": len(raw), "raw": raw, "at": time.time(), "evidence": getattr(exc, "evidence", None)}]
             tries = result.get("retry", {}).get("attempt", 0)
             if retryable and tries < RETRY_LIMIT:
                 delay = 25 if isinstance(exc, HTTPError) and exc.code == 500 else 2

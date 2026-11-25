@@ -78,3 +78,30 @@ Die Nachricht „Die Planung ist freigegeben. Erstelle jetzt die vollständige G
 - Die Weboberfläche hat im Plan-Dialog den Button **Freigeben und vollständig erstellen**.
 
 **Prüfung:** Die echte Nachricht erzeugt auf einer Kopie der Live-Datenbank einen Produktionsauftrag für Plan Version 2 (`PRODUCTION_RUNNING`). Dafür liefen Modell- und Bilddienst nicht. Neue Tests in `tests/creative-studio-chat.py` (Tabelle der Formulierungen, End-to-End gegen einen Serverprozess) und `tests/creative-studio-production.mjs` (Firefox: Chat-Freigabe und Ein-Klick-Button).
+
+## Nachtrag: „Story-Planung fehlgeschlagen“ ohne Ursache (25. November 2026, Chat „Schatten über Thunderforge“)
+
+Der Planungsjob `ded21870…` endete mit `story_input_invalid`, dem Schritt `planning` und dem Detail `{"exception": "OrganizerError"}`. Die Oberfläche zeigte nur den allgemeinen Satz „Der Schritt konnte nicht abgeschlossen werden“.
+
+**Ursache, belegt durch Nachspielen der gespeicherten Gliederung in `validate_plan`:**
+
+- Das Modell (`creative-writing`, Gemory 26B Q4_K_M, `human-writing` 1.3.0 und `story-writing` 1.0.0) hat die Gliederung vollständig und als gültiges JSON geliefert. Alle drei Kapitel, die Bibel-Einträge und die Bildideen waren vorhanden. Es gab kein Zeitlimit, keine abgeschnittene Antwort und keinen Datenbankfehler.
+- In der Story-Bibel standen `characters`, `world`, `locations` und `chronology` als leere Strings. `validate_plan` verlangt diese Felder nicht leer. Das Schema für die Modellantwort erlaubte leere Strings. Die Regel stand nur im Validator.
+- `story.clean` löste dafür einen allgemeinen `story_input_invalid` aus, ohne Feld. Das Studio protokollierte nur den Ausnahmetyp und hielt den Fehler für nicht wiederholbar.
+- Die Skill-Dateien sind unauffällig: Pfade, `SKILL.md`-Metadaten, Referenzen und Prüfsummen des gespeicherten Nachweises stimmen mit den installierten Dateien überein. Der Resolver lädt für die Planung `style-<Sprache>`, `story-planning` und `story-bible`. Die Skills haben die Planung nicht beeinträchtigt.
+
+**Änderungen:**
+
+- Validierungsfehler nennen das Feld und den Grund (`bible.characters`, `chapters[2].beats`; leer, fehlt, zu lang, kein Text), nie den Inhalt.
+- Fehlen nur die vom Validator geforderten Bibel-Felder, vervollständigt das Studio genau diese einmal aus der bereits erzeugten Planung. Es erfindet nichts: Fehlt eine Angabe, steht „Nicht festgelegt“. Alle gültigen Teile bleiben, Gliederung und Kapitel werden nicht neu erzeugt. **Schritt erneut ausführen** erlaubt diese Ergänzung ein weiteres Mal.
+- Der Planungsprompt sagt, dass jedes Bibel-Feld eine eigene Zusammenfassung braucht.
+- Der Job speichert den fehlgeschlagenen Schritt (`outline`, `chapters`, `validate`, `repair`, `review`, `impact`, `save`) und bei ungültigen Modellantworten die Originalantwort (bis 6.000 Zeichen) samt Modell- und Skillnachweis des fehlgeschlagenen Aufrufs in `result.diagnostics`. Dieser Bereich gehört nicht zu `public_job` und erscheint nicht in der Oberfläche. Technische Fehler werden höchstens zweimal automatisch wiederholt.
+- Die Oberfläche zeigt statt des allgemeinen Satzes zum Beispiel „Story-Planung: Story-Bibel konnte nicht validiert werden – „Story-Bibel · Figuren und Beziehungen“ ist leer.“, „Modellantwort unvollständig“ oder „Speichern der Planung fehlgeschlagen“. Unter **Technische Details** stehen Fehlercode, Schritt, Feld, Job-ID, Modell, Skills und Wiederholungen. Ältere Fehlerdaten ohne Feldangabe zeigen „Story-Planung konnte nicht validiert werden“.
+
+**Prüfung mit dem echten lokalen Modell** (isolierte Instanz auf einer Kopie der Live-Datenbank, Nachweise in `docs/results/creative-studio-planning-repair-acceptance.json`):
+
+- Der fehlgeschlagene Job wurde mit **Schritt erneut ausführen** fortgesetzt. Er blieb derselbe Job und erzeugte eine Planversion. Das Modell wurde zweimal neu gefragt: für die vier Bibel-Felder und für die Gesamtprüfung. Gliederung und Kapitel wurden nicht erneut erzeugt. Die ergänzten Angaben stammen aus den gespeicherten Figuren, Schauplätzen und der Zeitleiste.
+- Eine neue deutsche Planung mit drei Kapiteln zu je 900–1.200 Wörtern lief in 276 Sekunden ohne Wiederholung bis `PLAN_READY`. Die Freigabe führte zu `PLAN_APPROVED`.
+- Die Kapitelüberschriften dieser Planung heißen nur „Kapitel 1“ bis „Kapitel 3“. Das ist eine inhaltliche Schwäche des Modells und kein Fehler im Ablauf.
+
+Die neuen Python-Tests (`PlanningTests` in `tests/creative-studio-production.py`) decken deutsche und englische Planung, die Skill-Auflösung, die Feldfehler, die Ergänzung, die Wiederaufnahme eines gespeicherten Fehlerstands, ungültige und abgeschnittene Modellantworten, das Zeitlimit und einen fehlgeschlagenen Speichervorgang ab. Der Firefox-Test prüft die Fehleranzeige.

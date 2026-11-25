@@ -1,0 +1,55 @@
+{
+  "run": "Story planning repair, isolated Studio instance with the real local router (alias creative-writing) on a copy of the live database",
+  "date": "2026-11-25",
+  "failed_job": {
+    "id": "ded218700c394c8d985707dbb11696b0",
+    "error": "story_input_invalid",
+    "phase": "planning",
+    "cause": "validate_plan rejected the stored outline: the story bible fields characters, world, locations and chronology were empty strings",
+    "failed_runs": 2,
+    "outline_chapters_before": 3
+  },
+  "resumed_on_copy": {
+    "state": "completed",
+    "plan_version": 1,
+    "repairs": [
+      {
+        "step": "bible_fields",
+        "fields": [
+          "characters",
+          "world",
+          "locations",
+          "chronology"
+        ]
+      }
+    ],
+    "model_calls_total": 4,
+    "model_calls_new": 2,
+    "plan_versions": 1,
+    "production_jobs": 1,
+    "skills": {
+      "human-writing": "1.3.0",
+      "story-writing": "1.0.0"
+    },
+    "model": "Gemory-26B-A4B-Q4_K_M.gguf"
+  },
+  "fresh_german_three_chapter_plan": {
+    "state": "completed",
+    "plan_version": 1,
+    "language": "de",
+    "chapters": 3,
+    "words_per_chapter": [
+      900,
+      1200
+    ],
+    "seconds": 276,
+    "automatic_retries": 0,
+    "repairs": null,
+    "approved_afterwards": true,
+    "skills": {
+      "human-writing": "1.3.0",
+      "story-writing": "1.0.0"
+    },
+    "model": "Gemory-26B-A4B-Q4_K_M.gguf"
+  }
+}

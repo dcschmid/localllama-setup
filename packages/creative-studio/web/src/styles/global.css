@@ -257,6 +257,9 @@ dialog::backdrop { background: var(--scrim); }
 .job-card progress { display: block; height: 1rem; margin-block: .3rem .5rem; }
 .job-card label, .job-card .job-title { font-size: .88rem; }
 .job-title { font-weight: 680; margin-block-end: .65rem; }
+.job-facts { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: .5rem 0 0; font-size: .84rem; }
+.job-facts dt { color: var(--muted, inherit); font-weight: 600; }
+.job-facts dd { margin: 0; overflow-wrap: anywhere; }
 .job-card li + li { margin-top: .35rem; }
 .job-card ul { padding-inline-start: 1.25rem; }
 .job-card .prose { max-width: var(--reading-measure); padding: .35rem 0 .85rem; }

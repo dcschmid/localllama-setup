@@ -95,15 +95,19 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   assert.equal(briefReport[0].payload.maximum, 1200);
   // A free-wording release must release exactly the stored plan and start one real production.
   const api = async path => (await page.request.get(base + path)).json();
-  const planInChat = async title => {
+  const planInChat = async (title, text = 'Ich möchte eine vollständige Geschichte erstellen.\n# Das Glas\nEin Kapitel, 38–60 Wörter. Zeige mir zuerst die Planung.') => {
     const chat = await (await page.request.post(base + '/api/sessions', { data: { title } })).json();
     await page.goto(base + '/#chat/' + chat.id);
-    await page.locator('#prompt').fill('Ich möchte eine vollständige Geschichte erstellen.\n# Das Glas\nEin Kapitel, 38–60 Wörter. Zeige mir zuerst die Planung.');
+    await page.reload();
+    await expect(page.locator('#prompt')).toBeVisible();
+    await page.locator('#prompt').fill(text);
     await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
     await expect(page.locator('[data-kind=production-job]')).toBeVisible();
     await expect.poll(async () => (await api(`/api/sessions/${chat.id}`)).project_id, { timeout: 30_000 }).toBeTruthy();
     const project = (await api(`/api/sessions/${chat.id}`)).project_id;
-    await expect.poll(async () => (await api(`/api/production/${project}`)).stage, { timeout: 60_000 }).toBe('PLAN_READY');
+    if (!text.includes('[[model-format]]')) {
+      await expect.poll(async () => (await api(`/api/production/${project}`)).stage, { timeout: 60_000 }).toBe('PLAN_READY');
+    }
     return { chat: chat.id, project };
   };
   const typed = await planInChat('Freigabe im Chat');
@@ -126,6 +130,22 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   await dialog.getByRole('button', { name: 'Freigeben und vollständig erstellen' }).click();
   await expect(page.locator('[data-kind=production-job]').nth(1)).toBeVisible({ timeout: 30_000 });
   assert.ok(['PRODUCTION_RUNNING', 'PRODUCTION_COMPLETED', 'PRODUCTION_PAUSED'].includes((await api(`/api/production/${clicked.project}`)).stage));
+  // A failed planning step names its step and shows structured technical details, without model output.
+  const failed = await planInChat('Planung mit Fehler', 'Ich möchte eine vollständige Geschichte erstellen.\n# Der Fehler\nEin Kapitel, 38–60 Wörter. [[model-format]]');
+  await expect(page.getByText('Story-Planung: Die Modellantwort hatte kein gültiges strukturiertes Format', { exact: false })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText('Der Schritt konnte nicht abgeschlossen werden.')).toHaveCount(0);
+  await page.getByText('Technische Details', { exact: true }).click();
+  const facts = page.locator('[data-job-detail="technical-error"] .job-facts');
+  await expect(facts).toContainText('story_model_format');
+  await expect(facts).toContainText('Gliederung und Story-Bibel');
+  await expect(facts).toContainText('creative-writing');
+  await expect(facts).toContainText('human-writing 1.3.0');
+  await expect(facts).toContainText('story-writing 1.0.0');
+  await expect(facts).toContainText('automatisch 2');
+  const failedJob = (await api(`/api/production/${failed.project}`)).job;
+  await expect(facts).toContainText(failedJob.id);
+  assert.ok(!JSON.stringify(failedJob).includes('not json'), 'the original model answer must not be public');
+  await page.getByRole('button', { name: 'Schritt erneut ausführen' }).waitFor();
   assert.deepEqual(errors, []);
   console.log('Firefox production workflow, chat release, one-click release, chat image, manuscript and ZIP passed.');
 } finally {

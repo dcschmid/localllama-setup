@@ -20,6 +20,7 @@ export type ProductionJob = {
   phase?: string; image_state?: string; image_waiting?: string; retry?: { attempt: number; code: string };
   language_retry_available?: boolean; answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
   skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
+  model?: { alias: string; variant?: string | null; quantization?: string | null }; retries?: { automatic: number; manual: number };
   pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
 export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean; stage?: string;
@@ -96,6 +97,64 @@ const qualityMethod: Record<string, string> = { model_claim: 'Modellhinweis', in
 const qualityCategory: Record<string, string> = { punctuation: 'Zeichensetzung', grammar: 'Grammatik', repetition: 'Wiederholung',
   continuity: 'Kontinuität', character: 'Figuren', scene: 'Szene', plot: 'Handlung', naturalness: 'Sprache', pacing: 'Erzähltempo',
   dialogue: 'Dialog', tension: 'Spannung', emotion: 'Emotion', originality: 'Originalität', effect: 'Wirkung' };
+
+const planStages: Record<string, string> = { outline: 'Gliederung und Story-Bibel', chapters: 'Kapitelplanung', validate: 'Validierung der Planung',
+  repair: 'Ergänzung der Story-Bibel', review: 'Gesamtprüfung der Gliederung', impact: 'Prüfung bestehender Kapitel', save: 'Speichern der Planung' };
+const invalidReasons: Record<string, string> = { empty: 'leer', missing: 'nicht vorhanden', too_long: 'zu lang', type: 'kein Text' };
+
+// Field paths come from the backend validation. Only the path is shown, never the content.
+function fieldLabel(field: string) {
+  const bible = /^bible\.(\w+)$/.exec(field), visual = /^visual\.(\w+)$/.exec(field), chapter = /^chapters\[(\d+)\]\.(\w+)$/.exec(field),
+    record = /^bible_records\.(\w+)\[(\d+)\]\.(\w+)$/.exec(field);
+  if (bible) return `Story-Bibel · ${(bibleLabels as Record<string, string>)[bible[1]] ?? bible[1]}`;
+  if (visual) return `Bildideen · ${(visualLabels as Record<string, string>)[visual[1]] ?? visual[1]}`;
+  if (chapter) return `Kapitel ${chapter[1]} · ${(chapterFields as Record<string, string>)[chapter[2]] ?? chapter[2]}`;
+  if (record) return `Story-Bibel-Eintrag ${bibleRecordLabels[record[1]]?.label ?? record[1]} ${record[2]}`;
+  return (mainLabels as Record<string, string>)[field] ?? field;
+}
+
+const jobDetail = (job: ProductionJob) => job.detail && typeof job.detail === 'object' && !Array.isArray(job.detail)
+  ? job.detail as Record<string, string> : {};
+
+// The affected step of a failed planning job, from the stored error code and its validated detail.
+export function planningFailure(job: ProductionJob) {
+  if (!job.error || job.status !== 'failed' || (job.kind !== 'plan' && job.kind !== 'planning')) return undefined;
+  const detail = jobDetail(job);
+  const where = planStages[detail.stage] ? ` (${planStages[detail.stage]})` : '';
+  switch (job.error) {
+    case 'story_input_invalid':
+    case 'production_plan_invalid': {
+      const area = detail.field?.startsWith('chapters') ? 'Kapitelstruktur' : detail.field?.startsWith('bible') ? 'Story-Bibel' : 'Planung';
+      return `Story-Planung: ${area} konnte nicht validiert werden` + (detail.field
+        ? ` – „${fieldLabel(detail.field)}“ ist ${invalidReasons[detail.reason] ?? 'ungültig'}.` : '.');
+    }
+    case 'story_output_truncated': return `Story-Planung: Modellantwort unvollständig${where}.`;
+    case 'story_model_format': return `Story-Planung: Die Modellantwort hatte kein gültiges strukturiertes Format${where}.`;
+    case 'story_outline_incomplete': return 'Story-Planung: Das Modell hat nicht alle angeforderten Kapitel geliefert.';
+    case 'production_upstream_unavailable':
+      return `Story-Planung: Modellanfrage überschritt das Zeitlimit oder der Modelldienst war nicht erreichbar${where}.`;
+    case 'production_upstream_http': return `Story-Planung: Der Modelldienst hat den Aufruf mit einem HTTP-Fehler beendet${where}.`;
+    case 'production_checkpoint_write': return 'Story-Planung: Speichern der Planung fehlgeschlagen.';
+    case 'story_context_changed': return 'Story-Planung: Ein Kapitel wurde während der Planung geändert.';
+    default: return undefined;
+  }
+}
+
+export function technicalDetails(job: ProductionJob) {
+  const detail = jobDetail(job);
+  const model = job.model ? [job.model.alias, job.model.variant, job.model.quantization].filter(Boolean).join(' · ') : '';
+  const skills = Object.entries(job.skills ?? {}).map(([name, version]) => `${name} ${version}`).join(' · ');
+  const rows: Array<[string, string]> = [['Fehlercode', job.error ?? ''],
+    ['Schritt', [planStages[detail.stage] ?? '', detail.stage ?? job.phase ?? job.step].filter(Boolean).join(' · ')]];
+  if (detail.field) rows.push(['Feld', `${fieldLabel(detail.field)} (${detail.field}) · ${invalidReasons[detail.reason] ?? detail.reason ?? ''}`]);
+  for (const [key, label] of [['http_status', 'HTTP-Status'], ['sqlite_error', 'Datenbankfehler'], ['exception', 'Ausnahme']]) {
+    if (detail[key]) rows.push([label, String(detail[key])]);
+  }
+  rows.push(['Job-ID', job.id], ['Modell', model || 'nicht erfasst'], ['Skills', skills || 'nicht erfasst'],
+    ['Wiederholungen', job.retries ? `automatisch ${job.retries.automatic} · manuell ${job.retries.manual}` : 'nicht erfasst']);
+  return '<dl class="job-facts">' + rows.filter(([, value]) => value).map(([key, value]) =>
+    `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('') + '</dl>';
+}
 
 function issueMarkup(findings: Finding[] = []) {
   return findings.length ? '<ul>' + findings.map(f => {
@@ -238,11 +297,9 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   const skillMarkup = (loaded?: Record<string, string>) => loaded && Object.keys(loaded).length ?
     '<p>' + esc(Object.entries(loaded).map(([name, version]) => name + ' ' + version).join(' · ')) + '</p>' : '';
   const detail = typeof job.detail === 'string' ? job.detail : '';
-  const error = job.error && (productionErrors[detail] ?? productionErrors[job.error] ?? productionErrors.production_step_failed);
-  const technical = job.detail && !Array.isArray(job.detail) ? ' · ' +
-    (typeof job.detail === 'string' ? job.detail : JSON.stringify(job.detail)) : '';
+  const error = job.error && (planningFailure(job) ?? productionErrors[detail] ?? productionErrors[job.error] ?? productionErrors.production_step_failed);
   return `<p class="job-title">${esc(label)}</p>${job.waiting === 'gpu' ? '<p>Wartet auf einen freien GPU-Slot.</p>' : ''}${error ? `<p>${esc(error)}</p>
-    <details data-job-detail="technical-error"><summary>Technische Details</summary><code>${esc((job.error ?? '') + technical)}</code></details>` : ''}
+    <details data-job-detail="technical-error"><summary>Technische Details</summary>${technicalDetails(job)}</details>` : ''}
     ${job.status !== 'failed' && job.image_waiting === 'writer_gpu_release' ? '<p>Das Schreibmodell gibt den GPU-Slot frei.</p>' : ''}
     ${job.audit_lane === 'continuity' ? '<p>Story Writing prüft die Kontinuität.</p>' : ''}
     ${job.retry && !job.error ? `<p>Automatischer Wiederholungsversuch ${job.retry.attempt}.</p>` : ''}

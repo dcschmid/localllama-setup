@@ -324,16 +324,25 @@ def schema(properties):
             "additionalProperties": False}
 
 
+def rejected(code, answer, finish, evidence=None):
+    """A model failure that keeps a bounded copy of the original answer for the protected diagnostics.
+
+    `evidence` is the proof of the failed call (alias, variant, loaded skills), so the failure names its model."""
+    error = PlanError(code)
+    error.raw, error.finish, error.evidence = str(answer)[:6000], finish, evidence
+    return error
+
+
 def structured(call, lang, mode, prompt, properties, limit):
     answer, evidence, finish = call(lang, mode, prompt, limit, schema(properties))
     if finish == "length":
-        raise PlanError("story_output_truncated")
+        raise rejected("story_output_truncated", answer, finish, evidence)
     try:
         data = json.loads(answer)
     except json.JSONDecodeError as exc:
-        raise PlanError("story_model_format") from exc
+        raise rejected("story_model_format", answer, finish, evidence) from exc
     if not isinstance(data, dict):
-        raise PlanError("story_model_format")
+        raise rejected("story_model_format", answer, finish, evidence)
     return data, evidence
 
 
