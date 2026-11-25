@@ -2,11 +2,14 @@
 // origin (127.0.0.1). No cloud endpoints exist anywhere in this app.
 
 export type Project = { id: string; name: string; kind: string; lang: string;
-  description: string; tags: string[]; meta: Record<string, unknown> };
+  description: string; tags: string[]; meta: Record<string, unknown>; updated?: number;
+  latest_document?: string; document_count?: number; folder_id?: string | null; archived_at?: number };
 export type Document = { id: string; project_id: string; title: string; kind: string;
-  body: string; lang: string | null; status: string; version: number; updated: number };
-export type DocVersion = { id: string; version: number; note: string; origin: string; created: number };
-export type Session = { id: string; project_id: string | null; title: string; model: string | null };
+  body: string; lang: string | null; status: string; version: number; updated: number;
+  version_origin?: string; version_note?: string; folder_id?: string | null; story_number?: number | null };
+export type DocVersion = { id: string; version: number; note: string; origin: string; created: number; title?: string | null };
+export type Session = { id: string; project_id: string | null; title: string; model: string | null;
+  folder_id?: string | null; archived_at?: number; updated?: number; contexts?: Array<{id: string; name: string; kind: string}> };
 export type Msg = { id: string; role: 'user' | 'assistant'; content: string; meta?: Record<string, unknown> };
 export type Alias = 'research' | 'deep-research' | 'creative-writing' | 'human-writing'
   | 'human-rewrite' | 'human-audit';
@@ -28,14 +31,24 @@ export const ALIAS_FOR: Record<string, Alias> = {
   game: 'research',
 };
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly code: string) { super(code); }
+}
+
+export async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
   });
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body?.error ?? 'request_failed');
+  }
   return res.status === 204 ? ({} as T) : res.json();
 }
+
+export const post = <T>(path: string, body: object = {}) =>
+  json<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
   status: () => fetch('/api/status').then((r) => r.json()),
@@ -47,10 +60,11 @@ export const api = {
     json<{ id: string }>('/api/documents', { method: 'POST', body: JSON.stringify(body) }),
   document: (id: string) => json<Document>(`/api/documents/${id}`),
   editDocument: (id: string, body: Record<string, unknown>) =>
-    json<{ id: string; version: number }>(`/api/documents/${id}`,
+    json<{ id: string; version: number; status?: string }>(`/api/documents/${id}`,
       { method: 'POST', body: JSON.stringify(body) }),
   versions: (id: string) => json<DocVersion[]>(`/api/documents/${id}/versions`),
   sessions: (): Promise<Session[]> => json('/api/sessions'),
+  session: (id: string) => json<Session>(`/api/sessions/${id}`),
   createSession: (body: Record<string, unknown>) =>
     json<{ id: string }>('/api/sessions', { method: 'POST', body: JSON.stringify(body) }),
   messages: (sid: string): Promise<Msg[]> => json(`/api/sessions/${sid}/messages`),
@@ -71,20 +85,28 @@ export const api = {
 // ---------- SSE chat with stop/resume ---------------------------------------
 export async function chat(opts: {
   model: Alias; messages: Array<{ role: string; content: string }>;
-  sessionId?: string; kwargs?: Record<string, unknown>;
+  sessionId?: string; userContent?: string; kwargs?: Record<string, unknown>;
   onToken: (t: string) => void; signal?: AbortSignal;
 }): Promise<string> {
-  const res = await fetch('/api/chat', {
+  return stream('/api/chat', { model: opts.model, messages: opts.messages,
+    session_id: opts.sessionId, user_content: opts.userContent, chat_template_kwargs: opts.kwargs },
+    opts.onToken, opts.signal);
+}
+
+export async function stream(path: string, body: object, onToken: (text: string) => void,
+  signal?: AbortSignal): Promise<string> {
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: opts.model, messages: opts.messages,
-      session_id: opts.sessionId, chat_template_kwargs: opts.kwargs }),
-    signal: opts.signal,
+    body: JSON.stringify(body), signal,
   });
-  if (!res.body) throw new Error('no stream');
+  if (!res.ok || !res.body) {
+    const error = await res.json().catch(() => null);
+    throw new ApiError(res.status, error?.error ?? 'stream_unavailable');
+  }
   const reader = res.body.getReader();
   const dec = new TextDecoder();
-  let buf = '', full = '';
+  let buf = '', full = '', complete = false;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -92,15 +114,18 @@ export async function chat(opts: {
     let nl: number;
     while ((nl = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
-      try {
-        for (const ch of JSON.parse(line.slice(6)).choices ?? []) {
-          const t = ch?.delta?.content;
-          if (t) { full += t; opts.onToken(t); }
-        }
-      } catch { /* partial frame */ }
+      if (line === 'data: [DONE]') { complete = true; continue; }
+      if (!line.startsWith('data: ')) continue;
+      const frame = JSON.parse(line.slice(6));
+      if (frame.error) throw new ApiError(502, 'stream_unavailable');
+      for (const ch of frame.choices ?? []) {
+        const t = ch?.delta?.content;
+        if (typeof t === 'string' && t) { full += t; onToken(t); }
+        if (ch.finish_reason) complete = true;
+      }
     }
   }
+  if (!complete || !full.trim()) throw new ApiError(502, 'stream_incomplete');
   return full;
 }
 

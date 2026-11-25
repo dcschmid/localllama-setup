@@ -1,92 +1,25 @@
 ---
 import Layout from '../layouts/base.astro';
-import { SECTIONS } from '../lib/core';
-const LABELS: Record<string, string> = {
-  chat: 'Chat', stories: 'Stories', articles: 'Artikel', research: 'Recherche',
-  images: 'Bilder', game: 'Game Lab', library: 'Bibliothek', publish: 'Publish',
-  settings: 'Einstellungen',
-};
-const nav = SECTIONS.map((id) => ({ id, label: LABELS[id] ?? id }));
+import { icon } from '../lib/icons';
 ---
 <Layout>
-  <div class="shell">
-    <header class="topbar">
-      <div class="brand">Creative Studio<small>local · 127.0.0.1</small></div>
-      <nav class="sections" aria-label="Bereiche">
-        {nav.map(({ id, label }) => (<button data-section={id} id={`nav-${id}`}>{label}</button>))}
-      </nav>
-      <button class="btn" id="toggle-theme" aria-pressed="false">Dunkel</button>
-    </header>
-    <div class="body" id="body">
-      <aside id="sidebar" aria-label="Projekte und Bibliothek"></aside>
+  <div class="app" id="studio">
+    <aside class="sidebar" id="sidebar" aria-label="Seitenleiste" data-navigation></aside>
+    <div class="stage">
+      <header class="topbar">
+        <div class="topbar-group">
+          <button type="button" class="icon-button" id="nav-toggle" aria-expanded="false" aria-label="Seitenleiste öffnen" set:html={icon('panel')} />
+          <span id="location-label">Neuer Chat</span>
+        </div>
+        <div class="topbar-group" id="header-actions"></div>
+      </header>
       <main id="main" tabindex="-1"></main>
-      <section class="inspector" id="inspector" aria-label="Inspektor"></section>
     </div>
   </div>
+  <dialog id="nav-dialog" aria-label="Seitenleiste"><div data-navigation></div></dialog>
+  <dialog id="details" aria-labelledby="details-title"></dialog>
+  <p class="sr-only" id="announcement" role="status"></p>
   <script>
-    import { api, prefs, sectionLabel, type Section } from '../lib/core';
-    import { renderChat } from '../lib/chat';
-    import { renderLibrary } from '../lib/library';
-    import { renderStories } from '../lib/stories';
-    import { renderImages } from '../lib/images';
-    import { renderResearch, renderArticles, renderGame } from '../lib/sections';
-    import { renderPublish, renderSettings } from '../lib/publish';
-
-    const main = document.getElementById('main')!;
-    const sidebar = document.getElementById('sidebar')!;
-    const inspector = document.getElementById('inspector')!;
-    const body = document.getElementById('body')!;
-    const SECTIONS = [...document.querySelectorAll('[data-section]')] as HTMLButtonElement[];
-
-    function current(): Section {
-      const h = location.hash.slice(1) as Section;
-      return (SECTIONS.some((b) => b.dataset.section === h) ? h : 'chat') as Section;
-    }
-    async function render() {
-      const sec = current();
-      for (const b of SECTIONS) {
-        b.setAttribute('aria-current', b.dataset.section === sec ? 'page' : 'false');
-      }
-      main.innerHTML = ''; inspector.innerHTML = ''; sidebar.innerHTML = '';
-      document.documentElement.lang = prefs.lang;
-      if (sec === 'chat') {
-        await renderChat(main, sidebar, inspector);
-      } else if (sec === 'stories') {
-        await renderStories(main, sidebar, inspector);
-      } else if (sec === 'images') {
-        await renderImages(main, sidebar, inspector);
-      } else if (sec === 'research') {
-        await renderResearch(main, sidebar, inspector);
-      } else if (sec === 'articles') {
-        await renderArticles(main, sidebar, inspector);
-      } else if (sec === 'game') {
-        await renderGame(main, sidebar, inspector);
-      } else if (sec === 'publish') {
-        await renderPublish(main, sidebar, inspector);
-      } else if (sec === 'settings') {
-        await renderSettings(main, sidebar, inspector);
-      } else if (sec === 'library') {
-        await renderLibrary(main, sidebar, inspector);
-      } else {
-        main.innerHTML =
-          `<h1>${sectionLabel(sec)}</h1><p class="muted">Dieser Bereich wird in der
-           vorgesehenen Phase umgesetzt. Chat und Bibliothek sind bereits funktionsfähig.</p>`;
-      }
-    }
-    addEventListener('hashchange', render);
-    for (const b of SECTIONS) {
-      b.addEventListener('click', () => { location.hash = b.dataset.section!; });
-    }
-    const themeBtn = document.getElementById('toggle-theme') as HTMLButtonElement;
-    themeBtn.textContent = prefs.theme === 'dark' ? 'Hell' : 'Dunkel';
-    themeBtn.setAttribute('aria-pressed', String(prefs.theme === 'dark'));
-    themeBtn.addEventListener('click', () => {
-      const next = prefs.theme === 'dark' ? 'light' : 'dark';
-      prefs.theme = next;
-      document.documentElement.dataset.theme = next;
-      themeBtn.textContent = next === 'dark' ? 'Hell' : 'Dunkel';
-      themeBtn.setAttribute('aria-pressed', String(next === 'dark'));
-    });
-    render();
+    import '../lib/studio';
   </script>
 </Layout>

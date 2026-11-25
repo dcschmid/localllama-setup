@@ -8,12 +8,13 @@ lifecycle, never through real generation.  Wire format and route dispatch
 only — run with `./setup.sh creative-studio test`.
 """
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8700"
+BASE = os.environ.get("CREATIVE_STUDIO_TEST_URL", "http://127.0.0.1:8700").rstrip("/")
 passed = failed = 0
 
 

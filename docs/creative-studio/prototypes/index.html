@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de" data-concept="a">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Creative Studio · Designprototyp</title>
+  <script>
+    const concept = new URLSearchParams(location.search).get('design');
+    document.documentElement.dataset.concept = concept === 'b' ? 'b' : 'a';
+    document.documentElement.dataset.theme = localStorage.getItem('studio-prototype-theme')
+      ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  </script>
+  <link rel="stylesheet" href="./studio.css">
+  <script type="module" src="./studio.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Zum Inhalt springen</a>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Seitenleiste" data-navigation></aside>
+    <div class="stage">
+      <header class="topbar">
+        <div class="topbar-group">
+          <button type="button" class="icon-button" id="nav-toggle" aria-expanded="false" aria-label="Seitenleiste öffnen"></button>
+          <span id="location-label">Neuer Chat</span>
+        </div>
+        <div class="topbar-group">
+          <button type="button" class="prototype-link" data-action="about">Prototyp</button>
+          <button type="button" class="icon-button" id="theme-toggle" data-action="theme"></button>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"></main>
+    </div>
+  </div>
+  <dialog id="nav-dialog" aria-label="Seitenleiste">
+    <div data-navigation></div>
+  </dialog>
+  <dialog id="details" aria-labelledby="details-title"></dialog>
+  <p class="sr-only" id="announcement" role="status"></p>
+</body>
+</html>
