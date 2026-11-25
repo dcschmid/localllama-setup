@@ -8,6 +8,7 @@ import struct
 import time
 import uuid
 from pathlib import Path
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
@@ -86,7 +87,10 @@ def monitor(root, out, tasks, minutes):
     while pending and time.monotonic() < end:
         for case in sorted(pending.copy()):
             task = tasks[case]
-            current = call(root, "chat/tasks/" + task["task"])
+            try:
+                current = call(root, "chat/tasks/" + task["task"])
+            except (URLError, TimeoutError):
+                continue
             child = current.get("image") or {}
             status = (current["status"], child.get("status"), child.get("waiting_reason"), current.get("steps", {}).get("image", {}).get("error"))
             if statuses.get(case) != status:
@@ -105,6 +109,11 @@ def monitor(root, out, tasks, minutes):
             assert child["request"]["model"] == task["profile"]["model"]
             assert child["visual_profile"]["version"] == task["profile"]["version"]
             assert child["visual_profile"]["template"] == task["profile"]["template"]
+            messages = call(root, f"sessions/{task['chat']}/messages")
+            assert any(message["meta"].get("job_id") == task["task"] for message in messages)
+            memories = call(root, f"projects/{task['project']}/memories")
+            assert any(row["kind"] == "document-image" and row["key"] == f"{task['document']}/{child['image_id']}"
+                       for row in memories)
             (out / f"{case}.png").write_bytes(png)
         if pending:
             time.sleep(8)

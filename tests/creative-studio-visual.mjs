@@ -82,6 +82,24 @@ try {
       await page.screenshot({ path: process.env.CREATIVE_STUDIO_VISUAL_SCREENSHOT });
     }
   }
+  if (process.env.CREATIVE_STUDIO_REAL_PRODUCTION) {
+    if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Dialog schließen' }).click();
+    const run = JSON.parse(await readFile(process.env.CREATIVE_STUDIO_REAL_PRODUCTION, 'utf8'));
+    await page.goto(base + '/#chat/' + run.session_id);
+    await expect(page.getByText('Geschichte fertig', { exact: true })).toBeVisible();
+    const assets = [
+      page.locator('[data-production-chapter="1"]'),
+      page.locator('[data-production-chapter="2"]'),
+      page.locator('[data-job-detail="cover"]'),
+    ];
+    for (const asset of assets) {
+      if (!await asset.evaluate(node => node.open)) await asset.locator(':scope > summary').click();
+      await expect.poll(() => asset.getByRole('img').evaluate(image => [image.naturalWidth, image.naturalHeight]))
+        .toEqual([1024, 576]);
+    }
+    await page.getByRole('button', { name: 'Manuskript öffnen' }).click();
+    await expect(dialog.getByRole('navigation', { name: 'Kapitelnavigation' })).toBeVisible();
+  }
   assert.deepEqual(errors, []);
   console.log('Firefox story profiles, chat style changes, Visual Bible and saved image actions passed.');
 } finally {

@@ -18,6 +18,7 @@ Beginne im Chat mit einem freien Auftrag oder einem der vier Vorschläge. Das St
 - Ein Schreibauftrag speichert den Entwurf im aktuellen Chat. Öffne den Entwurf direkt aus der Antwort. Im Editor findest du **Text prüfen** und **Text verbessern** direkt am Dokument. Im Vergleich entscheidest du, welche Änderungen als neue Version gespeichert werden.
 - Recherchen zeigen Arbeitsschritt, Runden, verfügbare Quellen und offene Fragen in der Unterhaltung. Du kannst pausieren, fortsetzen und das Dossier im Editor öffnen.
 - Bilder erscheinen nach Abschluss im Chat und in **Bibliothek → Bilder**. Die dort abrufbaren Folgeseiten enthalten weitere gespeicherte Bilder. Der Auftragsverlauf zeigt Fehler und Abbrüche. In der Bildvorschau kannst du ein Bild zu einem Chat oder Dokument hinzufügen oder erneut generieren.
+- Im Story-Chat öffnet **Bildstil** das gespeicherte Visual Profile und die Visual Bible. Ein Beispiel für die direkte Bedienung ist „Verwende ab jetzt Graphic Novel für diese Geschichte.“ Neue Titel- und Kapitelbilder beginnen mit 16:9. [Story Visual Profiles](STORY_VISUAL_PROFILES.md)
 - Spielideen starten im Chat. Wähle bei Bedarf eine Rolle und verwende das **Decision Log**, um Entscheidungen festzuhalten. Die Seitenleiste öffnet Chats, der Button **Inhalte** zeigt deren Dokumente.
 - Exportiere im Editor oder per Chat, etwa mit „Exportiere den Artikel als Astro MDX.“ Enthält das Dokument Studio-Bilder, bündelt der Download den Text und die Bilddateien in einem ZIP.
 

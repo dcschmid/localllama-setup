@@ -106,6 +106,12 @@ class ProfileTests(unittest.TestCase):
         config["models"][1]["verified_modes"] = ["text"]
         with self.assertRaisesRegex(ValueError, "visual_reference_unavailable"):
             visual.prepare(profile, config, "Ada", "snow", 3, upload=lambda _: "e" * 32)
+        with self.conn:
+            clone = visual.organizer.duplicate_project(self.conn, visual.organizer.require(self.conn, "project", self.a))
+        clone_record = visual.load(self.conn, clone)["bible"]["characters"][0]
+        self.assertNotEqual(clone_record["attachment"], identifier)
+        copied = visual.organizer.require(self.conn, "attachment", clone_record["attachment"], include_data=True)
+        self.assertEqual((copied["project_id"], copied["data"]), (clone, b"fixture"))
 
     def test_confirmed_gpu_rejection_requeues_same_local_image(self):
         runtime = self.runtime
