@@ -1,4 +1,28 @@
 # Changelog
+## 2026.11-knowledge - Ordnerwissen (optional, ordnergebundenes Weltwissen)
+
+- `libexec/creative_studio_knowledge.py` + Migration: Ordnergebundenes Wissen
+  (`knowledge_entries/-versions/-suggestions` in `studio.sqlite3`) mit
+  Bestätigungsstufen (confirmed/reference/idea/unresolved), Versionierung mit
+  Restore, Vorschlagswarteschlange und Markdown-/JSON-Export. Bestehende
+  Ordner/Chats/Daten unverändert; leere Ordner funktionieren wie bisher.
+- Vererbung an Unterordner (nächste Ebene gewinnt, bestätigte Gleichtitel-
+  konflikte werden als ungeklärt gemeldet statt stillschweigend aufgelöst);
+  keine Übertragung zwischen unabhängigen Ästen; Purge-Cascade mit dem Ordner.
+- Selektive Injektion (Keyword-Relevanz + Budget, Ideen nie) in freien Chat,
+  Schreib-Aufträge, Guided Writing, Story-/Produktions-Kanon (per
+  Jobstart-Snapshot eingefroren) und Planungsschnappschuss; etablierte
+  Kapitel-Fakten landen nur als Vorschlag, nie automatisch im Kanon.
+- Visuelles Standardprofil pro Ordner; greift nur bei unberührten
+  Story-Profilen (`version == 0`), autorisierte Profile gewinnen, andere
+  Geschichten bleiben unverändert.
+- UI: Ordner-Menü „Ordnerwissen verwalten“ (Übersicht, Bearbeiten,
+  Vorschläge, Profil, Export); Chat-Hinweis über `GET /api/folders/hint`.
+  `docs/creative-studio/FOLDER_KNOWLEDGE.md`.
+- `tests/creative-studio-knowledge.py` (15 Fälle, inkl. Riff-Racers-Umlauf:
+  Thunderforge nach Import `reference`, Neustart-Persistenz); Organizer-,
+  Story-, Chat-, Produktions- und Writing-Suiten grün.
+
 ## 2026.11-studio - Local Creative Studio (opt-in) on the existing stack
 
 - `libexec/llama-creative-studio` + `packages/creative-studio/web`: writing,

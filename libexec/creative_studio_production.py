@@ -11,6 +11,7 @@ import uuid
 from urllib.error import HTTPError, URLError
 
 import creative_studio_organizer as organizer
+import creative_studio_knowledge as knowledge
 from creative_studio_chat import SIMULATED_OUTPUT
 from creative_studio_correction import digest, improvements, patch_text, patch_text_partial
 import creative_studio_visual as visuals
@@ -507,6 +508,8 @@ def planning_source(conn, pid, sid):
         if remaining <= 0:
             break
     source = {"version": None, "conversation": list(reversed(history))}
+    if folder := knowledge.context_for(conn, project_id=pid, session_id=sid):
+        source["folder_knowledge"] = folder
     record = latest_plan(conn, pid) if pid else None
     if record:
         return {**source, "version": record["version"], "plan": json.loads(record["plan"])}
@@ -785,7 +788,7 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
         story.error("not_found", 404)
     if record["state"] != "approved" or body.get("mode") not in ("automatic", "together"):
         story.error("production_approval_required", 409)
-    profile = visuals.ensure(conn, pid)
+    profile = knowledge.seed_profile(conn, pid, visuals.ensure(conn, pid))
     # The initial profile follows the approved visual direction until the author sets a profile explicitly.
     requested_style = visuals.choice(plan["visual"]["style"], riff=profile["template"].startswith("riff-racers"))
     if not profile["version"] and requested_style and requested_style != profile["template"]:
@@ -838,7 +841,10 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
     recovered.setdefault("step", "writing")
     recovered.setdefault("number", 1)
     typed = body.get("user_text")
-    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art, "visual_profiles": True}, recovered,
+    folder_knowledge = knowledge.context_for(conn, project_id=pid, session_id=sid, query=plan.get("title", ""))
+    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art,
+                      "visual_profiles": True, **({"folder_knowledge": folder_knowledge} if folder_knowledge else {})},
+                   recovered,
                    store_message, "Manuskriptproduktion", typed.strip()[:4000] if isinstance(typed, str) and typed.strip() else label)
 
 
@@ -891,6 +897,8 @@ class ProductionWorker:
                 if state in ("completed", "paused", "failed"):
                     event.update(finished_at=at, error=result.get("error"), detail=result.get("detail"))
                 result["artifact_manifest"] = artifact_manifest({"id": row["id"], "state": state}, payload, result)
+            if state == "completed":
+                knowledge.propose_from_job(conn, payload, result)
             conn.execute("UPDATE jobs SET state=?,result=?,updated=? WHERE id=?", (state, dump(result), at, row["id"]))
 
     def ask(self, lang, role, prompt, props, limit=1800):
@@ -1954,6 +1962,8 @@ class ProductionWorker:
                 result.update(number=index + 2, step="cover" if index + 1 == len(docs) else "writing")
             return self.commit(row, result, effect=advance)
         canon = self.canon(plan, chapter, finished[:index])
+        if folder := payload.get("folder_knowledge"):
+            canon += "\nFOLDER KNOWLEDGE (canonical reference; conflicts stay unresolved and reported)\n" + folder
         if step == "writing":
             return self.scene(row, plan, chapter, doc, current, result, canon)
         if step == "auditing":

@@ -91,6 +91,7 @@ const productionDocuments = new Map<string, Document>();
 const taskDocuments = new Map<string, Document>();
 let pendingDispatch: { session: string; text: string; id: string } | undefined;
 let pendingChoice: { text: string; kind: 'context' | 'document'; mode: Mode } | undefined;
+let worldHint: { name: string; count: number } | null = null;
 const activities: Record<Mode, string> = {
   auto: 'Automatisch erkennen', story: 'Geschichte / Roman', research: 'Deep Research',
   image: 'Bilder erstellen', article: 'Artikel / Devlog', game: 'Spielideen', chat: 'Chat',
@@ -400,6 +401,7 @@ function chatView() {
       <header class="chat-heading"><div class="organizer-title-row"><h1 id="chat-title">${esc(title)}</h1>
         ${session ? organizer.menuButton(chatEntry(session)) : ''}</div><div class="project-context">
         ${project && project.kind !== 'custom' ? `<span class="chat-context">${storyProject(project) ? 'Geschichte' : esc(kindLabel(project.kind))}</span>` : ''}
+        ${worldHint ? `<span class="chat-context">Weltwissen: ${esc(worldHint.name)} aktiv</span>` : ''}
         ${session ? button('contents', 'Inhalte', 'book') : ''}
         ${storyProject(project) ? button('production-plan', 'Story-Planung', 'book', 'button quiet', project?.id)
           + button('visual-profile', 'Bildstil', undefined, 'button quiet', project?.id) : ''}
@@ -554,7 +556,7 @@ async function loadRoute(focus = false) {
   organizer.reset(isManaged(route.view) ? route.view : undefined);
   status = ''; clarify = ''; draft = ''; busy = false; controller = undefined;
   mode = 'auto'; gameRole = 'partner'; chatDraftContext = undefined;
-  project = undefined; session = undefined; messages = []; story = undefined; storyFor = undefined; editor.close();
+  project = undefined; session = undefined; messages = []; story = undefined; storyFor = undefined; worldHint = null; editor.close();
   render(focus ? (route.view === 'home' ? 'prompt' : 'main') : undefined);
   navigation();
   try {
@@ -574,6 +576,10 @@ async function loadRoute(focus = false) {
       if (epoch !== revision) return;
       session = nextSession;
       if (session) mode = chatModes.get(session.id) ?? 'auto';
+      worldHint = null;
+      if (session) void json<{ name: string; count: number } | null>('/api/folders/hint?session=' + session.id)
+        .then(hint => { if (hint && route.view === 'chat' && session?.id === nextSession?.id && revision === epoch) { worldHint = hint; render(); } })
+        .catch(() => {});
       organizer.reveal(nextSession?.folder_id ?? nextDocument?.folder_id ?? undefined);
       project = nextProject;
       messages = nextMessages;

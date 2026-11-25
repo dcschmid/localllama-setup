@@ -26,6 +26,7 @@ Beginne im Chat mit einem freien Auftrag oder einem der vier Vorschläge. Das St
 
 - Lege Ordner über das Plus in der Seitenleiste an. Die drei Punkte öffnen die Aktionen für einen Eintrag. Zum Verschieben kannst du auch einen Eintrag auf einen Ordner ziehen. Öffne das Ordner-Menü, um direkt dort einen Chat oder Unterordner anzulegen.
 - Unter **Chats → Alle** findest du die Suche nach Namen und Nachrichten, die Sortierung nach Änderungsdatum und die Mehrfachauswahl. **Inhalte** zeigt Dokumente, Bilder und Anhänge bis 10 MB pro Datei aus dem geöffneten Chat.
+- Das Drei-Punkte-Menü eines Ordners öffnet **Ordnerwissen verwalten**: optionales, dauerhaftes Weltwissen (Fakten, Personen, Orte, Regeln, Referenzen, visuelle Vorgaben) für alle Chats und Produktionen im Ordner – inklusive Vererbung an Unterordner, Vorschlagsprüfung und Markdown-/JSON-Export. [Ordnerwissen](FOLDER_KNOWLEDGE.md)
 - Im Papierkorb siehst du den ursprünglichen Ort und das Löschdatum. Du kannst komplette Ordner und Chats oder einzelne enthaltene Einträge wiederherstellen. Beim endgültigen Löschen erscheint eine Vorschau. Der Papierkorb wird manuell geleert.
 - Laufende Aufträge blockieren das Löschen der zugehörigen Inhalte. Gemeinsam verwendete Bilder bleiben erhalten, solange eine Verknüpfung besteht. Bestätigte Bildlöschungen werden über den lokalen Bilddienst abgewickelt und bei einem vorübergehenden Fehler wiederholt.
 
@@ -113,6 +114,7 @@ python3 tests/creative-studio.py        # API-Vertrag, erzeugt Testeinträge
 python3 tests/creative-studio-organizer.py   # Migration, Papierkorb und Bildfreigaben in einer temporären Instanz
 python3 tests/creative-studio-chat.py        # Chat-Kontexte, Kapitelnumerierung, Migration und Papierkorb
 python3 tests/creative-studio-story.py       # Kapitelplanung, Versionen, Freigabeschutz und Wortbereiche
+python3 tests/creative-studio-knowledge.py   # Ordnerwissen: Vererbung, Konflikte, Vorschläge, Export, Profile
 tests/unit.sh                           # Installer-Regression
 ```
 

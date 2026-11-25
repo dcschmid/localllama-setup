@@ -1,6 +1,6 @@
 import { ApiError, api, esc, json, post, type Project, type Session } from './core';
 import { icon, type IconName } from './icons';
-import { $, announce, button, describe, details, dialogForm, formatDate, iconButton, showDialog } from './studio-ui';
+import { $, announce, button, describe, details, dialogForm, download, formatDate, iconButton, showDialog } from './studio-ui';
 
 export type EntryKind = 'folder' | 'chat' | 'project' | 'document' | 'image' | 'attachment';
 export type Entry = {
@@ -302,7 +302,8 @@ export class Organizer {
       ? [action('restore', 'Wiederherstellen'), action('purge', 'Endgültig löschen', 'trash')]
       : [action('open', 'Öffnen', glyphs[entry.kind]), action('rename', 'Umbenennen'),
         action('move', 'Verschieben', 'folder'),
-        ...(entry.kind === 'folder' ? [button('organizer-new-chat', 'Chat hier erstellen', 'chat', 'button quiet', entry.id),
+        ...(entry.kind === 'folder' ? [button('organizer-knowledge', 'Ordnerwissen verwalten', 'book', 'button quiet', key(entry)),
+          button('organizer-new-chat', 'Chat hier erstellen', 'chat', 'button quiet', entry.id),
           button('organizer-new-folder', 'Unterordner anlegen', 'plus', 'button quiet', entry.id)] : []),
         ...(entry.kind === 'chat' && !entry.archived_at ? [action('select', 'Für Mehrfachauswahl markieren')] : []),
         ...(entry.kind === 'chat' || entry.kind === 'project' ?
@@ -428,6 +429,7 @@ export class Organizer {
     }
     if (action === 'trash' || action === 'purge') return this.confirm(action, entries);
     if (action === 'move') return this.moveDialog(entries);
+    if (action === 'knowledge' && first.kind === 'folder') return this.knowledgeDialog(first);
     if (action === 'rename') {
       dialogForm('Umbenennen', nameField('Name', first.name), 'Speichern', async data => {
         await this.mutate(action, entries, { name: data.get('name') });

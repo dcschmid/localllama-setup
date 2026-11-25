@@ -8,6 +8,7 @@ import time
 import uuid
 
 import creative_studio_organizer as organizer
+import creative_studio_knowledge as knowledge
 from creative_studio_plan import PlanError, check_text
 
 MIGRATION = """
@@ -258,6 +259,9 @@ def context(conn, payload, current=None, source_limit=2200):
         ORDER BY created DESC LIMIT 16""", (payload["project_id"],)).fetchall()
     chunks = [f"{key}: {snippet(payload['bible'][key], 650)}" for key in BIBLE if payload["bible"].get(key)]
     chunks += [f"{row['kind']} {row['key']}: {snippet(row['body'], 280)}" for row in legacy]
+    if folder := knowledge.context_for(conn, project_id=payload["project_id"],
+                                       query=payload["instruction"] + " " + (current["story_plan"] if current else "")):
+        chunks.append("Folder canon (inherited):\n" + snippet(folder, 2000))
     if opening and source_limit:
         chunks.append("Canonical opening (source excerpt):\n" + snippet(opening["body"], source_limit))
     for row in chosen:
