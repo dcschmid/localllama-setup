@@ -576,18 +576,24 @@ def compose_visual(pid, profile, subject, passage, number, *, cover=False, seed=
         raise
     if composed.get("model") != metadata["model"] or composed.get("size") != size:
         raise PlanError("visual_format_unavailable")
+    if not isinstance(composed.get("prompt"), str) or not composed["prompt"].strip():
+        raise PlanError("visual_compose_invalid")
     composed = {key: value for key, value in image_request_from(composed).items()
                 if key not in ("recipe", "subject", "scene", "details", "aspect_ratio", "quality")}
+    if metadata["recipe"] == "anima-film":
+        prefix, separator, scene = composed["prompt"].partition(". ")
+        prefix = prefix.replace("cinematic anime film still", "full-bleed anime illustration")
+        prefix = prefix.replace(", soft dawn light", "")
+        composed["prompt"] = prefix + separator + scene
     model, _ = visual.available(catalog, profile)
     if model.get("negative"):
-        negative = ", ".join(filter(None, [composed.get("negative_prompt"),
-                                            "lettering, typography, watermark, letterbox, black bars, inset frame",
-                                            profile["negative"]]))
+        negative = composed.get("negative_prompt") or ""
         # Some older guided recipes set these exclusions for all styles.
         if metadata["template"] == "graphic-novel":
             negative = ", ".join(term.strip() for term in negative.split(",")
                                  if term.strip().casefold() not in ("comic", "manga"))
-        composed["negative_prompt"] = negative
+        composed["negative_prompt"] = ", ".join(filter(None, [negative,
+            "lettering, typography, watermark, letterbox, black bars, inset frame", profile["negative"]]))
     metadata["settings"] = {key: composed[key] for key in ("size", "seed", "steps", "cfg_scale", "sampler") if key in composed}
     return composed, metadata
 
@@ -1636,7 +1642,8 @@ def advance_task(row):
                     image_request, doc, cover=meta["cover"], profile=image.get("visual_profile"), previous_scene=previous_scene)
                 result["requirements"]["image_size"] = image_request["size"]
                 if doc:
-                    meta["alt"] = doc["title"]
+                    caption = re.split(r"(?<=[.!?])\s+", image["brief"], maxsplit=1)[-1]
+                    meta["alt"] = caption[:180].strip() or doc["title"]
             with _lock, conn:
                 organizer.check_image_links(conn, meta)
                 result["image_job_id"] = queue_image(conn, image_request, meta, wait=7200 if story_context else 1200)

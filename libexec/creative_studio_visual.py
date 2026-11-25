@@ -11,13 +11,13 @@ from creative_studio_plan import PlanError
 # Guided recipe names are preferences. The runtime catalog is authoritative.
 TEMPLATES = {
     "anima-aesthetic": ("Anima Aesthetic", "anima", "anima-film",
-        "Expressive illustrated anime film frame with clean contours and atmospheric depth."),
+        "Expressive anime illustration with clean contours, atmospheric depth and hand-painted environments."),
     "painterly-storybook": ("Painterly Storybook", "anima", "anima-storybook",
         "Hand-painted gouache, soft watercolor edges, translucent washes and visible paper grain."),
     "graphic-novel": ("Graphic Novel", "moss", "moss-comic",
         "Confident ink contours, deliberate halftones, graphic shadow shapes and selective color."),
     "soft-cinematic-anime": ("Soft Cinematic Anime", "anima", "anima-film",
-        "Quiet anime film frame, delicate lines, soft motivated light and natural color grading."),
+        "Quiet anime illustration, delicate lines, soft motivated light and natural color grading."),
     "low-poly-concept-art": ("Low-Poly Concept Art", "moss", "lowpoly-retro",
         "Stylized three-dimensional game illustration with broad angular facets and readable silhouettes."),
     "high-poly-stylized": ("High-Poly Stylized", "z-image", "",
@@ -272,7 +272,7 @@ def prepare(profile, catalog, subject, passage, chapter, *, cover=False, seed=No
         profile["style"], f"Palette: {colors}.", profile["lighting"], framing,
         f"Compose natively for {profile['ratio']}. Keep important subjects inside the frame.",
         profile["composition"], profile["consistency_rules"] if profile["consistency"] else "",
-        "Fill the canvas edge to edge. Use a single scene, free of lettering, logos, frames or black bars.",
+        "Use one continuous background running cleanly to all four edges of the canvas.",
         facts[:800], profile["extra"], f"Earlier observed details, if still current: {earlier[:380]}." if earlier else "",
     ]))
     request = ({"recipe": recipe, "model": model["id"], "subject": subject[:1800],

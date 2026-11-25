@@ -556,6 +556,11 @@ class ProductionTests(unittest.TestCase):
             f.change("save-plan", plan=plan)
             f.change("approve-plan", version=1)
             ident = f.change("start", version=1, mode="automatic", review_art=False)["id"]
+            def compose(pid, profile, subject, passage, number, *, cover, seed):
+                request = {"model": profile["model"], "prompt": subject, "size": "1024x576", "seed": seed}
+                return request, {key: profile[key] for key in ("id", "version", "template", "ratio", "recipe")}
+
+            f.worker.visual_compose = compose
             end = f.drive(checkpoints=210)
             self.assertEqual(end["state"], "completed")
             self.assertTrue(production.public_job(end)["art_review_pending"])
@@ -567,6 +572,8 @@ class ProductionTests(unittest.TestCase):
             self.assertTrue(manuscript["whole_review"]["repetitions"])
             assets = [manuscript["cover"], *[c["image"] for c in manuscript["chapters"]]]
             self.assertEqual(len({asset["id"] for asset in assets}), 9)
+            self.assertTrue(all(asset["visual_profile"]["recipe"] == "anima-film"
+                                and asset["dimensions"] == [1024, 576] for asset in assets))
             for fmt in ("md", "mdx"):
                 text = production.manuscript_text(manuscript, fmt, local_images=True)
                 self.assertTrue(all(f"images/{asset['id']}.png" in text for asset in assets))

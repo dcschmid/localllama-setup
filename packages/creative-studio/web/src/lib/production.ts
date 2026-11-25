@@ -211,7 +211,9 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   const phase = job.phase ?? job.step;
   let label = stateLabels[phase] ?? 'Produktion';
   if (phase === 'image_wait' && job.image_state === 'waiting_gpu') label = 'Bildauftrag wartet auf einen freien GPU-Slot';
-  if (phase === 'image_wait' && ['loading', 'generating'].includes(job.image_state ?? '')) label = 'Kapitelbild wird generiert';
+  if (phase === 'image_wait' && ['loading', 'generating'].includes(job.image_state ?? '')) {
+    label = job.step === 'cover' ? 'Titelbild wird generiert' : 'Kapitelbild wird generiert';
+  }
   if (phase === 'image_wait' && job.image_state === 'submitting') label = 'Bildauftrag wird an den Bilddienst übergeben';
   if (job.status === 'failed') label = failureLabels[phase] ?? label + ' fehlgeschlagen';
   if (job.number && job.total && job.number <= job.total) label = `Kapitel ${job.number} von ${job.total} · ${label}`;
@@ -268,7 +270,9 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
         ${button('production-edit-chapter', 'Überarbeiten', undefined, 'button', ch.id)}
         ${button('production-export-chapter', 'Kapitel exportieren', undefined, 'button quiet', ch.id)}</div>
       </details>`;
-    }).join('')}`;
+    }).join('')}
+    ${job.cover ? `<details data-job-detail="cover"><summary>Titelbild</summary>
+      ${media(job.cover.id, job.cover.alt, false)}${receiptMarkup(job.cover.visual_profile)}</details>` : ''}`;
 }
 
 export function artReviewDialog(job: ProductionJob, media: (id: string, alt: string, actions?: boolean) => string) {
