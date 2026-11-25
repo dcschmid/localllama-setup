@@ -18,7 +18,7 @@ export type ProductionJob = {
   downloads?: Partial<Record<'md' | 'mdx' | 'zip', string>>;
   manifest?: { completed_chapters: number; expected_chapters: number; verified_images: number; required_images: number };
   phase?: string; image_state?: string; image_waiting?: string; retry?: { attempt: number; code: string };
-  answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
+  language_retry_available?: boolean; answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
   skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
   pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
@@ -226,6 +226,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   const controls = job.status === 'paused' && job.pause_reason === 'art' ?
     button('production-approve-art', 'Illustrationen prüfen', undefined, 'button primary', job.id)
     : job.status === 'completed' && job.art_review_pending ? button('production-approve-art', 'Illustrationen prüfen', undefined, 'button quiet', job.id)
+    : job.language_retry_available ? button('production-retry', 'Sprachkorrektur erneut versuchen', undefined, 'button', job.id)
     : job.status === 'paused' ?
     button('production-resume', job.pause_reason === 'chapter' ? 'Kapitel freigeben und fortsetzen' :
       job.recheck_available ? 'Gespeichertes Kapitel erneut prüfen' : 'Fortsetzen', undefined, 'button', job.id)

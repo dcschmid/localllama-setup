@@ -193,6 +193,25 @@ def review_has_required_skills(review):
             and "story-writing" in proof_skills(review.get("proof", [])))
 
 
+def optional_language(finding):
+    return bool(re.search(r"\b(?:rein stilistisch\w*|optionaler stil|optional style|stylistic preference)\b",
+                          finding.get("verification") or "", re.I))
+
+
+def language_defects(review):
+    return [item for item in review.get("findings", []) + review.get("local", [])
+            if item.get("status") == "confirmed" and item.get("severity") == "automatic"
+            and item.get("category") in ("grammar", "punctuation") and not optional_language(item)]
+
+
+def language_retry_available(result):
+    current = result.get("current", {})
+    review = current.get("review", {})
+    return (result.get("pause_reason") == "blocker" and result.get("step") == "reviewed"
+            and current.get("automatic_version") == current.get("version") and bool(language_defects(review))
+            and not confirmed_blockers(review.get("findings", [])))
+
+
 def public_findings(review):
     findings = (review.get("findings", []) + review.get("local", []))[:45]
     if review.get("quality_version", 0) < 2:
@@ -267,6 +286,8 @@ def public_job(row, *, artifacts=None):
                                     [current["language_windows"][-1]["proof"]] if current.get("language_windows") else [])
     if report["phase"] == "auditing" and current.get("language_windows"):
         report["audit_lane"] = "continuity"
+    if row["state"] == "paused" and language_retry_available(result):
+        report["language_retry_available"] = True
     if result.get("pause_reason") == "blocker" and (current.get("review") or {}).get("quality_version") != QUALITY_VERSION:
         report["recheck_available"] = True
     if current.get("corrections"):
@@ -502,9 +523,10 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
         if not job or job["id"] != body.get("job_id") or job["state"] in CLOSED:
             story.error("story_job_closed", 409)
         allowed = {"pause": ("queued", "running"), "resume": ("paused",), "retry": ("failed",), "cancel": ACTIVE}
-        if job["state"] not in allowed[action]:
-            story.error("production_transition_invalid", 409)
         result = json.loads(job["result"])
+        retry_language = action == "retry" and job["state"] == "paused" and language_retry_available(result)
+        if job["state"] not in allowed[action] and not retry_language:
+            story.error("production_transition_invalid", 409)
         target = {"pause": "paused", "resume": "queued", "retry": "queued", "cancel": "cancelled"}[action]
         if action == "pause":
             result["pause_reason"] = "user"
@@ -546,14 +568,14 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
                 story.error("production_plan_changed", 409)
             if result.get("pause_reason") == "art":
                 story.error("production_art_review_required", 409)
-            if result.get("pause_reason") == "blocker":
+            if result.get("pause_reason") == "blocker" and not retry_language:
                 current = result.get("current", {})
                 doc = story.managed_chapter(conn, pid, current.get("document_id"))
                 if doc["version"] == current.get("version"):
                     if (current.get("review") or {}).get("quality_version") == QUALITY_VERSION:
                         story.error("production_fix_required", 409)
                     result["step"] = "auditing"
-            if action == "retry" and result.get("error") == "story_length_failed" and result.get("step") == "reviewed":
+            if retry_language or (action == "retry" and result.get("error") == "story_length_failed" and result.get("step") == "reviewed"):
                 current = result["current"]
                 current.setdefault("revision_batches", []).append({"passes": current.pop("passes", 0), "retried_at": time.time()})
             if result.get("error") in ("production_audit_evidence", "production_manuscript_blocked"):
@@ -1089,6 +1111,8 @@ class ProductionWorker:
             if verdict.get("status") not in ("confirmed", "unconfirmed", "refuted"):
                 continue
             item.update(status=verdict["status"], method="independent_audit", verification=verdict["reason"])
+            if role == "human-audit" and optional_language(item):
+                item.update(status="unconfirmed", severity="editorial")
             if item["status"] == "confirmed":
                 item["severity"] = "blocking" if item["category"] in fiction.CENTRAL else "automatic"
         return proof
@@ -1228,6 +1252,12 @@ class ProductionWorker:
             def automatic(report):
                 return sum(f["severity"] == "automatic" for f in report["findings"] + report["local"])
             before = current["review"]
+            observed = {(f["category"], f["quote"]) for f in review["findings"] + review["local"]
+                        if f.get("status") in ("confirmed", "refuted")}
+            for defect in language_defects(before):
+                identity = (defect["category"], defect["quote"])
+                if identity not in observed and (span := fiction.evidence(body, defect["quote"])):
+                    review["findings"].append({**defect, **span})
             candidate = current.pop("candidate")
             current.pop("candidate_base_hash", None)
             corrections = current.pop("proposed_corrections", 0)
@@ -1251,7 +1281,7 @@ class ProductionWorker:
         result["step"] = "reviewed"
         return self.commit(row, result)
 
-    def chapter_expansion(self, row, doc, current, result, canon, language, passes, low, high):
+    def chapter_expansion(self, row, doc, current, result, canon, plan, passes, low, high):
         original = doc["body"]
         text = current.get("short_expansion", original)
         original_hash = digest(original)
@@ -1263,6 +1293,21 @@ class ProductionWorker:
             anchors = [anchors[n * (len(anchors) - 1) // 7] for n in range(8)]
         if not anchors:
             anchors = [text.rstrip()[-120:]]
+        language = plan["language"]
+        targets = []
+        for defect in language_defects(current["review"]):
+            quote = defect["quote"]
+            if quote and text.count(quote) == 1:
+                offset = text.index(quote)
+                targets.append({**defect, "start": offset, "end": offset + len(quote)})
+        properties = {"anchor": enum(anchors), "addition": STR}
+        corrections = ""
+        if targets:
+            properties["edits"] = array(story.schema(fields(("before", "after"))), 4)
+            corrections = (" Also correct the confirmed language faults with exact before/after edits. "
+                           "Use an anchor outside every edit. Keep names, quantities and the surrounding passage. "
+                           "Return an empty list if no exact language correction is supported.\nLANGUAGE FAULTS\n"
+                           + dump([{k: finding[k] for k in ("quote", "issue", "correction")} for finding in targets[:4]]))
         answer, proof = self.ask(language, "rewrite",
             f"Write an additional scene of about {target} words, at least {minimum} and at most {maximum} words. "
             "Show a missing planned beat or a necessary consequence through actions and dialogue. "
@@ -1270,13 +1315,25 @@ class ProductionWorker:
             "Use the story language, point of view and tense. Preserve the chapter ending and established facts. "
             "Use the available space for the character's choices and reactions. Omit headings, commentary and filler.\n"
             + "CHAPTER PLAN\n" + doc["story_plan"] + "\nCANON\n" + story.snippet(canon, 3300)
-            + "\nANCHORS\n" + dump(anchors) + "\nEXISTING CHAPTER\n" + story.snippet(text, 9000),
-            {"anchor": enum(anchors), "addition": STR}, min(5600, max(600, target * 4 + 300)))
+            + "\nANCHORS\n" + dump(anchors) + "\nEXISTING CHAPTER\n" + story.snippet(text, 9000) + corrections,
+            properties, min(5600, max(600, target * 4 + 300 + 350 * bool(targets))))
         addition, anchor = answer["addition"].strip(), answer["anchor"]
         current["passes"] = passes + 1
         patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": original_hash,
                  "input_hash": digest(text), "words_before": words, "addition_words": story.count_words(addition), "evidence": proof}
         current.setdefault("patches", []).append(patch)
+        language_edits = answer.get("edits", [])
+        if targets and language_edits:
+            fiction, tools = self.fiction()
+            try:
+                corrected = patch_text(text, language_edits, plan["motifs"], fiction, targets=targets[:4],
+                                       language_tools=tools, language=language)
+                if corrected.count(anchor) != 1:
+                    raise PlanError("production_patch_boundary")
+                patch["language_edits"] = language_edits if corrected != text else []
+                text = corrected
+            except PlanError as exc:
+                patch["language_edit_error"] = str(exc)
         if (anchor in anchors and text.count(anchor) == 1 and addition and not SIMULATED_OUTPUT.search(addition)
                 and not story.PRODUCTION_ASIDE.search(addition) and not story.repeats(addition, text)):
             end = text.index(anchor) + len(anchor)
@@ -1285,7 +1342,7 @@ class ProductionWorker:
             patch.update(words_after=words_after)
             if words < words_after <= high:
                 patch.update(candidate_hash=digest(candidate), edits=[{"after_anchor": anchor, "addition": addition}])
-                additions = current.get("short_expansion_count", 0) + 1
+                additions = current.get("short_expansion_count", 0) + 1 + len(patch.get("language_edits", []))
                 if words_after < low:
                     current.update(short_expansion=candidate, short_expansion_count=additions)
                 else:
@@ -1313,7 +1370,7 @@ class ProductionWorker:
                     and current.get("automatic_version") == doc["version"])
         chapter = plan["chapters"][doc["story_number"] - 1]
         if editable and passes < 2 and review["words"] < chapter["minimum"]:
-            return self.chapter_expansion(row, doc, current, result, canon, language, passes,
+            return self.chapter_expansion(row, doc, current, result, canon, plan, passes,
                                           chapter["minimum"], chapter["maximum"])
         if (local_edits or targeted) and passes < 2 and editable:
             if local_edits:
@@ -1380,10 +1437,9 @@ class ProductionWorker:
         if any(f.get("method") == "word_count" for f in blockers):
             result.update(error="story_length_failed", detail={"words": review["words"]})
             return self.commit(row, result, "failed")
-        language_defects = [item for item in [*targeted, *review["local"]] if item.get("status") == "confirmed"
-                            and item.get("severity") == "automatic" and item.get("category") in ("grammar", "punctuation")]
-        if blockers or language_defects:
-            result.update(pause_reason="blocker", detail=[*blockers, *language_defects])
+        unresolved = language_defects(review)
+        if blockers or unresolved:
+            result.update(pause_reason="blocker", detail=[*blockers, *unresolved])
             return self.commit(row, result, "paused")
         result["step"] = "text_finalize"
         return self.commit(row, result)

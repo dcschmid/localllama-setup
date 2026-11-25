@@ -252,6 +252,30 @@ class ProductionTests(unittest.TestCase):
             f.change("approve-art", job_id=row["id"])
             self.assertEqual(f.drive()["state"], "completed")
 
+    def test_short_chapter_can_fix_confirmed_punctuation_in_same_revision(self):
+        with Fixture() as f:
+            f.start()
+            short = PROSE.rsplit(" The lock", 1)[0].replace("paper. She", "paper., but she")
+            addition = "Nera turned the key in her hand and compared its teeth with the marks Mara had drawn."
+
+            def expanding(lang, role, prompt, tokens, schema=None):
+                if role == "write":
+                    return short + "\n\nShe watched the empty corridor.", {}, "stop"
+                if role == "rewrite" and "anchor" in schema["properties"]:
+                    self.assertIn("edits", schema["properties"])
+                    anchor = schema["properties"]["anchor"]["enum"][0]
+                    return json.dumps({"anchor": anchor, "addition": addition,
+                                       "edits": [{"before": "paper.,", "after": "paper,"}]}), {}, "stop"
+                return fake_model(lang, role, prompt, tokens, schema)
+
+            f.worker.call = expanding
+            row = f.drive()
+            result = json.loads(row["result"])
+            receipt = result["chapter_results"][0]
+            self.assertEqual(receipt["corrections"], 2)
+            self.assertTrue(receipt["candidate_audits"][0]["accepted"])
+            self.assertNotIn("paper.,", production.managed_docs(f.conn, f.pid)[0]["body"])
+
     def test_short_scene_expansions_accumulate_before_rechecking(self):
         with Fixture() as f:
             f.create()
