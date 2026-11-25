@@ -22,6 +22,15 @@ try {
   const session = await page.request.post(base + '/api/sessions', { data: { title: 'The Key in the Drawer', project_id: project.id } });
   const { id } = await session.json();
   await page.goto(base + '/#chat/' + id);
+  const simulated = await page.request.post(base + `/api/sessions/${id}/messages`, { data: {
+    role: 'assistant', meta: { model: 'research' },
+    content: '*(Simuliertes Bild: Low-Poly, 16:9)*\n\n![Bild](/api/images/files/' + 'f'.repeat(32) + ')\n\n[Download Markdown](https://example.invalid/manuscript.md)',
+  } });
+  assert.ok(simulated.ok(), await simulated.text());
+  await page.reload();
+  await expect(page.getByText(/keinen belegten Produktionsabschluss/)).toBeVisible();
+  await expect(page.locator(`img[src*="${'f'.repeat(32)}"]`)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Download Markdown' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Story-Planung', exact: true }).click();
   await page.getByLabel('Was soll die Geschichte erzählen?').fill('Mara and Nera find a lost key and recover a record.');
   await page.getByLabel('Sprache', { exact: true }).selectOption('en');
@@ -51,7 +60,13 @@ try {
   await page.getByRole('button', { name: 'Manuskript öffnen' }).click();
   await expect(dialog.getByRole('navigation', { name: 'Kapitelnavigation' })).toBeVisible();
   const downloaded = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'ZIP herunterladen' }).click();
+  await dialog.getByRole('link', { name: 'ZIP herunterladen' }).click();
+  for (const fmt of ['MD', 'MDX']) {
+    const link = dialog.getByRole('link', { name: fmt + ' herunterladen', exact: true });
+    const artifact = await page.request.get(base + await link.getAttribute('href'));
+    assert.ok(artifact.ok());
+    assert.ok((await artifact.text()).includes('When Mara opened the drawer'));
+  }
   const file = join(output, 'manuscript.zip');
   await (await downloaded).saveAs(file);
   const archive = spawnSync('python3', ['-c', `
@@ -65,6 +80,19 @@ with zipfile.ZipFile(sys.argv[1]) as z:
         assert all(png in text for png in z.namelist() if png.endswith('.png'))
 `, file], { encoding: 'utf-8' });
   assert.equal(archive.status, 0, archive.stderr);
+  await dialog.getByRole('button', { name: 'Dialog schließen' }).click();
+  const newChat = await page.request.post(base + '/api/sessions', { data: { title: 'Neuer Produktionsauftrag' } });
+  const { id: briefChat } = await newChat.json();
+  await page.goto(base + '/#chat/' + briefChat);
+  await page.locator('#prompt').fill('Ich möchte eine vollständige Geschichte erstellen.\n# Der Salzsteg\nDrei Kapitel, jeweils 900–1.200 Wörter. Exportiere anschließend Markdown und MDX.');
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  await expect(page.locator('[data-kind=production-job]')).toBeVisible();
+  const afterBrief = await (await page.request.get(base + `/api/sessions/${briefChat}`)).json();
+  assert.ok(afterBrief.project_id);
+  const briefReport = await (await page.request.get(base + `/api/production/${afterBrief.project_id}/report`)).json();
+  assert.equal(briefReport[0].payload.count, 3);
+  assert.equal(briefReport[0].payload.minimum, 900);
+  assert.equal(briefReport[0].payload.maximum, 1200);
   assert.deepEqual(errors, []);
   console.log('Firefox production workflow, chat image, manuscript and ZIP passed.');
 } finally {

@@ -84,13 +84,48 @@ DRAFT_CHAPTER = re.compile(r"^\s*(?:bitte\s+)?(?:schreib\w*|verfass\w*|setze|for
 NO_DRAFT = re.compile(r"\b(?:(?:schreib\w*|verfass\w*)\s+(?:noch\s+)?(?:kein\w*|nicht)|(?:do not|don't)\s+(?:write|draft))\b[^.!?]*", re.I)
 
 
+PRODUCTION_START = re.compile(
+    r"(?:(?:bitte )?(?:(?:die |diese )?geschichte vollständig (?:erstellen|schreiben)|"
+    r"(?:erstelle|schreibe) (?:(?:jetzt|nun) )?(?:(?:die |diese )?geschichte vollständig|(?:die )?(?:ganze|gesamte|vollständige) geschichte)|(?:starte|start) (?:die |the )?(?:manuskriptproduktion|story production)|"
+    r"create the (?:complete|full) story|gemeinsam schreiben|write together))", re.I)
+PLAN_APPROVAL = re.compile(
+    r"(?:ich gebe (?:die )?planung frei|ich habe (?:die )?planung freigegeben|(?:die )?(?:story[ -]?)?planung (?:freigeben|freigegeben|ist freigegeben)|"
+    r"(?:ist )?freigegeben|approve (?:the )?(?:story )?plan|plan approved)", re.I)
+MANUSCRIPT_EXPORT = re.compile(
+    r"(?:bitte )?(?:(?:exportier\w*|lade) (?:mir )?(?:(?:das |die |den )?(?:vollständige\w* )?)"
+    r"(?:manuskript|geschichte|roman)|(?:export|download) (?:the )?(?:complete )?(?:manuscript|story)|"
+    r"(?:manuskript|geschichte) exportieren)(?: (?:als|as) (?:markdown|mdx?|zip|astro mdx)(?: (?:und|and) (?:markdown|mdx?|zip))?)?(?: herunter)?", re.I)
+SIMULATED_OUTPUT = re.compile(
+    r"(?:simuliertes? (?:bild|titelbild|illustration|download|export)|hier würde (?:der|das|die) (?:gesamte|vollständige)|"
+    r"bild würde hier erscheinen|simulated (?:image|download|export)|(?:image|manuscript) would (?:appear|go) here)", re.I)
+
+
+def command(text):
+    phrase = " ".join(text.strip().rstrip(".!").split())
+    if PRODUCTION_START.fullmatch(phrase):
+        return "together" if phrase.casefold().removeprefix("bitte ") in ("gemeinsam schreiben", "write together") else "automatic"
+    if PLAN_APPROVAL.fullmatch(phrase):
+        return "approve"
+    if MANUSCRIPT_EXPORT.fullmatch(phrase):
+        return "export"
+    return None
+
+
+def production_brief(text):
+    return bool(outline_count(text) and STORY.search(text) and re.search(
+        r"story[ -]produktion|manuskriptproduktion|(?:vollständig\w*|komplett\w*|complete|full)\b[^.!?\n]{0,75}"
+        r"\b(?:geschichte|manuskript|roman|story|manuscript|novel)\b", text, re.I)
+        and re.search(r"\b(?:möchte|will|want|erstelle|erstellt|create|schreibe|write|produzier\w*)\b", text, re.I))
+
+
 def number(value):
     return NUMBERS[value.casefold()] if value.casefold() in NUMBERS else int(value)
 
 
 def title(text, fallback):
     match = TITLE.search(text)
-    name = next((part for part in match.groups() if part), "") if match else ""
+    heading = re.search(r"(?m)^#\s+([^\n]{1,180})$", text) if not match and production_brief(text) else None
+    name = next((part for part in match.groups() if part), "") if match else heading[1] if heading else ""
     return (name.strip(" *'„“«»\".,:") or fallback or "Unterhaltung")[:180]
 
 
@@ -142,6 +177,8 @@ def ensure_context(conn, session, kind, lang, name=None, *, fresh=False):
 
 
 def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_context=False):
+    if production_brief(text):
+        return "outline"
     text = NO_DRAFT.sub("", text)
     chapter = CHAPTER.search(text)
     bible_reference = re.search(r"\b(?:nach|anhand|mit|against|using)\b[^,;.!?]{0,48}\b(?:story[ -]?bibel|story bible)\b", text, re.I)
@@ -205,9 +242,9 @@ def length_range(text):
 
 
 def story_language(text, fallback):
-    if re.search(r"\b(?:auf englisch|in english|englischer text)\b", text, re.I):
+    if re.search(r"\b(?:auf englisch|in english|englischer text|sprache:\*?\*?\s*englisch|\ben-us\b)\b", text, re.I):
         return "en"
-    if re.search(r"\b(?:auf deutsch|in german|deutscher text)\b", text, re.I):
+    if re.search(r"\b(?:auf deutsch|in german|deutscher text|sprache:\*?\*?\s*deutsch|\bde-de\b)\b", text, re.I):
         return "de"
     return fallback
 

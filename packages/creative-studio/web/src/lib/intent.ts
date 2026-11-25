@@ -23,10 +23,12 @@ const makeImage = /\b(?:erstell\w*|generier\w*|mach\w*|zeichn\w*|mal(?:e|en)|cre
 const write = /\b(?:schreib\w*|verfass\w*|erzäh\w*|write|draft)\b/iu;
 const startWriting = /\b(?:möcht\w*|will|lass uns|starte\w*|beginn\w*|start|let.s)\b/iu;
 
+const exportCommand = /^(?:bitte\s+)?(?:exportier\w*|export|download|lade)\b[^\n]{0,200}$/iu;
+
 export function routeIntent(text: string, mode: Mode, context?: Tool): Intent {
   const prompt = text.normalize('NFKC').trim();
-  if (matches(prompt, /\b(?:markdown|mdx|astro|artikel|dokument|export|datei|attachment)\b/iu,
-    /\b(?:exportier\w*|herunterlad\w*|export|download)\b/iu)) return 'export';
+  if (exportCommand.test(prompt) && /\b(?:markdown|mdx|astro|artikel|dokument|export|datei|attachment)\b/iu.test(prompt)
+    && !/\b(?:manuskript|manuscript|geschichte|roman|story)\b/iu.test(prompt)) return 'export';
   if (context === 'game' && /^(?:bitte\s+)?(?:merke|notiere|speichere|halte)\b/iu.test(prompt)
     && /entscheidung|beschluss|fest|entscheidungslog/iu.test(prompt)) return 'decision';
   if (mode !== 'auto') return mode;

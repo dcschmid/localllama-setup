@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 import creative_studio_visual as visual
+from creative_studio_exports import Exports, FORMATS as EXPORT_FORMATS
 import creative_studio_organizer as organizer
 import creative_studio_production as production
 import creative_studio_story as story
@@ -221,7 +222,8 @@ def advance_image(job_id):
                 return
     if result.get("status") == "completed" and (payload.get("meta", {}).get("chat_task_id") or durable):
         try:
-            result["dimensions"] = verify_image_file(result.get("image_id"), payload["request"].get("size"))
+            verify = verify_production_image if production_id else verify_image_file
+            result["dimensions"] = verify(result.get("image_id"), payload["request"].get("size"))
         except urllib.error.HTTPError as exc:
             if exc.code != 404:
                 return
@@ -628,10 +630,7 @@ def story_image_request(pid, brief, supplied, doc=None, *, cover=False, profile=
     return compose_visual(pid, profile, brief, passage or previous_scene, number, cover=cover, seed=supplied.get("seed"))
 
 
-def verify_image_file(image_id, requested_size):
-    import struct
-    import zlib
-
+def fetch_image_png(image_id):
     if not isinstance(image_id, str) or not ID.fullmatch(image_id):
         raise PlanError("image_archive_missing")
     _, metadata = http_json(IMAGES + "/studio/api/gallery/" + image_id, timeout=15)
@@ -640,13 +639,20 @@ def verify_image_file(image_id, requested_size):
     req = urllib.request.Request(f"{IMAGES}/studio/api/files/{image_id}", headers={"Accept": "image/png"})
     with open_upstream(req, timeout=20) as response:
         png = response.read(32 * 1024 * 1024 + 1)
+    return png
+
+
+def png_dimensions(png, requested_size=None):
+    import struct
+    import zlib
+
     if not 57 <= len(png) <= 32 * 1024 * 1024 or png[:8] != b"\x89PNG\r\n\x1a\n" or png[8:16] != b"\x00\x00\x00\x0dIHDR":
         raise PlanError("image_invalid_png")
     width, height = struct.unpack_from(">II", png, 16)
     if not width or not height or (requested_size and f"{width}x{height}" != requested_size):
         raise PlanError("image_dimensions_mismatch")
     offset = 8
-    data = False
+    data = bytearray()
     while offset + 12 <= len(png):
         length, kind = struct.unpack_from(">I4s", png, offset)
         end = offset + 8 + length
@@ -654,12 +660,93 @@ def verify_image_file(image_id, requested_size):
             break
         offset = end + 4
         if kind == b"IDAT" and length:
-            data = True
+            data.extend(png[offset - length - 4:offset - 4])
         if kind == b"IEND":
             if data and length == 0 and offset == len(png):
+                depth, color, compression, filtering, interlace = png[24:29]
+                channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color)
+                depths = {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}
+                if not channels or depth not in depths[color] or compression or filtering or interlace not in (0, 1):
+                    break
+                passes = [(0, 0, 1, 1)] if not interlace else [
+                    (0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4),
+                    (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
+                strides = [(1 + (((width - x + dx - 1) // dx) * channels * depth + 7) // 8,
+                            (height - y + dy - 1) // dy) for x, y, dx, dy in passes if width > x and height > y]
+                expected = sum(stride * rows for stride, rows in strides)
+                if expected > 96 * 1024 * 1024:
+                    break
+                inflater = zlib.decompressobj()
+                try:
+                    pixels = inflater.decompress(data, expected + 1)
+                except zlib.error:
+                    break
+                if not inflater.eof or inflater.unused_data or len(pixels) != expected:
+                    break
+                start = 0
+                for stride, rows in strides:
+                    if any(value > 4 for value in pixels[start:start + stride * rows:stride]):
+                        raise PlanError("image_invalid_png")
+                    start += stride * rows
                 return [width, height]
             break
     raise PlanError("image_invalid_png")
+
+
+def verify_image_file(image_id, requested_size):
+    return png_dimensions(fetch_image_png(image_id), requested_size)
+
+
+def production_image_bytes(image_id, size):
+    import tempfile
+
+    if not isinstance(image_id, str) or not ID.fullmatch(image_id):
+        raise PlanError("image_archive_missing")
+    path = DATA / "production-images" / f"{image_id}.png"
+    try:
+        original = path.read_bytes()
+        png_dimensions(original, size)
+        return original
+    except (OSError, PlanError):
+        pass
+    original = fetch_image_png(image_id)
+    png_dimensions(original, size)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+        handle.write(original)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(handle.name, path)
+    return original
+
+
+def verify_production_image(image_id, size):
+    return png_dimensions(production_image_bytes(image_id, size), size)
+
+
+def mdx_validator():
+    bundle = WEB / ".studio-validate-mdx.mjs"
+    if bundle.is_file():
+        return bundle
+    return Path(__file__).resolve().parent.parent / "packages/creative-studio/web/scripts/validate-mdx.mjs"
+
+
+production_exports = Exports(DATA / "productions", mdx_validator)
+
+
+def artifacts_available(row):
+    result = json.loads(row["result"] or "{}")
+    receipt = result.get("exports", {})
+    if not receipt or not production_exports.valid(row["id"], receipt):
+        return False
+    payload = json.loads(row["payload"])
+    docs = production.managed_docs(db(), payload["project_id"])
+    finished = result.get("chapter_results", [])
+    if not len(docs) == len(finished) == len(payload["plan"]["chapters"]):
+        return False
+    return all(doc["id"] == saved["id"] and doc["version"] == saved["version"] and doc["status"] == "approved"
+               and not organizer.purged_image(db(), saved["image"]["id"]) for doc, saved in zip(docs, finished, strict=True)) and (
+               bool(result.get("cover")) and not organizer.purged_image(db(), result["cover"]["id"]))
 
 
 @lru_cache(maxsize=1)
@@ -944,7 +1031,8 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
 
 
 production_worker = production.ProductionWorker(db, _lock, production_model, production_skill,
-    queue_image, verify_image_file, store_message, running_work, visual_compose=compose_visual)
+    queue_image, verify_production_image, store_message, running_work, visual_compose=compose_visual,
+    exports=production_exports, image_bytes=production_image_bytes)
 
 
 def article_model(lang, role, prompt, tokens, schema=None):
@@ -1906,7 +1994,9 @@ class Handler(BaseHTTPRequestHandler):
             row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='production'", (parts[2],)).fetchone()
             if not row or not organizer.visible_job(conn, row):
                 raise organizer.OrganizerError("story_job_missing", 404)
-            return self._json(production.public_job(row))
+            return self._json(production.public_job(row, artifacts=artifacts_available(row)))
+        if len(parts) in (5, 6) and parts[:2] == ["production", "jobs"] and parts[3] == "files":
+            return self._production_file(parts[2], "/".join(parts[4:]))
         if len(parts) in (2, 3) and parts[0] == "production":
             with conn:
                 conn.execute("BEGIN")
@@ -1914,14 +2004,19 @@ class Handler(BaseHTTPRequestHandler):
                     version = self._query().get("version")
                     if version is not None and not re.fullmatch(r"[1-9][0-9]{0,8}", version):
                         raise organizer.OrganizerError("production_plan_invalid")
-                    return self._json(production.plan_info(conn, parts[1], int(version) if version else None))
+                    return self._json(production.plan_info(conn, parts[1], int(version) if version else None, artifact_valid=artifacts_available))
                 if parts[2] == "manuscript":
-                    return self._json(production.manuscript(conn, parts[1]))
+                    return self._json(production.manuscript(conn, parts[1], artifact_valid=artifacts_available))
                 if parts[2] == "report":
                     organizer.require(conn, "project", parts[1])
-                    rows = conn.execute("""SELECT id,state,payload,result FROM jobs WHERE service='production'
+                    rows = conn.execute("""SELECT * FROM jobs WHERE service='production'
                                          AND json_extract(payload,'$.project_id')=? ORDER BY created""", (parts[1],))
-                    return self._json([row_json(row, ("payload", "result")) for row in rows])
+                    reports = []
+                    for row in rows:
+                        entry = row_json(row, ("payload", "result"))
+                        entry["effective_status"] = production.public_job(row, artifacts=artifacts_available(row))["status"]
+                        reports.append(entry)
+                    return self._json(reports)
         if len(parts) == 2 and parts[0] == "stories":
             with conn:
                 conn.execute("BEGIN")
@@ -2086,7 +2181,16 @@ class Handler(BaseHTTPRequestHandler):
             organizer.require(conn, "chat", parts[1])
             rows = conn.execute("SELECT * FROM messages WHERE session_id=?"
                                 " ORDER BY created,rowid", (parts[1],)).fetchall()
-            return self._json([row_json(r, ("meta",)) for r in rows])
+            messages = [row_json(r, ("meta",)) for r in rows]
+            placeholders = [message for message in messages if message["role"] == "assistant"
+                            and not message["meta"].get("kind") and chats.SIMULATED_OUTPUT.search(message["content"])]
+            if placeholders:
+                chapters = conn.execute("""SELECT count(DISTINCT d.id) FROM live_documents d
+                    WHERE d.kind='chapter' AND trim(d.body)<>'' AND (d.project_id IN (
+                        SELECT context_id FROM chat_contexts WHERE chat_id=?) OR d.id IN (
+                        SELECT document_id FROM chat_document_links WHERE session_id=?))""", (parts[1], parts[1])).fetchone()[0]
+                placeholders[-1]["meta"].update(unverified_production=True, saved_chapters=chapters)
+            return self._json(messages)
         if parts[:1] == ["search"]:
             words = re.findall(r"\w+", self._query().get("q", "")[:500])
             if not words:
@@ -2104,6 +2208,16 @@ class Handler(BaseHTTPRequestHandler):
             if organizer.purged_image(conn, parts[2]) or (
                     parts[2] in organizer.hidden_images(conn) and organizer.orphan_image(conn, parts[2])):
                 return self._json({"error": "image_not_found"}, 404)
+            local = DATA / "production-images" / f"{parts[2]}.png"
+            if local.is_file():
+                try:
+                    png_dimensions(local.read_bytes())
+                except (OSError, PlanError):
+                    pass
+                else:
+                    return self._serve_file(local, "image/png")
+            if exported := self._exported_image(parts[2]):
+                return self._serve_file(exported, "image/png")
             return self._image_bytes("/studio/api/files/" + parts[2])
         if parts == ["images", "gallery"]:
             return self._gallery(conn)
@@ -2217,7 +2331,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "production":
             with conn:
                 conn.execute("BEGIN IMMEDIATE")
-                result, status = production.mutate(conn, parts[1], parts[2], body, save_document, store_message)
+                result, status = production.mutate(conn, parts[1], parts[2], body, save_document, store_message,
+                                                   artifact_valid=artifacts_available)
             return self._json(result, status)
         if len(parts) == 3 and parts[0] == "stories":
             with conn:
@@ -2462,41 +2577,63 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(row["data"])
 
     # ---- astro export (md/mdx, files[] payloads; no writes outside studio) --
-    def _production_export(self, pid, body):
-        import io
-        import zipfile
+    def _serve_file(self, path, content_type, filename=None):
+        import shutil
 
-        document = production.manuscript(db(), pid)
+        with path.open("rb") as source:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(os.fstat(source.fileno()).st_size))
+            if filename:
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(filename, safe=""))
+            self.end_headers()
+            shutil.copyfileobj(source, self.wfile)
+
+    def _exported_image(self, identifier):
+        conn = db()
+        rows = conn.execute("""SELECT * FROM jobs WHERE service='production' AND state='completed'
+            AND json_type(result,'$.exports')='object' AND (json_extract(result,'$.cover.id')=? OR EXISTS (
+                SELECT 1 FROM json_each(result,'$.chapter_results') WHERE json_extract(value,'$.image.id')=?))
+            ORDER BY updated DESC""", (identifier, identifier))
+        for row in rows:
+            if not organizer.visible_job(conn, row):
+                continue
+            result = json.loads(row["result"])
+            name = "images/cover.png" if result["cover"]["id"] == identifier else next(
+                f"images/chapter-{c['number']:02}.png" for c in result["chapter_results"] if c["image"]["id"] == identifier)
+            try:
+                return production_exports.file(row["id"], result["exports"], name)
+            except PlanError:
+                continue
+        return None
+
+    def _production_file(self, identifier, name):
+        conn = db()
+        row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='production'", (identifier,)).fetchone()
+        if not row or not organizer.visible_job(conn, row) or row["state"] != "completed" or not artifacts_available(row):
+            raise organizer.OrganizerError("production_export_missing", 404)
+        receipt = json.loads(row["result"])["exports"]
+        path = production_exports.file(identifier, receipt, name)
+        extension = path.suffix
+        types = {".zip": "application/zip", ".png": "image/png", ".json": "application/json"}
+        filename = None if extension == ".png" else receipt["slug"] + extension
+        return self._serve_file(path, types.get(extension, "text/markdown; charset=utf-8"), filename)
+
+    def _production_export(self, pid, body):
         fmt = body.get("format", "md")
-        if fmt not in ("md", "mdx", "zip"):
+        if fmt not in EXPORT_FORMATS:
             raise organizer.OrganizerError("bad_request")
+        document = production.manuscript(db(), pid, artifact_valid=artifacts_available)
         if not document["complete"]:
             raise organizer.OrganizerError("production_manuscript_partial", 409)
-        slug = re.sub(r"[^a-z0-9]+", "-", document["title"].lower()).strip("-")[:60] or "manuscript"
-        assets = {a["id"]: a for a in [document["cover"], *(ch["image"] for ch in document["chapters"])]}
-        images = {}
-        for image_id, asset in assets.items():
-            try:
-                verify_image_file(image_id, asset["request"]["size"])
-                if fmt == "zip":
-                    with open_upstream(urllib.request.Request(IMAGES + "/studio/api/files/" + image_id), 30) as response:
-                        images[image_id] = response.read()
-            except (OSError, ValueError):
-                raise organizer.OrganizerError("image_export_failed", 422) from None
-        if fmt != "zip":
-            return self._json({"name": f"{slug}.{fmt}", "text": production.manuscript_text(document, fmt, local_images=True)})
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for extension in ("md", "mdx"):
-                archive.writestr(f"{slug}.{extension}", production.manuscript_text(document, extension, local_images=True))
-            for image_id, png in images.items():
-                archive.writestr(f"images/{image_id}.png", png)
-            archive.writestr("images/metadata.json", json.dumps([
-                {"path": f"images/{asset['id']}.png", "alt": asset["alt"],
-                 "model": asset["request"].get("model"), "seed": asset["request"].get("seed"),
-                 "size": asset["request"].get("size"), "visual_profile": asset.get("visual_profile")}
-                for asset in assets.values()], ensure_ascii=False, indent=2))
-        return self._json({"name": slug + ".zip", "base64": base64.b64encode(buffer.getvalue()).decode()})
+        row = db().execute("SELECT result FROM jobs WHERE id=?", (document["production_id"],)).fetchone()
+        receipt = json.loads(row["result"])["exports"]
+        path = production_exports.file(document["production_id"], receipt, f"manuscript.{fmt}")
+        name = receipt["slug"] + "." + fmt
+        if fmt == "zip":
+            return self._json({"name": name, "base64": base64.b64encode(path.read_bytes()).decode()})
+        return self._json({"name": name, "text": path.read_text(encoding="utf-8")})
 
     def _export(self, body):
         import io
@@ -2694,21 +2831,40 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- handlers -----------------------------------------------------------
     def _resolve_chat_first(self, body, conn, session, mode, lang, fingerprint):
-        request = body["text"].strip().casefold().rstrip(".!")
-        if request in ("geschichte vollständig erstellen", "create the complete story", "gemeinsam schreiben", "write together"):
-            pid = session["project_id"]
+        text, sid, ident = body["text"], session["id"], body["request_id"]
+        command = chats.command(text)
+        if command:
+            contexts = [item for item in chats.context_list(conn, sid) if item["kind"] in visual.KINDS]
+            pid = body.get("context_id") or session["project_id"]
+            if not any(item["id"] == pid for item in contexts):
+                if body.get("context_id"):
+                    raise organizer.OrganizerError("chat_context_invalid", 404)
+                if len(contexts) > 1:
+                    return chats.choice(contexts, "context"), mode, text, None
+                pid = contexts[0]["id"] if contexts else None
+            if command == "export":
+                if not pid:
+                    raise organizer.OrganizerError("production_manuscript_missing", 404)
+                document = production.manuscript(conn, pid, artifact_valid=artifacts_available)
+                if not document["complete"]:
+                    raise organizer.OrganizerError("production_manuscript_partial", 409)
+                return {"handled": True, "manuscript_project_id": pid}, mode, text, pid
             record = production.latest_plan(conn, pid) if pid else None
-            if not record or record["state"] != "approved":
+            if not record:
                 raise organizer.OrganizerError("production_approval_required", 409)
+            if command == "approve":
+                if record["state"] != "approved":
+                    production.mutate(conn, pid, "approve-plan", {"version": record["version"]}, save_document, store_message)
+                    store_message(conn, sid, "user", text)
+                    store_message(conn, sid, "assistant", "Die Story-Planung ist freigegeben. Du kannst jetzt die vollständige Produktion starten.")
+                return {"handled": True, "project_id": pid}, mode, text, pid
             previous = production.job_state(conn, pid)
             if previous and previous["state"] in production.ACTIVE and json.loads(previous["payload"])["kind"] == "story":
-                return {"handled": True, "production_id": previous["id"], "project_id": pid}, mode, body["text"], pid
-            choice = "together" if request in ("gemeinsam schreiben", "write together") else "automatic"
-            result, _ = production.mutate(conn, pid, "start", {"session_id": session["id"], "version": record["version"], "mode": choice},
-                                          save_document, store_message)
-            return {"handled": True, "production_id": result["id"], "project_id": pid}, mode, body["text"], pid
+                return {"handled": True, "production_id": previous["id"], "project_id": pid}, mode, text, pid
+            result, _ = production.mutate(conn, pid, "start", {"session_id": sid, "version": record["version"], "mode": command},
+                                          save_document, store_message, artifact_valid=artifacts_available)
+            return {"handled": True, "production_id": result["id"], "project_id": pid}, mode, text, pid
 
-        text, sid, ident = body["text"], session["id"], body["request_id"]
         existing = conn.execute("SELECT service,state,payload FROM jobs WHERE id=?", (ident,)).fetchone()
         if existing:
             prior = jload(existing["payload"], {})
@@ -2810,7 +2966,7 @@ class Handler(BaseHTTPRequestHandler):
                 prior_notes = [row["content"] for row in conn.execute("""SELECT content FROM messages
                     WHERE session_id=? AND role='user' ORDER BY created DESC LIMIT 5""", (sid,))]
                 brief = (text + ("\n\nEarlier author messages:\n" + "\n".join(reversed(prior_notes)) if prior_notes and not fresh else ""))[:8000]
-                if (chats.PLAN_TARGET.search(text) or chats.outline_count(text) > 1) and (fresh or not has_plan):
+                if (chats.production_brief(text) or chats.PLAN_TARGET.search(text) or chats.outline_count(text) > 1) and (fresh or not has_plan):
                     visual_options = {key: value for key, value in body.get("image_options", {}).items()
                                       if key in ("model", "preset")}
                     aspect = re.search(r"\b(\d{1,2}:\d{1,2})\b", text)
@@ -3416,8 +3572,20 @@ def unit_installed() -> bool:
 
 
 def cmd_serve():
+    import fcntl
+
     DATA.mkdir(parents=True, exist_ok=True)
     CONF.mkdir(parents=True, exist_ok=True)
+    server_lock = (DATA / ".studio-server.lock").open("a")
+    try:
+        fcntl.flock(server_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit("creative-studio: another server owns this data directory")
+    with server_lock:
+        serve_data()
+
+
+def serve_data():
     migrate()
     threading.Thread(target=queue_worker, daemon=True, name="gpu-queue").start()
     threading.Thread(target=image_purge_worker, daemon=True, name="image-purge").start()
@@ -3478,9 +3646,7 @@ def cmd_install() -> None:
         dist = src / "packages/creative-studio/web/dist"
         if dist.is_dir() and WEB != dist.resolve():
             import shutil
-            if WEB.exists():
-                shutil.rmtree(WEB)
-            shutil.copytree(dist, WEB)
+            shutil.copytree(dist, WEB, dirs_exist_ok=True)
             print(f"web -> {WEB}")
         units = Path.home() / ".config/systemd/user"
         unit_src = src / "units" / UNIT
@@ -3506,7 +3672,7 @@ def cmd_install() -> None:
         shutil.copyfile(Path(__file__).resolve(), backend / "llama-creative-studio")
         for module in ("creative_studio_plan.py", "creative_studio_organizer.py", "creative_studio_story.py",
                        "creative_studio_chat.py", "creative_studio_production.py", "creative_studio_skills.py",
-                       "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py"):
+                       "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py", "creative_studio_exports.py"):
             shutil.copyfile(src / "libexec" / module, backend / module)
         print(f"installed (repeatable): data {DATA}, state {STATE}")
 
@@ -3566,6 +3732,7 @@ def cmd_uninstall(purge=False):
                  Path.home() / ".local/libexec/creative_studio_story.py",
                  Path.home() / ".local/libexec/creative_studio_chat.py",
                  Path.home() / ".local/libexec/creative_studio_production.py",
+                 Path.home() / ".local/libexec/creative_studio_exports.py",
                  Path.home() / ".local/libexec/creative_studio_skills.py",
                  Path.home() / ".local/libexec/creative_studio_correction.py",
                  Path.home() / ".local/libexec/creative_studio_article.py",

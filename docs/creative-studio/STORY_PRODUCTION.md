@@ -6,7 +6,9 @@ Wähle im Chat **Geschichte / Roman** und öffne **Geschichte planen**. Beschrei
 
 Im Chat steht der laufende Schritt. Du kannst pausieren, fortsetzen, abbrechen oder einen fehlgeschlagenen Schritt wiederholen. Ein bereits laufender Einzelaufruf kann noch auslaufen. Er unterbricht keinen anderen Dienst. Nach einem Studio-Neustart setzt der Job an seinem gespeicherten Schritt an. Dokumentversionen und bereits abgeschlossene Bilder sind über ihre IDs zugeordnet.
 
-Öffne das Manuskript über den Produktionsauftrag. Neue automatische Aufträge stellen es nach Textprüfung und technischer Bildprüfung in Markdown, MDX und als ZIP mit beiden Fassungen und den PNG-Dateien bereit. Die Sichtprüfung kann anschließend aus dem Chat aufgerufen werden. Bei gemeinsamen Aufträgen gibt der Nutzer die Bildserie vor dem Export frei. Das ZIP enthält relative Bildpfade. Für ein Astro-Projekt kannst du die MDX-Datei und ihren Ordner `images` gemeinsam übernehmen. [Astro MDX-Dokumentation](https://v5.docs.astro.build/en/guides/integrations-guide/mdx/)
+Öffne das Manuskript über den Produktionsauftrag. Nach der Prüfung schreibt das Studio `manuscript.md`, `manuscript.mdx`, `manifest.json`, die Original-PNGs unter `images/` und ein ZIP in `~/.local/share/creative-studio/productions`. Erst die vollständige Prüfung einschließlich MDX-Compiler und ZIP macht die Downloads im selben Chat sichtbar. Einzeldateien behalten relative Bildpfade. Im ZIP liegen die passenden Bilddateien bereits neben dem Manuskript. Bei gemeinsamen Aufträgen gibt der Nutzer die Bildserie vor dem Export frei. [Astro MDX-Dokumentation](https://v5.docs.astro.build/en/guides/integrations-guide/mdx/)
+
+Ein vollständiger Produktionsauftrag im Chat darf Anforderungen an Bilder und Export enthalten. Er führt zunächst zur Story-Planung. „Planung freigeben“ und „Geschichte vollständig erstellen“ sind eigenständige Chatbefehle. Wenn Exportdateien eines früheren Jobs fehlen, zeigt das Studio den Auftrag als unvollständig. **Produktion vervollständigen** übernimmt vorhandene Checkpoints der freigegebenen Planversion.
 
 ## Modellrollen
 
@@ -27,7 +29,7 @@ Das Studio wartet, solange ein Inferenzslot belegt ist oder der Bilddienst rende
 
 ## Abnahme der Bilder
 
-Das Studio speichert für jedes Motiv eine Textstelle, den Prompt, den Seed, die zugehörige Dokumentversion, das tatsächlich verwendete Visual Profile und die Bild-ID. Das Standardformat für neue Produktionen ist 16:9. Das Studio prüft die PNG-Struktur, Prüfsummen und Abmessungen der archivierten Datei. Über **Neue Fassung für das Manuskript** kannst du einzelne Motive neu erzeugen. Vorhandene Fassungen bleiben im Bildarchiv. Figuren, Kleidung und Schauplätze kannst du mit Kapitelgrenzen in der Visual Bible erfassen. Ein Seed stabilisiert das Sampling einer konkreten Anfrage. [Visual Profiles und lokale Abnahme](STORY_VISUAL_PROFILES.md)
+Das Studio speichert für jedes Motiv eine Textstelle, den Prompt, den Seed, die zugehörige Dokumentversion, das tatsächlich verwendete Visual Profile und die Bild-ID. Das Standardformat für neue Produktionen ist 16:9. Das Studio prüft die PNG-Struktur, dekomprimierte Bilddaten, Prüfsummen und Abmessungen. Geprüfte Originale liegen zusätzlich in der Studio-Mediathek. Über **Neue Fassung für das Manuskript** kannst du einzelne Motive neu erzeugen. Vorhandene Fassungen bleiben im Bildarchiv. Figuren, Kleidung und Schauplätze kannst du mit Kapitelgrenzen in der Visual Bible erfassen. Ein Seed stabilisiert das Sampling einer konkreten Anfrage. [Visual Profiles und lokale Abnahme](STORY_VISUAL_PROFILES.md)
 
 Aktualisierte Image-Service-Builds nehmen einen `Idempotency-Key` an. Bei älteren Builds versucht das Studio, eine unterbrochene Einreichung anhand der gespeicherten Anfrage und des Seeds wiederzufinden. Bei einer mehrdeutigen Antwort hält es den Produktionsjob an. Es sendet die Anfrage in diesem Fall nicht blind erneut.
 
@@ -37,3 +39,5 @@ Aktualisierte Image-Service-Builds nehmen einen `Idempotency-Key` an. Bei älter
 - `python3 tests/creative-studio-production.py --serve-fixture 18702` startet eine isolierte HTTP-Fixture. `CREATIVE_STUDIO_TEST_URL=http://127.0.0.1:18702 node tests/creative-studio-production.mjs` prüft sie mit Firefox.
 - `python3 tests/creative-studio-real-production.py --url http://127.0.0.1:18700 --output output/story-production-acceptance` verfolgt einen bereits angelegten echten Abnahmelauf. Die Ergebnisse und der aktuelle Status liegen in dessen Ausgabeverzeichnis.
 - `python3 benchmarks/story-production-models.py --help` zeigt die Eingaben für den Deutsch-/Englisch-Vergleich. Der Vergleich liest die vorhandenen Beispiele aus SQLite und schreibt eigene Ergebnisdateien.
+
+Der [P0-Bericht](STORY_PRODUCTION_P0.md) dokumentiert die Untersuchung von Riff Racers, den lokalen Abnahmelauf und die Nachweise.

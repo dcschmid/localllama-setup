@@ -53,7 +53,7 @@ const imageStates: Record<string, string> = {
   loading: 'Bilddienst wird vorbereitet', generating: 'Bild wird erstellt', running: 'Bild wird erstellt',
   completed: 'Bild fertig', cancelled: 'Bildauftrag abgebrochen', failed: 'Bild konnte nicht erstellt werden',
 };
-const ended = (status: string) => ['completed', 'partial', 'failed', 'cancelled'].includes(status);
+const ended = (status: string) => ['completed', 'partial', 'failed', 'cancelled', 'incomplete'].includes(status);
 const path = (value: string) => encodeURIComponent(value);
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{32}$/u.test(value);
 const option = (value: string, label: string, selected = false) => `<option value="${esc(value)}"${selected ? ' selected' : ''}>${esc(label)}</option>`;
@@ -386,7 +386,9 @@ function transcript() {
                 ? button('write-unwritten', 'Kapitel schreiben', 'text', 'button', String(meta.number)) : ''));
     return `<article class="message ${isUser ? 'user' : 'assistant'}">${isUser ? '' : mark()}<div class="message-content">
       <h2>${isUser ? 'Du' : 'Studio'}</h2>
-      ${m.content && !['image', 'research', 'chat-task'].includes(String(kind)) ? `<div class="prose">${isUser ? '<p class="user-text">' + esc(m.content) + '</p>' : markdown(m.content)}</div>` : ''}
+      ${m.content && !['image', 'research', 'chat-task'].includes(String(kind)) ? `<div class="prose">${isUser ? '<p class="user-text">' + esc(m.content) + '</p>' : markdown(m.content, !meta.model)}</div>` : ''}
+      ${meta.unverified_production ? `<p>In diesem Chat stehen Platzhalter aus Modellantworten. Für diese Antworten gibt es keinen belegten Produktionsabschluss.
+        ${meta.saved_chapters === 0 ? 'Die Texte stehen im Chatverlauf. Es sind keine Kapitel als Dokumente gespeichert.' : ''}</p>` : ''}
       ${attachment}</div></article>`;
   }).join('');
 }
@@ -735,7 +737,7 @@ function toolsOptions(kind: 'image' | 'research') {
 
 type EditorialChat = { mode: 'audit' | 'review' | 'rewrite' | 'both' | 'compare'; id: string; scoped: boolean };
 type ChatDispatch = { handled: boolean; editorial?: EditorialChat; activity?: Mode; context_id?: string;
-  choice?: 'context' | 'document'; choices?: {id: string; label: string}[] };
+  manuscript_project_id?: string; choice?: 'context' | 'document'; choices?: {id: string; label: string}[] };
 
 async function refreshChatContext(sid: string, epoch: number) {
   const updated = await api.session(sid);
@@ -802,6 +804,14 @@ async function submit(text: string, selection?: Intent, chosen?: { context_id?: 
         pendingDispatch = undefined;
         await editorialFromChat(dispatched.editorial, text, epoch);
         return;
+      }
+      if (dispatched.manuscript_project_id) {
+        const format = /\bzip\b/iu.test(text) ? 'zip' : /\bmdx\b/iu.test(text) ? 'mdx' : 'md';
+        if (/\bmdx\b/iu.test(text) && /\b(?:markdown|md)\b/iu.test(text)) {
+          manuscriptDialog(await manuscript(dispatched.manuscript_project_id), dispatched.manuscript_project_id);
+        } else {
+          await exportManuscript(dispatched.manuscript_project_id, format);
+        }
       }
       if (dispatched.handled) {
         messages = await api.messages(sid);
@@ -1489,6 +1499,12 @@ async function handleProduction(action: string, value: string) {
       const updated = await productionInfo(pid);
       if (updated.version !== info.version) planDialog(updated, pid);
     });
+    return;
+  }
+  if (action === 'production-recover' && pid) {
+    const info = await productionInfo(pid);
+    await productionAct(pid, 'start', { version: info.version, session_id: session?.id, mode: 'automatic' });
+    await refresh();
     return;
   }
   if ((action === 'production-approve' || action.startsWith('production-start-')) && pid) {

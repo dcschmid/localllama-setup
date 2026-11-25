@@ -11,6 +11,7 @@ import uuid
 from urllib.error import HTTPError, URLError
 
 import creative_studio_organizer as organizer
+from creative_studio_chat import SIMULATED_OUTPUT
 from creative_studio_correction import digest, improvements, patch_text
 import creative_studio_visual as visuals
 import creative_studio_story as story
@@ -187,6 +188,11 @@ def work_phase(result):
     return step
 
 
+def review_has_required_skills(review):
+    return ("local" in review and "human-writing" in proof_skills(review.get("language_proof", []))
+            and "story-writing" in proof_skills(review.get("proof", [])))
+
+
 def public_findings(review):
     findings = (review.get("findings", []) + review.get("local", []))[:45]
     if review.get("quality_version", 0) < 2:
@@ -209,7 +215,29 @@ def review_proofs(review):
             for proof in review.get(key, [])]
 
 
-def public_job(row):
+def artifact_manifest(row, payload, result):
+    plan = payload["plan"]
+    chapters = [{"number": c["number"], "document_id": c["id"], "version": c["version"], "words": c["words"],
+                 "minimum": plan["chapters"][c["number"] - 1]["minimum"], "maximum": plan["chapters"][c["number"] - 1]["maximum"],
+                 "sha256": c.get("final_hash"), "image_id": c["image"]["id"], "image_job_id": c["image"].get("job_id"),
+                 "audit_id": c.get("audit_id"), "skills": proof_skills(review_proofs(c.get("review", {}))),
+                 "revision_id": c.get("revision_id")}
+                for c in result.get("chapter_results", [])]
+    cover = result.get("cover") or {}
+    current = result.get("current", {})
+    slot = image_slot(result)
+    checkpoint = {"number": result.get("number"), "phase": work_phase(result),
+                  "document_id": current.get("document_id"), "version": current.get("version"),
+                  "image_job_id": slot.get("image_job"), "image_state": slot.get("image_state"),
+                  "word_count": current.get("review", {}).get("words")}
+    expected = len(plan["chapters"])
+    return {"story_id": payload["project_id"], "production_id": row["id"], "status": row["state"],
+            "expected_chapters": expected, "completed_chapters": len(chapters), "required_images": expected + 1,
+            "verified_images": len(chapters) + bool(cover), "cover_id": cover.get("id"), "chapters": chapters,
+            "checkpoint": checkpoint, "exports": result.get("exports", {}).get("files", {})}
+
+
+def public_job(row, *, artifacts=None):
     payload, result = json.loads(row["payload"]), json.loads(row["result"] or "{}")
     keys = ("step", "number", "error", "detail", "pause_reason", "plan_version", "chapter_results", "cover", "whole_review",
             "answer", "planning_findings", "compared_chapters", "proposal_stale", "retry", "art_review_pending")
@@ -225,8 +253,7 @@ def public_job(row):
     if "chapter_results" in report:
         report["chapter_results"] = [
             {**{k: c[k] for k in ("number", "id", "version", "title", "status", "words", "image")},
-             "corrections": c.get("corrections", 0), "skills": proof_skills(c.get("generation", []),
-                 review_proofs(c.get("review") or {})),
+             "corrections": c.get("corrections", 0), "skills": proof_skills(review_proofs(c.get("review") or {})),
              "findings": public_findings(c.get("review") or {})}
             for c in report["chapter_results"]
         ]
@@ -246,12 +273,22 @@ def public_job(row):
         report["corrections"] = current["corrections"]
     if result.get("last_completed"):
         report["last_completed"] = result["last_completed"]
-    return {**report, "id": row["id"], "status": row["state"], "kind": payload["kind"],
+    status = row["state"]
+    if payload["kind"] == "story":
+        manifest = artifact_manifest(row, payload, result)
+        if status == "completed" and (not result.get("exports") or artifacts is not None and not artifacts):
+            status = "incomplete"
+            report.update(error="production_export_missing", phase="export_generation", art_review_pending=False)
+            manifest["exports"] = {}
+        report["manifest"] = {**manifest, "status": status}
+        if status == "completed":
+            report["downloads"] = {fmt: f"/api/production/jobs/{row['id']}/files/manuscript.{fmt}" for fmt in ("md", "mdx", "zip")}
+    return {**report, "id": row["id"], "status": status, "kind": payload["kind"],
             "total": len(payload["plan"]["chapters"]) if "plan" in payload else payload.get("count"),
             "project_id": payload["project_id"]}
 
 
-def plan_info(conn, pid, version=None):
+def plan_info(conn, pid, version=None, *, artifact_valid=None):
     organizer.require(conn, "project", pid)
     record, job = latest_plan(conn, pid), job_state(conn, pid)
     history = [dict(row) for row in conn.execute(
@@ -279,7 +316,7 @@ def plan_info(conn, pid, version=None):
             "approved": bool(record and record["state"] == "approved"),
             "historical": bool(record and record["version"] != latest), "history": history, "narrative": narrative,
             "impact": json.loads(record["impact"]) if record else None,
-            "job": public_job(job) if job else None}
+            "job": public_job(job, artifacts=artifact_valid(job) if artifact_valid else None) if job else None}
 
 
 def plan_version(conn, pid, plan, impact):
@@ -327,8 +364,11 @@ def impact_sources(conn, pid):
 def add_job(conn, sid, pid, payload, result, store_message, label, user_text, identifier=None):
     identifier = identifier or uuid.uuid4().hex
     at = time.time()
+    payload = {**payload, "project_id": pid, "session_id": sid}
+    if payload["kind"] == "story":
+        result["artifact_manifest"] = artifact_manifest({"id": identifier, "state": "queued"}, payload, result)
     conn.execute("INSERT INTO jobs(id,service,state,payload,result,created,updated) VALUES(?,'production','queued',?,?,?,?)",
-                 (identifier, dump({**payload, "project_id": pid, "session_id": sid}), dump(result), at, at))
+                 (identifier, dump(payload), dump(result), at, at))
     if sid:
         store_message(conn, sid, "user", user_text or label)
         store_message(conn, sid, "assistant", label, {"kind": "production-job", "job_id": identifier})
@@ -410,7 +450,7 @@ def planning_impact(conn, pid, base, plan, findings):
             "changed_chapters": changes, "global_change": global_change}
 
 
-def mutate(conn, pid, action, body, save_document, store_message):
+def mutate(conn, pid, action, body, save_document, store_message, *, artifact_valid=None):
     project = organizer.require(conn, "project", pid)
     sid = body.get("session_id")
     if sid and not conn.execute("SELECT 1 FROM chat_contexts WHERE chat_id=? AND context_id=?", (sid, pid)).fetchone():
@@ -424,9 +464,12 @@ def mutate(conn, pid, action, body, save_document, store_message):
         optional_review = job["state"] == "completed" and result.get("art_review_pending") is True
         if not optional_review and (job["state"] != "paused" or result.get("step") != "art_review"):
             story.error("production_transition_invalid", 409)
-        if optional_review and not manuscript(conn, pid)["complete"]:
+        if optional_review and not manuscript(conn, pid, artifact_valid=artifact_valid)["complete"]:
             story.error("production_transition_invalid", 409)
         result.pop("art_review_pending", None)
+        if action == "regenerate-art":
+            result.pop("exports", None)
+            result.pop("export_candidate", None)
         if action == "approve-art":
             result["whole_review"]["art_review"] = {"method": "visual-review", "reviewed_at": time.time(),
                 "images": [result["cover"]["id"], *(c["image"]["id"] for c in result["chapter_results"])]}
@@ -514,7 +557,11 @@ def mutate(conn, pid, action, body, save_document, store_message):
                 current = result.get("current", {})
                 if result.get("step") == "manuscript" and result.get("whole_review", {}).get("quality_version") != QUALITY_VERSION:
                     result.setdefault("quality_history", []).append(result.pop("whole_review"))
-                elif result.get("step") == "auditing" and (current.get("review") or {}).get("quality_version") != QUALITY_VERSION:
+                elif result.get("error") == "production_audit_evidence" and current:
+                    if prior_review := current.pop("review", None):
+                        current.setdefault("quality_history", []).append({"version": current.get("version"), "review": prior_review})
+                    current.pop("language_windows", None)
+                    current.pop("audit_windows", None)
                     result["step"] = "auditing"
             if result.get("error") == "production_manuscript_blocked" and "whole_review" in result:
                 receipts = result.get("chapter_results", [])
@@ -542,6 +589,9 @@ def mutate(conn, pid, action, body, save_document, store_message):
                                                                if key in result})
             for key in ("error", "detail", "next_at", "pause_reason", "failure_phase", "retry"):
                 result.pop(key, None)
+        stored_payload = json.loads(conn.execute("SELECT payload FROM jobs WHERE id=?", (job["id"],)).fetchone()[0])
+        if stored_payload["kind"] == "story":
+            result["artifact_manifest"] = artifact_manifest({"id": job["id"], "state": target}, stored_payload, result)
         conn.execute("UPDATE jobs SET state=?,result=?,updated=? WHERE id=?", (target, dump(result), time.time(), job["id"]))
         return {"id": job["id"], "status": target}, 200
     if action == "approve-plan":
@@ -601,7 +651,12 @@ def mutate(conn, pid, action, body, save_document, store_message):
         story.error("not_found", 404)
     if record["state"] != "approved" or body.get("mode") not in ("automatic", "together"):
         story.error("production_approval_required", 409)
-    visuals.ensure(conn, pid)
+    profile = visuals.ensure(conn, pid)
+    # The initial profile follows the approved visual direction until the author sets a profile explicitly.
+    requested_style = visuals.choice(plan["visual"]["style"], riff=profile["template"].startswith("riff-racers"))
+    if not profile["version"] and requested_style and requested_style != profile["template"]:
+        selected = {**visuals.template(requested_style), "id": pid, "version": 1}
+        conn.execute("UPDATE projects SET meta=json_set(meta,'$.visual_profile',json(?)) WHERE id=?", (dump(selected), pid))
     review_art = body.get("review_art", body["mode"] == "together")
     if type(review_art) is not bool:
         story.error("production_plan_invalid")
@@ -619,7 +674,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
     existing = {row["story_number"]: row for row in managed_docs(conn, pid)}
     if (job and job["state"] == "completed" and json.loads(job["payload"])["kind"] == "story"
             and json.loads(job["result"]).get("plan_version") == record["version"]):
-        if manuscript(conn, pid)["complete"]:
+        if manuscript(conn, pid, artifact_valid=artifact_valid)["complete"]:
             return {"id": job["id"], "status": "completed"}, 200
     for chapter in plan["chapters"]:
         number = chapter["number"]
@@ -645,7 +700,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         recovered.pop(key, None)
     if recovered.get("step") in ("done", "art_review"):
         recovered.update(step="manuscript", number=len(plan["chapters"]) + 1)
-        recovered.pop("whole_review", None)
+        recovered.pop("exports", None)
     recovered.setdefault("step", "writing")
     recovered.setdefault("number", 1)
     return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art, "visual_profiles": True}, recovered,
@@ -656,16 +711,21 @@ QUALITY_VERSION = 3
 QUALITY_FIELDS = ("quote", "related_quote", "issue", "correction")
 
 
+def audit_identifier(job_id, doc, review):
+    return hashlib.sha256(f"{job_id}:{doc['id']}:{doc['version']}:{review['hash']}".encode()).hexdigest()
+
+
 def confirmed_blockers(items):
     return [f for f in items if f.get("severity") == "blocking" and f.get("status") == "confirmed"]
 
 
 class ProductionWorker:
-    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope, *, visual_compose=None):
+    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope, *, visual_compose=None, exports=None, image_bytes=None):
         self.db, self.lock, self.call, self.fiction = db, lock, call, fiction
         self.image_queue, self.image_verify = image_queue, image_verify
         self.store_message, self.validate_scope = store_message, validate_scope
         self.visual_compose = visual_compose
+        self.exports, self.image_bytes = exports, image_bytes
 
     def commit(self, row, result, state="running", effect=None, *, retry=False):
         with self.lock, self.db() as conn:
@@ -678,8 +738,25 @@ class ProductionWorker:
                 effect(conn)
             if not retry:
                 result.pop("retry", None)
-            conn.execute("UPDATE jobs SET state=?,result=?,updated=? WHERE id=?",
-                         (state, dump(result), time.time(), row["id"]))
+            at = time.time()
+            if payload["kind"] == "story":
+                events = result.setdefault("events", [])
+                signature = (result.get("number"), result.get("failure_phase") or work_phase(result), state)
+                last = events[-1] if events else {}
+                if signature != (last.get("number"), last.get("step"), last.get("status")):
+                    if last:
+                        last["finished_at"] = at
+                    events.append({"number": signature[0], "step": signature[1], "status": state,
+                                   "started_at": row["updated"] if not last else at})
+                event = events[-1]
+                slot = image_slot(result)
+                event.update(document_id=result.get("current", {}).get("document_id"),
+                             image_job_id=slot.get("image_job"),
+                             attempts=max(event.get("attempts", 1), result.get("retry", {}).get("attempt", 0) + 1))
+                if state in ("completed", "paused", "failed"):
+                    event.update(finished_at=at, error=result.get("error"), detail=result.get("detail"))
+                result["artifact_manifest"] = artifact_manifest({"id": row["id"], "state": state}, payload, result)
+            conn.execute("UPDATE jobs SET state=?,result=?,updated=? WHERE id=?", (state, dump(result), at, row["id"]))
 
     def ask(self, lang, role, prompt, props, limit=1800):
         answer, proof = story.structured(self.call, lang, role, prompt, props, limit)
@@ -909,7 +986,7 @@ class ProductionWorker:
         total = story.sections(0, low, high)
         if len(parts) == total:
             text = "\n\n".join(parts)
-            if not low <= story.count_words(text) <= high:
+            if not 0 < story.count_words(text) <= high:
                 raise PlanError("story_length_failed")
 
             def save(conn):
@@ -960,8 +1037,10 @@ class ProductionWorker:
         measured = story.count_words(text)
         checked = story.check_text(text, {"lang": language, "words": None}, language_tools)
         current.setdefault("generation", []).append({**proof, "words": measured, "scene": index + 1})
-        if (finish == "length" or not lower <= measured <= upper or checked["issues"]
-                or len(duplicates) >= 2 or story.PRODUCTION_ASIDE.search(text)):
+        # Retain a usable final scene below target. The saved chapter is then expanded and re-audited.
+        minimum_usable = max(1, lower // 2) if index + 1 == total else lower
+        if (finish == "length" or not minimum_usable <= measured <= upper or checked["issues"]
+                or len(duplicates) >= 2 or story.PRODUCTION_ASIDE.search(text) or SIMULATED_OUTPUT.search(text)):
             current.update(attempt=attempt + 1, attempt_words=measured)
             if attempt >= 2:
                 current["attempt"] = 0
@@ -1044,7 +1123,8 @@ class ProductionWorker:
     def language_window(self, language, text, number, motifs):
         fiction = self.fiction()[0]
         response, proof = self.ask(language, "human-audit",
-            "Audit language only. Report objective grammar, tense, syntax, idiom, punctuation or accidental repetition. "
+            "Audit language only. Report objective spelling errors (missing, repeated, or transposed letters), "
+            "grammar, tense, syntax, idiom, punctuation or accidental repetition. Use grammar for spelling. "
             "Confirm only what is demonstrable in the supplied language and passage. Preserve deliberate literary "
             "devices, fragments, voice, dialogue and motifs. Quote the shortest unique affected phrase. In issue, "
             "explain the concrete rule broken in a complete sentence. In correction, specify exactly what to change. "
@@ -1133,6 +1213,8 @@ class ProductionWorker:
                   "language_proof": [w["proof"] for w in language_audits],
                   "language_verification_proof": [w["verification_proof"] for w in language_audits if w["verification_proof"]],
                   "hash": digest(body), "unverified_findings": sum(f["status"] == "unconfirmed" for f in findings),
+                  "local_evidence": {"skill": "human-writing", "method": "fiction_audit", "executed_at": time.time(),
+                                     "version": proof_skills([w["proof"] for w in language_audits]).get("human-writing")},
                   "quality_version": QUALITY_VERSION}
         current.pop("audit_windows", None)
         current.pop("language_windows", None)
@@ -1166,6 +1248,37 @@ class ProductionWorker:
         result["step"] = "reviewed"
         return self.commit(row, result)
 
+    def chapter_expansion(self, row, doc, current, result, canon, language, passes, low, high):
+        text = doc["body"]
+        words = story.count_words(text)
+        target = min(high - words, low - words + min(60, (high - low) // 2))
+        anchors = [block[-140:] for block in text.rstrip().split("\n\n")[:-1] if len(block.strip()) >= 35]
+        if not anchors:
+            anchors = [text.rstrip()[-140:]]
+        answer, proof = self.ask(language, "rewrite",
+            f"Add around {target} words of story prose from a missing planned beat or a necessary consequence. "
+            "Choose one anchor verbatim from the list. The addition goes directly after it. "
+            "Use the story language, point of view and tense. Keep the existing ending and all established facts. "
+            "No introductions, headings, repeated events, commentary or filler.\n" + canon + "\nANCHORS\n" + dump(anchors)
+            + "\nEXISTING CHAPTER\n" + story.snippet(text, 16000),
+            {"anchor": enum(anchors), "addition": STR}, min(5600, max(600, target * 4 + 300)))
+        addition, anchor = answer["addition"].strip(), answer["anchor"]
+        current["passes"] = passes + 1
+        patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": digest(text), "evidence": proof}
+        current.setdefault("patches", []).append(patch)
+        if (anchor in anchors and text.count(anchor) == 1 and addition and not SIMULATED_OUTPUT.search(addition)
+                and not story.PRODUCTION_ASIDE.search(addition) and not story.repeats(addition, text)):
+            end = text.index(anchor) + len(anchor)
+            candidate = text[:end] + "\n\n" + addition + text[end:]
+            if low <= story.count_words(candidate) <= high:
+                patch.update(candidate_hash=digest(candidate), edits=[{"after_anchor": anchor, "addition": addition}])
+                current.update(candidate=candidate, candidate_base_hash=digest(text), audit_windows=[],
+                               language_windows=[], proposed_corrections=1)
+                result["step"] = "auditing"
+                return self.commit(row, result)
+        patch["error"] = "story_length_failed"
+        return self.commit(row, result)
+
     def improve(self, row, plan, doc, current, result, canon):
         review = current["review"]
         if doc["version"] != current["version"] or review.get("quality_version") != QUALITY_VERSION:
@@ -1179,6 +1292,10 @@ class ProductionWorker:
         passes = current.get("passes", 0)
         editable = (doc["status"] != "approved" and doc["version_origin"] == "generated"
                     and current.get("automatic_version") == doc["version"])
+        chapter = plan["chapters"][doc["story_number"] - 1]
+        if editable and passes < 2 and review["words"] < chapter["minimum"]:
+            return self.chapter_expansion(row, doc, current, result, canon, language, passes,
+                                          chapter["minimum"], chapter["maximum"])
         if (local_edits or targeted) and passes < 2 and editable:
             if local_edits:
                 edits = local_edits
@@ -1241,8 +1358,13 @@ class ProductionWorker:
                     result["step"] = "auditing"
             return self.commit(row, result)
         current.setdefault("passes", passes)
-        if blockers:
-            result.update(pause_reason="blocker", detail=blockers)
+        if any(f.get("method") == "word_count" for f in blockers):
+            result.update(error="story_length_failed", detail={"words": review["words"]})
+            return self.commit(row, result, "failed")
+        language_defects = [item for item in [*targeted, *review["local"]] if item.get("status") == "confirmed"
+                            and item.get("severity") == "automatic" and item.get("category") in ("grammar", "punctuation")]
+        if blockers or language_defects:
+            result.update(pause_reason="blocker", detail=[*blockers, *language_defects])
             return self.commit(row, result, "paused")
         result["step"] = "text_finalize"
         return self.commit(row, result)
@@ -1252,6 +1374,10 @@ class ProductionWorker:
         if current.get("version") != doc["version"] or not review or review.get("quality_version") != QUALITY_VERSION:
             result["step"] = "auditing"
             return self.commit(row, result)
+        if not review_has_required_skills(review):
+            raise PlanError("production_audit_evidence")
+        if SIMULATED_OUTPUT.search(doc["body"]):
+            raise PlanError("production_placeholder")
         if confirmed_blockers(review["findings"]):
             result["step"] = "reviewed"
             return self.commit(row, result)
@@ -1286,6 +1412,7 @@ class ProductionWorker:
             scene_bible = {"characters": visual.get("characters"), "locations": visual.get("locations"),
                            "wardrobe": visual.get("wardrobe")} if not profile else {
                 "style": profile["style"], "chapter_records": visuals.records(profile, number, text),
+                "approved_visual_bible": {key: visual.get(key) for key in ("palette", "characters", "wardrobe", "locations", "atmosphere")},
                 "scene_direction": chapter["illustration"] if chapter else "Use the opening chapter for the cover.",
                 "earlier_observations": visual_observations(self.db(), payload["project_id"], number, text)
                     if profile["consistency"] else [],
@@ -1305,6 +1432,8 @@ class ProductionWorker:
             if not quote or quote not in source["body"]:
                 raise PlanError("production_image_evidence")
             prompt, alt = response["prompt"].strip(), response["alt"].strip()
+            if SIMULATED_OUTPUT.search(prompt) or SIMULATED_OUTPUT.search(alt):
+                raise PlanError("production_image_evidence")
             fallback = not prompt
             if fallback:
                 layout = f"{ratio} book cover" if cover else f"{ratio} chapter illustration"
@@ -1334,6 +1463,8 @@ class ProductionWorker:
                     slot["resolved_image"] = {"request": request, "visual_profile": metadata}
                     return self.commit(row, result)
                 request = slot["resolved_image"]["request"]
+                if ratio == "16:9" and visuals.ratio_for(request["size"]) != ratio:
+                    raise PlanError("image_dimensions_mismatch")
             else:
                 request = {"prompt": slot["image_prompt"]["prompt"], "size": size,
                            "preset": visual["preset"] or "none", "seed": seed}
@@ -1352,6 +1483,7 @@ class ProductionWorker:
             return self.commit(row, result, effect=queue)
         job = self.db().execute("SELECT * FROM jobs WHERE id=? AND service='image'", (slot["image_job"],)).fetchone()
         if not job or job["state"] in ("failed", "cancelled"):
+            slot["image_state"] = job["state"] if job else "failed"
             error = json.loads(job["result"] or "{}").get("error") if job else "image_job_not_found"
             result.update(error="production_image_uncertain" if error == "image_submission_uncertain" else "production_image_failed",
                           detail=error, failure_phase="image_archive" if error in
@@ -1413,7 +1545,9 @@ class ProductionWorker:
                        "candidate_audits": current.get("candidate_audits", []),
                        "original_version": current.get("original_version", doc["version"]),
                        "original_hash": current.get("original_hash", digest(doc["body"])), "final_hash": digest(doc["body"]),
-                       "quality_history": current.get("quality_history", []), "corrections": current.get("corrections", 0)}
+                       "quality_history": current.get("quality_history", []), "corrections": current.get("corrections", 0),
+                       "audit_id": audit_identifier(row["id"], doc, review),
+                       "revision_id": f"{doc['id']}:{doc['version']}" if current.get("corrections") else None}
             receipts = result.setdefault("chapter_results", [])
             receipts[chapter["number"] - 1:] = [receipt]
             result["last_completed"] = chapter["number"]
@@ -1485,9 +1619,49 @@ class ProductionWorker:
                 return self.commit(row, result, "paused")
             result["art_review_pending"] = True
         whole["words"] = sum(chapter["words"] for chapter in chapter_results)
-        result["step"] = "done"
+        result.update(step="export_generation")
         result.pop("current", None)
-        return self.commit(row, result, "completed")
+        return self.commit(row, result)
+
+    def export(self, row, payload, docs, result):
+        expected = payload["plan"]["chapters"]
+        receipts = result.get("chapter_results", [])
+        if len(receipts) != len(docs) or not result.get("cover"):
+            raise PlanError("production_manuscript_partial")
+        for plan, doc, receipt in zip(expected, docs, receipts, strict=True):
+            review = receipt.get("review") or {}
+            words = story.count_words(doc["body"])
+            if (receipt["id"] != doc["id"] or receipt["number"] != doc["story_number"]
+                    or receipt["version"] != doc["version"] or doc["status"] != "approved"
+                    or words != receipt["words"] or not plan["minimum"] <= words <= plan["maximum"]
+                    or SIMULATED_OUTPUT.search(doc["body"]) or review.get("hash") != digest(doc["body"])
+                    or not review_has_required_skills(review)):
+                raise PlanError("production_audit_evidence")
+            # Earlier checkpoints persisted the same in-process linter results without an audit ID.
+            receipt.setdefault("audit_id", audit_identifier(row["id"], doc, review))
+        for asset in [result["cover"], *(receipt["image"] for receipt in receipts)]:
+            job = self.db().execute("SELECT state,result FROM jobs WHERE id=? AND service='image'", (asset.get("job_id"),)).fetchone()
+            if not job or job["state"] != "completed" or json.loads(job["result"]).get("image_id") != asset["id"]:
+                raise PlanError("image_archive_missing")
+        document = material(payload, result, docs)
+        if result["step"] == "export_generation":
+            result["export_candidate"] = self.exports.build(row["id"], document, artifact_manifest(row, payload, result),
+                                                             manuscript_text, self.image_bytes)
+            result["step"] = "final_validation"
+            return self.commit(row, result)
+        candidate = result["export_candidate"]
+        try:
+            self.exports.validate(row["id"], candidate, document, manuscript_escape)
+        except PlanError as exc:
+            result.update(error=str(exc), failure_phase="final_validation", step="export_generation")
+            return self.commit(row, result, "failed")
+        result.update(exports=result.pop("export_candidate"), step="done")
+
+        def check_versions(conn):
+            latest = managed_docs(conn, payload["project_id"])
+            if [(d["id"], d["version"], d["status"]) for d in latest] != [(d["id"], d["version"], d["status"]) for d in docs]:
+                raise PlanError("story_context_changed")
+        return self.commit(row, result, "completed", effect=check_versions)
 
     def produce(self, row, payload, result):
         plan = payload["plan"]
@@ -1496,15 +1670,20 @@ class ProductionWorker:
         step, index = result["step"], result["number"] - 1
         if len(docs) != len(plan["chapters"]) or [d["story_number"] for d in docs] != list(range(1, len(docs) + 1)):
             raise PlanError("story_context_changed")
+        if step in ("cover", "manuscript", "export_generation", "final_validation") and len(finished) < len(docs):
+            result.update(number=len(finished) + 1, step="writing", current={})
+            return self.commit(row, result)
         for offset, (saved, doc) in enumerate(zip(finished, docs)):
             if (offset == index and step in ("awaiting_chapter", "advance") or offset >= index):
                 continue
             if (saved["version"] != doc["version"] or doc["status"] != "approved"
                     or organizer.purged_image(self.db(), saved["image"]["id"])):
                 result.update(number=offset + 1, step="writing", chapter_results=finished[:offset], current={})
-                for key in ("cover", "cover_work", "art_variant", "whole_review"):
+                for key in ("cover", "cover_work", "art_variant", "whole_review", "exports", "export_candidate"):
                     result.pop(key, None)
                 return self.commit(row, result)
+        if step in ("export_generation", "final_validation"):
+            return self.export(row, payload, docs, result)
         if step == "art_variant":
             slot = result["art_variant"]
             target = slot["number"] - 1
@@ -1612,7 +1791,20 @@ class ProductionWorker:
             time.sleep(0.8)
 
 
-def manuscript(conn, pid):
+def material(payload, result, docs):
+    plan = payload["plan"]
+    receipts = {chapter["id"]: chapter for chapter in result.get("chapter_results", [])}
+    chapters = [{"number": doc["story_number"], "id": doc["id"], "title": doc["title"], "body": doc["body"],
+                 "words": story.count_words(doc["body"]), "version": doc["version"], "status": doc["status"],
+                 "image": receipts.get(doc["id"], {}).get("image")}
+                for doc in docs]
+    return {"title": plan["title"], "subtitle": plan["subtitle"], "afterword": plan["afterword"],
+            "language": plan["language"], "cover": result.get("cover"), "chapters": chapters,
+            "plan_version": result["plan_version"], "words": sum(c["words"] for c in chapters),
+            "whole_review": result.get("whole_review")}
+
+
+def manuscript(conn, pid, *, artifact_valid=None):
     project = organizer.require(conn, "project", pid)
     job = conn.execute("""SELECT * FROM jobs WHERE service='production' AND json_extract(payload,'$.project_id')=?
                          AND json_extract(payload,'$.kind')='story' ORDER BY created DESC LIMIT 1""", (pid,)).fetchone()
@@ -1622,7 +1814,9 @@ def manuscript(conn, pid):
     plan = payload["plan"]
     docs = managed_docs(conn, pid)
     receipts = {chapter["id"]: chapter for chapter in result.get("chapter_results", [])}
-    ready = job["state"] == "completed" and len(docs) == len(plan["chapters"]) == len(receipts)
+    ready = (job["state"] == "completed" and bool(result.get("exports"))
+             and len(docs) == len(plan["chapters"]) == len(receipts)
+             and (artifact_valid is None or artifact_valid(job)))
     chapters = []
     for doc in docs:
         receipt = receipts.get(doc["id"])
@@ -1649,24 +1843,30 @@ def manuscript(conn, pid):
     return {"title": plan["title"], "subtitle": plan["subtitle"], "afterword": plan["afterword"],
             "language": plan["language"], "cover": cover, "chapters": chapters, "complete": ready,
             "plan_version": result["plan_version"], "words": sum(c["words"] for c in chapters),
-            "whole_review": result.get("whole_review")}
+            "whole_review": result.get("whole_review"), "production_id": job["id"],
+            "downloads": public_job(job)["downloads"] if ready else {}}
 
 
-def manuscript_text(manuscript, fmt, local_images=False):
+def manuscript_escape(text, fmt):
+    if fmt == "mdx":
+        # Story prose remains text when the consuming site parses MDX.
+        text = text.replace("&", "&amp;").replace("<", "&lt;").replace("{", "&#123;").replace("}", "&#125;")
+        text = re.sub(r"(?m)^( {0,3})(import|export)(?=\s|\{|\*)", lambda m: m[1] + "&#" + str(ord(m[2][0])) + ";" + m[2][1:], text)
+    return text
+
+
+def manuscript_text(manuscript, fmt, local_images=False, *, image_paths=None):
     lang = manuscript["language"]
     image_root = "images/" if local_images else "/api/images/files/"
     suffix = ".png" if local_images else ""
 
     def escape(text):
-        if fmt == "mdx":
-            # MDX interprets braces/HTML as executable expressions/components. Story prose is plain text.
-            text = text.replace("&", "&amp;").replace("<", "&lt;").replace("{", "&#123;").replace("}", "&#125;")
-            text = re.sub(r"(?m)^(import|export)(?=\s)", lambda m: "&#" + str(ord(m[0][0])) + ";" + m[0][1:], text)
-        return text
+        return manuscript_escape(text, fmt)
 
     def image(asset):
         alt = re.sub(r"[\[\]\r\n]", " ", escape(asset["alt"]))
-        return f"![{alt}]({image_root}{asset['id']}{suffix})"
+        url = image_paths[asset["id"]] if image_paths else image_root + asset["id"] + suffix
+        return f"![{alt}]({url})"
 
     title = manuscript["title"]
     parts = [f"# {escape(title)}"]

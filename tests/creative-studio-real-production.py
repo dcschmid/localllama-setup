@@ -2,7 +2,9 @@
 """Drive an explicitly authorized local production run and collect actual artifacts."""
 
 import argparse
-import base64
+import hashlib
+import re
+import struct
 import json
 import time
 import urllib.request
@@ -31,7 +33,8 @@ def watch(args):
     base = root + "/api/production/" + receipt["project_id"]
     previous = None
     paused = {"blocker", "art", "chapter", "user"}
-    while True:
+    deadline = time.monotonic() + args.timeout
+    while time.monotonic() < deadline:
         try:
             plan_info = http(base)
         except (URLError, TimeoutError):
@@ -59,7 +62,8 @@ def watch(args):
             save_json(run_path, receipt)
             continue
         if job["status"] in ("failed", "cancelled") or job.get("pause_reason") in paused or job["status"] == "completed":
-            save_json(folder / "job-report.json", http(base + "/report"))
+            report = http(base + "/report")
+            save_json(folder / "job-report.json", report)
             if job["kind"] == "story":
                 manuscript = http(base + "/manuscript")
                 target = folder / "material"
@@ -74,33 +78,50 @@ def watch(args):
                     (target / "cover.png").write_bytes(http(root + "/api/images/files/" + cover["id"], raw=True))
                 save_json(folder / "manuscript-state.json", {**manuscript, "chapters": [
                     {k: v for k, v in chapter.items() if k != "body"} for chapter in manuscript["chapters"]]})
-                if manuscript["complete"]:
+                if job["status"] == "completed":
+                    assert manuscript["complete"], manuscript
                     assert [chapter["number"] for chapter in manuscript["chapters"]] == list(range(1, args.chapters + 1))
                     assert all(args.minimum <= chapter["words"] <= args.maximum and chapter["image"] for chapter in manuscript["chapters"])
-                    if args.visual_profile:
-                        assets = [manuscript["cover"], *(chapter["image"] for chapter in manuscript["chapters"])]
-                        assert all(asset["dimensions"] == [1024, 576]
-                                   and asset["visual_profile"]["template"] == args.visual_profile for asset in assets)
-                    archive = http(base + "/export", {"format": "zip"})
-                    raw = base64.b64decode(archive["base64"])
-                    with zipfile.ZipFile(BytesIO(raw)) as bundle:
-                        assert bundle.testzip() is None
-                        images = [name for name in bundle.namelist() if name.endswith(".png")]
-                        texts = [name for name in bundle.namelist() if name.endswith((".md", ".mdx"))]
-                        assert len(images) == args.chapters + 1 and len(texts) == 2
-                        for name in texts:
-                            contents = bundle.read(name).decode()
-                            assert all(path in contents for path in images) and "/api/images/" not in contents
+                    manifest = job["manifest"]
+                    assert manifest["completed_chapters"] == args.chapters and manifest["verified_images"] == args.chapters + 1
+                    evidence = next(item["result"] for item in report if item["id"] == job["id"])
+                    for entry, chapter in zip(evidence["chapter_results"], manuscript["chapters"], strict=True):
+                        review = entry["review"]
+                        assert entry["audit_id"] and hashlib.sha256(chapter["body"].encode()).hexdigest() == review["hash"]
+                        assert "local" in review and review["language_proof"] and review["proof"]
+                        for lane, skill in (("language_proof", "human-writing"), ("proof", "story-writing")):
+                            assert any(s["name"] == skill and s["version"] for p in review[lane] for s in p["skills"])
+                    assets = [manuscript["cover"], *(chapter["image"] for chapter in manuscript["chapters"])]
+                    for asset, png_file in zip(assets, [target / "cover.png", *sorted(target.glob("chapter-*.png"))], strict=True):
+                        data = png_file.read_bytes()
+                        assert data.startswith(b"\x89PNG\r\n\x1a\n")
+                        width, height = struct.unpack_from(">II", data, 16)
+                        assert width * 9 == height * 16 and [width, height] == asset["dimensions"]
                         if args.visual_profile:
-                            metadata = json.loads(bundle.read("images/metadata.json"))
-                            assert {item["path"] for item in metadata} == set(images)
-                            assert all(item["alt"] and item["visual_profile"]["template"] == args.visual_profile for item in metadata)
-                    (folder / archive["name"]).write_bytes(raw)
-                    for fmt in ("md", "mdx"):
-                        export = http(base + "/export", {"format": fmt})
-                        (folder / export["name"]).write_text(export["text"], encoding="utf-8")
+                            assert asset["visual_profile"]["template"] == args.visual_profile
+                    paths = job["downloads"]
+                    files = {fmt: http(root + paths[fmt], raw=True) for fmt in ("md", "mdx", "zip")}
+                    for fmt, data in files.items():
+                        name = f"manuscript.{fmt}"
+                        assert hashlib.sha256(data).hexdigest() == manifest["exports"][name]["sha256"]
+                        (folder / name).write_bytes(data)
+                    with zipfile.ZipFile(BytesIO(files["zip"])) as bundle:
+                        assert bundle.testzip() is None
+                        bundled = json.loads(bundle.read("manifest.json"))
+                        assert bundled["status"] == "completed" and "mdx_compile" in bundled["checks"]
+                        assert len(bundled["images"]) == args.chapters + 1
+                        for fmt in ("md", "mdx"):
+                            assert bundle.read(f"manuscript.{fmt}") == files[fmt]
+                            contents = files[fmt].decode()
+                            assert len(re.findall(r"(?m)^## (?:Kapitel|Chapter) [0-9]+$", contents)) == args.chapters
+                            assert all(f"]({entry['path']})" in contents for entry in bundled["images"])
+                        for entry in bundled["images"]:
+                            image = bundle.read(entry["path"])
+                            assert image == http(root + paths["md"].rsplit("/", 1)[0] + "/" + entry["path"], raw=True)
+                            assert hashlib.sha256(image).hexdigest() == entry["sha256"]
             return 0 if job["status"] == "completed" else 2
         time.sleep(8)
+    return 3
 
 
 if __name__ == "__main__":
@@ -111,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--minimum", type=int, default=1000)
     parser.add_argument("--maximum", type=int, default=1500)
     parser.add_argument("--visual-profile")
+    parser.add_argument("--timeout", type=int, default=5400, help="Maximum number of seconds to follow the job.")
     parser.add_argument("--start-approved-test", action="store_true",
                         help="Approve the distinct test proposal and start the authorized live test.")
     raise SystemExit(watch(parser.parse_args()))

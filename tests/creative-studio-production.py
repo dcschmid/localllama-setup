@@ -9,6 +9,7 @@ import runpy
 import struct
 import threading
 import zlib
+import zipfile
 import sys
 import tempfile
 import unittest
@@ -35,7 +36,9 @@ def example_plan():
 
 def fake_model(lang, role, prompt, tokens, schema=None):
     def data(value):
-        return json.dumps(value), {"model_id": "fixture", "skill_version": "fixture", "role": role}, "stop"
+        skills = [{"name": name, "version": "fixture"} for name in
+                  {"human-audit": ("human-writing",), "audit": ("story-writing",)}.get(role, ())]
+        return json.dumps(value), {"model_id": "fixture", "skill_version": "fixture", "role": role, "skills": skills}, "stop"
     if role == "write":
         return PROSE, {"model_id": "fixture", "role": role}, "stop"
     keys = schema["properties"]
@@ -93,7 +96,8 @@ class Fixture:
         self.worker = self.backend["production_worker"]
         self.worker.call = fake_model
         self.worker.visual_compose = None
-        self.worker.image_verify = lambda image, size: [int(side) for side in size.split("x")]
+        self.worker.image_verify = lambda image, size: self.backend["png_dimensions"](png(size), size)
+        self.worker.image_bytes = lambda image, size: png(size)
         return self
 
     def __exit__(self, *_):
@@ -141,6 +145,138 @@ class Fixture:
 
 
 class ProductionTests(unittest.TestCase):
+    def test_placeholder_in_image_response_never_creates_an_image_job(self):
+        with Fixture() as f:
+            f.start()
+            def simulated(lang, role, prompt, tokens, schema=None):
+                if role == "image":
+                    return json.dumps({"passage": "1", "alt": "Mara", "prompt": "Simuliertes Bild: Low-Poly"}), {}, "stop"
+                return fake_model(lang, role, prompt, tokens, schema)
+            f.worker.call = simulated
+            for _ in range(40):
+                row = production.job_state(f.conn, f.pid)
+                if row["state"] == "failed":
+                    break
+                f.worker.tick()
+                with f.conn:
+                    f.conn.execute("UPDATE jobs SET result=json_remove(result,'$.next_at') WHERE id=?", (row["id"],))
+            report = production.public_job(row)
+            self.assertEqual(report["error"], "production_image_evidence")
+            self.assertFalse(report.get("downloads"))
+            self.assertEqual(report["manifest"]["verified_images"], 0)
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 0)
+
+    def test_incomplete_chapters_resume_automatically_and_stop_on_failed_image(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            chapter = plan["chapters"][0]
+            plan["chapters"] = [{**chapter, "number": n, "title": f"Drawer {n}", "beats": f"Mara finds record {n}."}
+                                for n in range(1, 4)]
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            f.change("start", version=1, mode="automatic", review_art=False)
+            docs = production.managed_docs(f.conn, f.pid)
+            for doc in docs[:2]:
+                with f.conn:
+                    production.organizer.update_document(f.conn, doc, doc["title"], PROSE, "Existing draft", "user", "en")
+            self.assertFalse(production.manuscript(f.conn, f.pid)["complete"])
+            for _ in range(110):
+                row = production.job_state(f.conn, f.pid)
+                result = json.loads(row["result"])
+                if result.get("number") == 3:
+                    break
+                f.uploads()
+                f.worker.tick()
+            self.assertEqual((row["state"], result["number"], result["step"]), ("running", 3, "writing"))
+            f.conn.close()
+            del f.backend["_dbs"].conn
+            f.conn = f.backend["db"]()
+            for _ in range(40):
+                f.worker.tick()
+                row = production.job_state(f.conn, f.pid)
+                if child := json.loads(row["result"])["current"].get("image_job"):
+                    with f.conn:
+                        f.conn.execute("UPDATE jobs SET state='failed',result=? WHERE id=?",
+                                       ('{"error":"image_service_unreachable"}', child))
+                    break
+            f.worker.tick()
+            row = production.job_state(f.conn, f.pid)
+            self.assertEqual((row["state"], production.public_job(row)["error"]), ("failed", "production_image_failed"))
+            current = production.manuscript(f.conn, f.pid)
+            self.assertEqual([c["body"] for c in current["chapters"]], [PROSE] * 3)
+            self.assertEqual([c["version"] for c in current["chapters"]], [2, 2, 2])
+            self.assertEqual([c["image"] is not None for c in current["chapters"]], [True, True, False])
+            self.assertFalse(current["complete"])
+            f.change("retry", job_id=row["id"])
+            done = f.drive()
+            self.assertEqual(done["state"], "completed")
+            receipt = json.loads(done["result"])["exports"]
+            archive = f.worker.exports.file(row["id"], receipt, "manuscript.zip")
+            with zipfile.ZipFile(archive) as bundle:
+                self.assertEqual({name for name in bundle.namelist() if name.endswith(".png")},
+                                 {"images/cover.png", "images/chapter-01.png", "images/chapter-02.png", "images/chapter-03.png"})
+                self.assertEqual(bundle.read("manuscript.md").decode().count(PROSE), 3)
+                self.assertEqual(bundle.read("manuscript.mdx").decode().count(PROSE), 3)
+                manifest = json.loads(bundle.read("manifest.json"))
+                self.assertEqual(manifest["verified_images"], 4)
+                self.assertTrue(all(c["audit_id"] for c in manifest["chapters"]))
+            path = f.worker.exports.file(row["id"], receipt, "manuscript.md")
+            path.write_bytes(b"x" * path.stat().st_size)
+            self.assertFalse(f.backend["artifacts_available"](done))
+            self.assertEqual(production.public_job(done, artifacts=False)["status"], "incomplete")
+            self.assertFalse(production.public_job(done, artifacts=False).get("downloads"))
+
+    def test_short_generated_chapter_gets_an_audited_scene_expansion(self):
+        with Fixture() as f:
+            f.start()
+            short = PROSE.rsplit(" The lock", 1)[0]
+            addition = "Nera turned the key in her hand and compared its teeth with the marks Mara had drawn."
+
+            def expanding(lang, role, prompt, tokens, schema=None):
+                if role == "write":
+                    return short, {}, "stop"
+                if role == "rewrite" and "anchor" in schema["properties"]:
+                    return json.dumps({"anchor": short[-140:], "addition": addition}), {}, "stop"
+                return fake_model(lang, role, prompt, tokens, schema)
+
+            f.worker.call = expanding
+            row = f.drive()
+            result = json.loads(row["result"])
+            c = result["chapter_results"][0]
+            self.assertEqual(c["original_version"], 2)
+            self.assertEqual(c["version"], 3)
+            self.assertEqual(c["corrections"], 1)
+            self.assertTrue(c["candidate_audits"][0]["accepted"])
+            self.assertEqual(production.managed_docs(f.conn, f.pid)[0]["body"], short + "\n\n" + addition)
+            f.change("approve-art", job_id=row["id"])
+            self.assertEqual(f.drive()["state"], "completed")
+
+    def test_in_range_words_and_both_audit_proofs_gate_completion(self):
+        with Fixture() as f:
+            f.start()
+            doc = production.managed_docs(f.conn, f.pid)[0]
+            with f.conn:
+                production.organizer.update_document(f.conn, doc, doc["title"], "Mara opened the drawer.", "Short draft", "user", "en")
+            row = f.drive()
+            self.assertEqual(production.public_job(row)["error"], "story_length_failed")
+            self.assertEqual(production.manuscript(f.conn, f.pid)["chapters"][0]["words"], 4)
+            self.assertFalse(production.public_job(row).get("downloads"))
+        with Fixture() as f:
+            f.start()
+            def missing_proof(lang, role, prompt, tokens, schema=None):
+                output, proof, stop = fake_model(lang, role, prompt, tokens, schema)
+                if role == "human-audit":
+                    proof["skills"] = []
+                return output, proof, stop
+            f.worker.call = missing_proof
+            row = f.drive()
+            report = production.public_job(row)
+            self.assertEqual(report["error"], "production_audit_evidence")
+            self.assertNotIn("human-writing", report["skills"])
+            self.assertFalse(report.get("chapter_results"))
+            self.assertFalse(report.get("downloads"))
+
     def test_image_preflight_releases_only_its_sleeping_writer_and_rechecks_gpu(self):
         with Fixture() as f:
             f.backend["gpu_holders"] = lambda: [(6, "/usr/bin/kwin_wayland", 7),
@@ -285,8 +421,10 @@ class ProductionTests(unittest.TestCase):
             f.worker.call = invalid_patch
             for _ in range(3):
                 f.worker.tick()
-            result = json.loads(production.job_state(f.conn, f.pid)["result"])
-            self.assertEqual(result["step"], "text_finalize")
+            row = production.job_state(f.conn, f.pid)
+            result = json.loads(row["result"])
+            self.assertEqual(row["state"], "paused")
+            self.assertEqual(result["pause_reason"], "blocker")
             self.assertEqual(result["current"]["passes"], 2)
             self.assertEqual([p["error"] for p in result["current"]["patches"]], ["story_model_format"] * 2)
             self.assertEqual(production.managed_docs(f.conn, f.pid)[0]["body"], PROSE)
@@ -335,7 +473,7 @@ class ProductionTests(unittest.TestCase):
             f.conn = f.backend["db"]()
             f.worker = production.ProductionWorker(f.backend["db"], f.backend["_lock"], fake_model,
                 f.backend["production_skill"], f.backend["queue_image"], lambda *_: [768, 768],
-                f.backend["store_message"], f.backend["running_work"])
+                f.backend["store_message"], f.backend["running_work"], exports=f.worker.exports, image_bytes=f.worker.image_bytes)
             f.change("resume", job_id=identifier)
             art = f.drive()
             self.assertEqual(json.loads(art["result"])["step"], "art_review")
@@ -637,7 +775,10 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(job["state"], "paused")
             saved = production.managed_docs(f.conn, f.pid)[0]
             self.assertEqual((saved["body"], saved["version"], saved["version_origin"]), (manual, version, "user"))
-            self.assertEqual(json.loads(job["result"])["chapter_results"][0]["corrections"], 0)
+            result = json.loads(job["result"])
+            self.assertEqual(result["pause_reason"], "blocker")
+            self.assertNotIn("chapter_results", result)
+            self.assertFalse(result["current"].get("corrections"))
 
     def test_model_patches_reject_bad_joins_overlap_and_new_duplicates(self):
         with Fixture() as f:
@@ -747,10 +888,12 @@ def serve_fixture(port):
     threading.Thread(target=image_server.serve_forever, daemon=True).start()
     upstream = f"http://127.0.0.1:{image_server.server_port}"
     os.environ.update(CREATIVE_STUDIO_PORT=str(port), CREATIVE_STUDIO_IMAGES=upstream, CREATIVE_STUDIO_ROUTER=upstream,
-                      CREATIVE_STUDIO_RESEARCH=upstream, CREATIVE_STUDIO_WEB=str(ROOT / "packages/creative-studio/web/dist"))
+                      CREATIVE_STUDIO_RESEARCH=upstream)
+    os.environ.setdefault("CREATIVE_STUDIO_WEB", str(ROOT / "packages/creative-studio/web/dist"))
     with Fixture() as fixture:
         fixture.backend["gpu_free"] = lambda **_: (True, "")
-        fixture.worker.image_verify = fixture.backend["verify_image_file"]
+        fixture.worker.image_verify = fixture.backend["verify_production_image"]
+        fixture.worker.image_bytes = fixture.backend["production_image_bytes"]
         fixture.backend["cmd_serve"]()
 
 

@@ -1,6 +1,6 @@
 import { receiptMarkup, type VisualReceipt } from './visual';
 import { esc, json, post } from './core';
-import { button, dialogForm, download, markdown, productionErrors, showDialog } from './studio-ui';
+import { button, dialogForm, markdown, productionErrors, showDialog } from './studio-ui';
 
 type Section = Record<string, string>;
 type Image = { visual_profile?: VisualReceipt; id: string; alt: string };
@@ -15,6 +15,8 @@ export type ProductionPlan = {
 };
 export type ProductionJob = {
   id: string; project_id: string; status: string; kind: 'plan' | 'planning' | 'story'; step: string; number?: number; total?: number;
+  downloads?: Partial<Record<'md' | 'mdx' | 'zip', string>>;
+  manifest?: { completed_chapters: number; expected_chapters: number; verified_images: number; required_images: number };
   phase?: string; image_state?: string; image_waiting?: string; retry?: { attempt: number; code: string };
   answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
   skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
@@ -26,7 +28,7 @@ export type ProductionInfo = { plan: ProductionPlan | null; version: number | nu
   impact?: { findings: Finding[]; outline_findings?: Finding[]; versions?: Record<string, number>;
     changed_chapters?: number[]; global_change?: boolean }; job: ProductionJob | null };
 export type Manuscript = { title: string; subtitle: string; language: string; complete: boolean; words: number; cover?: Image;
-  afterword: string; chapters: Chapter[]; whole_review?: { reviews?: Array<{ assessment: string; findings: Finding[] }>; repetitions?: Finding[] } };
+  afterword: string; downloads?: ProductionJob['downloads']; chapters: Chapter[]; whole_review?: { reviews?: Array<{ assessment: string; findings: Finding[] }>; repetitions?: Finding[] } };
 
 const root = (pid: string) => '/api/production/' + encodeURIComponent(pid);
 export const productionInfo = (pid: string, version?: number) => json<ProductionInfo>(root(pid) + (version ? '?version=' + version : ''));
@@ -74,7 +76,8 @@ const stateLabels: Record<string, string> = { planning: 'Story-Planung', impact:
   illustrating: 'Illustration vorbereiten', image_prompt: 'Bildszene wird ausgewählt', image_queue: 'Bildauftrag wird angelegt',
   image_wait: 'Bildauftrag wartet', image_archive: 'Bilddatei wird geprüft', finalizing: 'Kapitel wird abgeschlossen',
   awaiting_chapter: 'Kapitel zur Freigabe', advance: 'Kapitel abgeschlossen', cover: 'Titelbild',
-  manuscript: 'Manuskriptprüfung', art_variant: 'Bildvariante erzeugen', art_review: 'Illustrationen zur Sichtprüfung', done: 'Geschichte fertig' };
+  manuscript: 'Manuskript wird geprüft', export_generation: 'Exportdateien werden erstellt',
+  final_validation: 'Manuskript und Dateien werden validiert', art_variant: 'Bildvariante erzeugen', art_review: 'Illustrationen zur Sichtprüfung', done: 'Geschichte fertig' };
 
 const failureLabels: Record<string, string> = {
   writing: 'Schreiben fehlgeschlagen', auditing: 'Textprüfung fehlgeschlagen', reviewed: 'Automatische Überarbeitung fehlgeschlagen',
@@ -207,7 +210,7 @@ export function editPlanDialog(info: ProductionInfo, submit: (values: object) =>
 export function productionCard(job: ProductionJob | undefined, chapters: Map<string, { body: string; version: number }>,
   media: (id: string, alt: string, actions?: boolean) => string) {
   if (!job) return '<p>Produktionsstatus wird geladen …</p>';
-  const term = ['completed', 'cancelled'].includes(job.status);
+  const term = ['completed', 'cancelled', 'incomplete'].includes(job.status);
   const phase = job.phase ?? job.step;
   let label = stateLabels[phase] ?? 'Produktion';
   if (phase === 'image_wait' && job.image_state === 'waiting_gpu') label = 'Bildauftrag wartet auf einen freien GPU-Slot';
@@ -215,6 +218,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     label = job.step === 'cover' ? 'Titelbild wird generiert' : 'Kapitelbild wird generiert';
   }
   if (phase === 'image_wait' && job.image_state === 'submitting') label = 'Bildauftrag wird an den Bilddienst übergeben';
+  if (job.status === 'incomplete') label = 'Produktion unvollständig';
   if (job.status === 'failed') label = failureLabels[phase] ?? label + ' fehlgeschlagen';
   if (job.number && job.total && job.number <= job.total) label = `Kapitel ${job.number} von ${job.total} · ${label}`;
   if (job.status === 'paused' && job.pause_reason !== 'chapter') label = 'Pausiert · ' + label;
@@ -225,6 +229,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     : job.status === 'paused' ?
     button('production-resume', job.pause_reason === 'chapter' ? 'Kapitel freigeben und fortsetzen' :
       job.recheck_available ? 'Gespeichertes Kapitel erneut prüfen' : 'Fortsetzen', undefined, 'button', job.id)
+    : job.status === 'incomplete' ? button('production-recover', 'Produktion vervollständigen', undefined, 'button', job.project_id)
     : job.status === 'failed' ? button('production-retry', 'Schritt erneut ausführen', undefined, 'button', job.id)
     : term ? '' : button('production-pause', 'Pausieren', undefined, 'button', job.id);
   const items = job.chapter_results ?? [];
@@ -239,7 +244,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     ${job.status !== 'failed' && job.image_waiting === 'writer_gpu_release' ? '<p>Das Schreibmodell gibt den GPU-Slot frei.</p>' : ''}
     ${job.audit_lane === 'continuity' ? '<p>Story Writing prüft die Kontinuität.</p>' : ''}
     ${job.retry && !job.error ? `<p>Automatischer Wiederholungsversuch ${job.retry.attempt}.</p>` : ''}
-    ${job.answer ? '<div class="prose">' + markdown(job.answer) + '</div>' : ''}
+    ${job.answer ? '<div class="prose">' + markdown(job.answer, false) + '</div>' : ''}
     ${job.compared_chapters?.length ? '<p>Verglichene Kapitel · ' + esc(job.compared_chapters.join(', ')) + '</p>' : ''}
     ${job.planning_findings?.length ? '<details open><summary>Befunde zur Planung</summary>' + issueMarkup(job.planning_findings) + '</details>' : ''}
     ${job.proposal_stale ? '<p>Die Planung hat sich während der Prüfung geändert. Prüfe die aktuelle Version erneut.</p>' : ''}
@@ -252,9 +257,13 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
         Array.isArray(job.detail) ? issueMarkup(job.detail as Finding[]) : '') + '</details>' : ''}
     <div class="editor-actions">${controls}${job.pause_reason === 'blocker' && !job.recheck_available && job.draft_document_id ?
       button('production-edit-chapter', 'Konflikt im Kapitel bearbeiten', undefined, 'button', job.draft_document_id) : ''}
+    ${job.draft_document_id && !items.some(ch => ch.id === job.draft_document_id) ?
+      button('open-doc', 'Gespeicherten Kapiteltext öffnen', undefined, 'button quiet', job.draft_document_id) : ''}
     ${term ? '' : button('production-cancel', 'Abbrechen', undefined, 'button quiet', job.id)}
     ${job.kind === 'plan' && job.status === 'completed' ? button('production-plan', 'Planung öffnen', 'book', 'button', job.project_id) : ''}
     ${job.kind === 'planning' && job.plan_version ? button('production-plan-version', 'Planentwurf öffnen', 'book', 'button', job.project_id + ':' + job.plan_version) : ''}
+    ${job.manifest ? `<p>${job.manifest.completed_chapters} / ${job.manifest.expected_chapters} Kapitel · ${job.manifest.verified_images} / ${job.manifest.required_images} geprüfte Bilder</p>` : ''}
+    ${downloadLinks(job.downloads)}
     ${job.kind === 'story' && items.length ? button('production-manuscript', 'Manuskript öffnen', 'book', 'button', job.project_id) : ''}</div>
     ${items.map(ch => {
       const doc = chapters.get(ch.id);
@@ -297,17 +306,29 @@ export function manuscriptDialog(doc: Manuscript, pid: string, chapterNumber = 1
     <nav class="editor-actions" aria-label="Kapitelnavigation">${doc.chapters.map(c =>
       `<button type="button" class="button quiet" data-action="production-read-chapter" data-value="${esc(pid)}:${c.number}"
         ${c.number === chapterNumber ? 'aria-current="page"' : ''}>${c.number}. ${esc(c.title)}</button>`).join('')}</nav>
-    ${chapter ? `<article class="prose"><h3>${esc(chapter.title)}</h3>${thumbnail(chapter.image)}${markdown(chapter.body ?? '')}</article>` : ''}
+    ${chapter ? `<article class="prose"><h3>${esc(chapter.title)}</h3>${thumbnail(chapter.image)}${markdown(chapter.body ?? '', false)}</article>` : ''}
     ${chapterNumber === doc.chapters.length && doc.afterword ? '<div class="prose"><h3>Nachwort</h3>' + markdown(doc.afterword) + '</div>' : ''}
     ${doc.whole_review ? `<details><summary>Manuskriptprüfung</summary>${(doc.whole_review.reviews ?? []).map(r =>
       '<p>' + esc(r.assessment) + '</p>' + issueMarkup(r.findings)).join('')}${issueMarkup(doc.whole_review.repetitions)}</details>` : ''}
-    ${doc.complete ? `<div class="editor-actions">${['md', 'mdx', 'zip'].map((fmt) =>
-      button('production-export', fmt.toUpperCase() + ' herunterladen', undefined, 'button', pid + ':' + fmt)).join('')}</div>` : ''}`, true);
+    ${doc.complete ? downloadLinks(doc.downloads) : ''}`, true);
+}
+
+function downloadLinks(links: ProductionJob['downloads']) {
+  if (!links || !Object.keys(links).length) return '';
+  return '<div class="editor-actions">' + Object.entries(links).map(([fmt, url]) =>
+    /^\/api\/production\/jobs\/[a-f0-9]{32}\/files\/manuscript\.(md|mdx|zip)$/.test(url)
+      ? `<a class="button" href="${esc(url)}" download>${esc(fmt.toUpperCase())} herunterladen</a>` : '').join('') + '</div>';
 }
 
 export async function exportManuscript(pid: string, format: string) {
-  const result = await post<{ name: string; base64?: string; text?: string }>(root(pid) + '/export', { format });
-  if (result.base64) download(result.name, Uint8Array.from(atob(result.base64), c => c.charCodeAt(0)), 'application/zip');
-  else download(result.name, result.text ?? '');
+  if (format !== 'md' && format !== 'mdx' && format !== 'zip') return;
+  const document = await manuscript(pid);
+  const url = document.downloads?.[format];
+  if (!url || !/^\/api\/production\/jobs\/[a-f0-9]{32}\/files\/manuscript\.(md|mdx|zip)$/.test(url)) {
+    throw new Error('production_manuscript_partial');
+  }
+  const link = window.document.createElement('a');
+  link.href = url;
+  link.download = '';
+  link.click();
 }
-

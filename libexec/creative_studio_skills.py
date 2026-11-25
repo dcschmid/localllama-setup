@@ -85,6 +85,8 @@ def resolve(root, language, domain, phase, *, lane="combined"):
             references += ["patterns-core", "fidelity-rules"]
         if phase in ("generate", "audit", "rewrite"):
             references.append("quality-gates")
+            if domain == "story":
+                references.append("long-form-fiction")
         load(HUMAN, references)
     if domain in PROFILES and lane != "language" and phase != "image":
         load(STORY if domain == "story" else ARTICLE, PROFILES[domain][phase])

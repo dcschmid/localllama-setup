@@ -76,7 +76,14 @@ export const productionErrors: Record<string, string> = {
   production_fix_required: 'Bearbeite zuerst den Konflikt im Kapitel und speichere die Änderung.',
   production_impact_required: 'Prüfe und bestätige die Auswirkungen der Planänderung.',
   production_art_review_required: 'Bestätige die Bildserie nach der Sichtprüfung.',
-  production_manuscript_partial: 'Der vollständige Export ist verfügbar, sobald Texte und Bilder geprüft sind.',
+  production_manuscript_partial: 'Der vollständige Export ist verfügbar, sobald Texte, Bilder und Dateien geprüft sind.',
+  production_manuscript_missing: 'Zu diesem Chat ist kein Manuskript in der Story-Produktion gespeichert.',
+  production_export_missing: 'Mindestens eine geprüfte Exportdatei fehlt oder wurde verändert.',
+  production_export_invalid: 'Der Export stimmt nicht mit den gespeicherten Kapiteln und Bildern überein.',
+  production_mdx_invalid: 'Der lokale MDX-Compiler konnte das Manuskript nicht lesen.',
+  production_mdx_tool_unavailable: 'Der lokale MDX-Compiler ist nicht verfügbar.',
+  production_audit_evidence: 'Für mindestens ein Kapitel fehlt der technische Nachweis der Textprüfung.',
+  production_placeholder: 'Der Kapiteltext enthält einen Platzhalter aus einer Modellantwort.',
   production_role_unavailable: 'Das konfigurierte lokale Modellprofil ist derzeit nicht verfügbar.',
   production_context_budget: 'Dieses Modellprofil hat für den nächsten Abschnitt zu wenig Kontext.',
   production_image_evidence: 'Die ausgewählte Szene ließ sich im gespeicherten Kapitel nicht belegen.',
@@ -175,7 +182,7 @@ export function safeImageId(value: unknown): value is string {
 
 export function imageUrl(id: string) { return '/api/images/files/' + encodeURIComponent(id); }
 
-export function markdown(value: string) {
+export function markdown(value: string, verifiedAttachments = true) {
   const template = document.createElement('template');
   template.innerHTML = micromark(value);
   for (const heading of template.content.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
@@ -185,13 +192,16 @@ export function markdown(value: string) {
     heading.replaceWith(adjusted);
   }
   for (const img of template.content.querySelectorAll('img')) {
-    if (!/^\/api\/images\/files\/[a-f0-9]{32}$/.test(img.getAttribute('src') ?? '')) {
+    if (!verifiedAttachments || !/^\/api\/images\/files\/[a-f0-9]{32}$/.test(img.getAttribute('src') ?? '')) {
       img.replaceWith(document.createTextNode(img.alt));
     } else img.loading = 'lazy';
   }
   for (const link of template.content.querySelectorAll('a')) {
     const url = link.getAttribute('href') ?? '';
-    if (/^https?:\/\//i.test(url)) {
+    if (!verifiedAttachments && (/\b(?:download|herunterlad\w*|export(?:datei)?)\b/iu.test(link.textContent ?? '')
+      || /\.(?:mdx?|zip|png)(?:[?#]|$)/iu.test(url))) {
+      link.removeAttribute('href');
+    } else if (/^https?:\/\//i.test(url)) {
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
     } else if (!url.startsWith('#') || url.startsWith('#/')) {
