@@ -6,7 +6,7 @@ type Image = { id: string; alt: string };
 type Finding = { quote: string; issue: string; severity?: string; chapter?: string; category?: string; status?: string;
   method?: string; correction?: string; related_quote?: string; verification?: string; line?: number };
 type Chapter = { id: string; number: number; title: string; version: number; words: number; status: string;
-  body?: string; image?: Image; corrections?: number; findings?: Finding[] };
+  body?: string; image?: Image; corrections?: number; findings?: Finding[]; skills?: Record<string, string> };
 export type ProductionPlan = {
   title: string; subtitle: string; afterword: string;
   bible: Section; bible_records?: Record<string, Section[]>; visual: Section; chapters: Array<{ title: string; number: number; minimum: number; maximum: number }>;
@@ -16,6 +16,7 @@ export type ProductionJob = {
   id: string; project_id: string; status: string; kind: 'plan' | 'planning' | 'story'; step: string; number?: number; total?: number;
   phase?: string; image_state?: string; image_waiting?: string; retry?: { attempt: number; code: string };
   answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
+  skills?: Record<string, string>; audit_lane?: string;
   pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
 export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean;
@@ -33,7 +34,7 @@ export const productionAct = (pid: string, action: string, values: object) => po
 export const manuscript = (pid: string) => json<Manuscript>(root(pid) + '/manuscript');
 
 const mainLabels = {
-  title: 'Arbeitstitel', subtitle: 'Untertitel', genre: 'Genre', perspective: 'Erzählperspektive', tone: 'Tonalität',
+  title: 'Arbeitstitel', subtitle: 'Untertitel', genre: 'Genre', audience: 'Zielgruppe', perspective: 'Erzählperspektive', tone: 'Tonalität',
   setting: 'Setting', main_characters: 'Hauptfiguren', supporting_characters: 'Nebenfiguren',
   character_goals: 'Ziele', character_conflicts: 'Charakterkonflikte', backstory: 'Vorgeschichte',
   central_conflict: 'Zentraler Konflikt', dramatic_arc: 'Dramaturgie', turning_points: 'Wendepunkte',
@@ -53,6 +54,8 @@ const bibleRecordLabels: Record<string, { label: string; fields: Section }> = {
     travel: 'Weg und Reisezeit', depends_on: 'Voraussetzung' } },
   knowledge: { label: 'Figurenwissen', fields: { character: 'Figur', fact: 'Information',
     learns_when: 'Erfährt es wann', how: 'Erfährt es wie' } },
+  objects: { label: 'Gegenstände', fields: { name: 'Name', quantity: 'Anzahl', markings: 'Merkmale',
+    initial_holder: 'Anfangs bei', location: 'Ort', transitions: 'Wechsel' } },
   threads: { label: 'Handlungsstränge', fields: { name: 'Handlungsstrang', status: 'Stand',
     foreshadowing: 'Foreshadowing', payoff: 'Payoff' } },
 };
@@ -66,7 +69,7 @@ const number = new Intl.NumberFormat('de');
 const stateLabels: Record<string, string> = { planning: 'Story-Planung', impact: 'Planauswirkungen prüfen',
   planning_audit: 'Planung wird geprüft', planning_revise: 'Planung wird überarbeitet', planning_discuss: 'Antwort wird vorbereitet',
   planning_import: 'Planung wird übernommen', planning_done: 'Story-Planung',
-  plan_ready: 'Story-Planung liegt vor', writing: 'Kapitel wird geschrieben', auditing: 'Kapitel wird geprüft',
+  plan_ready: 'Story-Planung liegt vor', writing: 'Kapitel wird geschrieben', auditing: 'Human Writing prüft das Kapitel',
   reviewed: 'Automatische Überarbeitung', rewrite_audit: 'Überarbeitung wird geprüft', text_finalize: 'Kapiteltext wird finalisiert',
   illustrating: 'Illustration vorbereiten', image_prompt: 'Bildszene wird ausgewählt', image_queue: 'Bildauftrag wird angelegt',
   image_wait: 'Bildauftrag wartet', image_archive: 'Bilddatei wird geprüft', finalizing: 'Kapitel wird abgeschlossen',
@@ -174,7 +177,7 @@ export function editPlanDialog(info: ProductionInfo, submit: (values: object) =>
   const plan = info.plan;
   if (!plan) return;
   const controls = (prefix: string, labels: Section, data: object) => Object.entries(labels).map(([key, label]) =>
-    textarea(prefix + key, label, (data as Section)[key], ['subtitle', 'afterword', 'model', 'preset'].includes(key) || (data as Section)[key] === '')).join('');
+    textarea(prefix + key, label, (data as Section)[key], ['audience', 'subtitle', 'afterword', 'model', 'preset'].includes(key) || (data as Section)[key] === '')).join('');
   const group = (title: string, body: string) => `<details><summary>${esc(title)}</summary>${body}</details>`;
   dialogForm('Story-Planung bearbeiten',
     group('Handlung und Figuren', controls('plan-', mainLabels, plan)) +
@@ -220,6 +223,8 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     : job.status === 'failed' ? button('production-retry', 'Schritt erneut ausführen', undefined, 'button', job.id)
     : term ? '' : button('production-pause', 'Pausieren', undefined, 'button', job.id);
   const items = job.chapter_results ?? [];
+  const skillMarkup = (loaded?: Record<string, string>) => loaded && Object.keys(loaded).length ?
+    '<p>' + esc(Object.entries(loaded).map(([name, version]) => name + ' ' + version).join(' · ')) + '</p>' : '';
   const detail = typeof job.detail === 'string' ? job.detail : '';
   const error = job.error && (productionErrors[detail] ?? productionErrors[job.error] ?? productionErrors.production_step_failed);
   const technical = job.detail && !Array.isArray(job.detail) ? ' · ' +
@@ -227,6 +232,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   return `<p class="job-title">${esc(label)}</p>${job.waiting === 'gpu' ? '<p>Wartet auf einen freien GPU-Slot.</p>' : ''}${error ? `<p>${esc(error)}</p>
     <details data-job-detail="technical-error"><summary>Technische Details</summary><code>${esc((job.error ?? '') + technical)}</code></details>` : ''}
     ${job.status !== 'failed' && job.image_waiting === 'writer_gpu_release' ? '<p>Das Schreibmodell gibt den GPU-Slot frei.</p>' : ''}
+    ${job.audit_lane === 'continuity' ? '<p>Story Writing prüft die Kontinuität.</p>' : ''}
     ${job.retry && !job.error ? `<p>Automatischer Wiederholungsversuch ${job.retry.attempt}.</p>` : ''}
     ${job.answer ? '<div class="prose">' + markdown(job.answer) + '</div>' : ''}
     ${job.compared_chapters?.length ? '<p>Verglichene Kapitel · ' + esc(job.compared_chapters.join(', ')) + '</p>' : ''}
@@ -236,8 +242,9 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     ${job.corrections ? `<p>${job.corrections} Textfehler automatisch korrigiert.</p>` : ''}
     ${job.pause_reason === 'blocker' && !job.recheck_available ? '<p>Ein bestätigter Konflikt braucht eine Entscheidung.</p>' : ''}
     ${job.recheck_available ? '<p>Das gespeicherte Kapitel kann mit der aktualisierten Qualitätsprüfung fortgesetzt werden.</p>' : ''}
-    ${(job.findings?.length || Array.isArray(job.detail)) ? '<details data-job-detail="current-quality"><summary>Prüfdetails</summary>'
-      + (job.findings?.length ? issueMarkup(job.findings) : issueMarkup(job.detail as Finding[])) + '</details>' : ''}
+    ${(skillMarkup(job.skills) || job.findings?.length || Array.isArray(job.detail)) ? '<details data-job-detail="current-quality"><summary>Prüfdetails</summary>'
+      + skillMarkup(job.skills) + (job.findings?.length ? issueMarkup(job.findings) :
+        Array.isArray(job.detail) ? issueMarkup(job.detail as Finding[]) : '') + '</details>' : ''}
     <div class="editor-actions">${controls}${job.pause_reason === 'blocker' && !job.recheck_available && job.draft_document_id ?
       button('production-edit-chapter', 'Konflikt im Kapitel bearbeiten', undefined, 'button', job.draft_document_id) : ''}
     ${term ? '' : button('production-cancel', 'Abbrechen', undefined, 'button quiet', job.id)}
@@ -251,7 +258,8 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
           ch.status === 'approved' ? 'Geprüft' : 'Zur Freigabe'}</summary>
         ${ch.image ? media(ch.image.id, ch.image.alt, false) + button('variant', 'Bildvariante erstellen', undefined, 'button quiet', ch.image.id) : ''}
         ${ch.corrections ? `<p>${ch.corrections} Textfehler automatisch korrigiert.</p>` : ''}
-        ${ch.findings?.length ? `<details data-job-detail="chapter-${ch.number}-quality"><summary>Prüfdetails</summary>${issueMarkup(ch.findings)}</details>` : ''}
+        ${ch.findings?.length || skillMarkup(ch.skills) ? `<details data-job-detail="chapter-${ch.number}-quality"><summary>Prüfdetails</summary>
+          ${skillMarkup(ch.skills)}${ch.findings?.length ? issueMarkup(ch.findings) : ''}</details>` : ''}
         <div class="prose">${doc ? markdown(doc.body) : '<p>Kapitel wird geladen …</p>'}</div>
         <div class="editor-actions">${button('open-doc', 'Kapitel öffnen', 'text', 'button', ch.id)}
         ${button('production-edit-chapter', 'Überarbeiten', undefined, 'button', ch.id)}

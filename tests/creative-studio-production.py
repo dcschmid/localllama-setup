@@ -26,7 +26,7 @@ BLOCK = "The lock turned as the last bell rang."
 def example_plan():
     return production.validate_plan({
         **{key: key.replace("_", " ") + " about a lost key" for key in production.PLAN},
-        "title": "The Key in the Drawer", "language": "en", "motifs": [],
+        "title": "The Key in the Drawer", "language": "en", "motifs": [], "audience": "General readers",
         "bible": {key: "Mara and Nera look for the key." for key in production.BIBLE},
         "visual": {**{key: "Ink wash in red and gray" for key in production.VISUAL}, "size": "768x768", "cover_size": "768x768"},
         "chapters": [{**{key: "Mara opens the drawer." for key in production.CHAPTER}, "title": "The drawer", "minimum": 38, "maximum": 60}],
@@ -317,8 +317,10 @@ class ProductionTests(unittest.TestCase):
     def test_scene_checkpoints_archived_images_and_manifest(self):
         with Fixture() as f:
             identifier = f.start()
-            for _ in range(5):
+            for _ in range(10):
                 f.worker.tick()
+                if production.public_job(production.job_state(f.conn, f.pid))["phase"] == "reviewed":
+                    break
             f.change("pause", job_id=identifier)
             paused = f.drive()
             self.assertEqual(paused["state"], "paused")

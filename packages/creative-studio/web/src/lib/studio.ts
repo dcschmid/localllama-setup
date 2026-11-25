@@ -20,7 +20,9 @@ type ImageJob = { id?: string; status: string; image_id?: string; progress?: num
 type Task = { status: string; project_id?: string; document_id?: string; error?: string; image?: ImageJob;
   requirements: { language?: 'de' | 'en'; word_range?: [number, number]; image_size?: string };
   steps: Record<string, { status: string; name?: string; error?: string;
-    diagnostics?: Array<{ validation: { words: number; language: string; issues: string[] } }> }> };
+    diagnostics?: Array<{ validation: { words: number; language: string; issues: string[] } }>;
+    skills?: Record<string, string>; corrections?: number; publishing?: string;
+    findings?: Array<{ quote: string; verdict: string; reason: string; source_url?: string }> }> };
 type ResearchJob = { status: string; result?: { document_id?: string }; checkpoint?: {
   stage?: string; paused?: boolean; done_rounds?: number; rounds?: number;
   sources?: Array<{ url: string; title: string }>; open?: string[];
@@ -271,7 +273,8 @@ const taskErrors: Record<string, string> = {
   variant_source_missing: 'In dieser Unterhaltung ist noch kein fertiges Bild für eine Variante verfügbar.',
   gpu_wait_timeout: 'Der Bilddienst blieb während der Wartezeit belegt.',
 };
-const taskFailure = (code?: string) => taskErrors[code ?? ''];
+const taskFailure = (code?: string) => code?.startsWith('writing_skill_missing:') ?
+  'Der lokale Schreibskill fehlt: ' + code.split(':')[1] : taskErrors[code ?? ''];
 
 function taskContent(id: string) {
   const task = chatTasks.get(id);
@@ -288,8 +291,14 @@ function taskContent(id: string) {
     requirements.image_size?.replace('x', ' × '),
   ].filter(Boolean).join(' · ');
   const writingStatus = writing?.status === 'generating' ? 'Text wird geschrieben' :
-    writing?.status === 'validating' ? 'Sprache und Wortzahl werden geprüft' :
+    writing?.status === 'validating' ? 'Human Writing prüft den Text' :
+    writing?.status === 'researching' ? 'Quellen werden recherchiert' :
+    writing?.status === 'planning' ? 'Artikel wird geplant' :
+    writing?.status === 'fact-checking' ? 'Article Writing prüft die Belege' :
     writing?.status === 'revising' ? 'Text wird überarbeitet' : writing?.status === 'pending' ? 'Schreiben vorgesehen' : '';
+  const factStatus: Record<string, string> = { supported: 'Belegt', unsupported: 'Beleg fehlt',
+    disputed: 'Widersprüchlich', unverified: 'Offen', editorial: 'Redaktionell' };
+  const skillList = Object.entries(writing?.skills ?? {}).map(([name, version]) => name + ' ' + version).join(' · ');
   const error = taskFailure(task.error) || (task.error ? 'Der Auftrag konnte nicht vollständig ausgeführt werden.' : '');
   const imageError = task.steps.image?.error || image?.error;
   const imageStatus = image?.status ?? task.steps.image?.status;
@@ -301,6 +310,14 @@ function taskContent(id: string) {
     ${requested ? `<p class="muted">${esc(requested)}</p>` : ''}
     ${error ? '<p>' + esc(error) + '</p>' : ''}
     ${writingStatus ? '<p>' + writingStatus + ' …</p>' : ''}
+    ${writing?.corrections ? `<p>${writing.corrections} Textfehler automatisch korrigiert.</p>` : ''}
+    ${writing?.publishing === 'needs_review' ? '<p>Der Artikel bleibt zur redaktionellen Prüfung als Entwurf gespeichert.</p>' : ''}
+    ${skillList || writing?.findings?.length ? `<details data-job-detail="article-quality"><summary>Prüfdetails</summary>
+      ${skillList ? '<p>' + esc(skillList) + '</p>' : ''}
+      ${writing?.findings?.length ? '<ul>' + writing.findings.map(f => '<li><strong>' +
+        esc(factStatus[f.verdict] ?? 'Offen') + '</strong> ' + (f.quote ? '„' + esc(f.quote) + '“ ' : '') +
+        esc(f.reason) + (f.source_url ? ' ' + sourceLink(f.source_url, 'Quelle') : '') + '</li>').join('') + '</ul>' : ''}
+      </details>` : ''}
     ${writing?.status === 'failed' ? '<p>' + esc(taskFailure(writing.error) || 'Die Texterstellung ist fehlgeschlagen.') + '</p>' : ''}
     ${doc ? `<section class="task-result" aria-label="Gespeichertes Dokument"><h3>${esc(doc.title)}</h3>
       <p>Text gespeichert${writing?.diagnostics?.at(-1) ? ' · ' + writing.diagnostics.at(-1)!.validation.words + ' Wörter' : ''}</p>
@@ -1432,7 +1449,8 @@ async function handleProduction(action: string, value: string) {
       const ready = await ensureSession('Story-Planung');
       const { project_id: id } = await post<{ project_id: string }>(`/api/sessions/${ready.id}/context`, { kind: 'story', lang: prefs.lang });
       await refreshChatContext(ready.id, revision);
-      await productionAct(id, 'propose', { ...values, session_id: ready.id, image: options.image });
+      await productionAct(id, 'propose', { ...values, session_id: ready.id,
+        image: { model: options.image.model, preset: options.image.preset } });
       draft = '';
       await refresh();
     });

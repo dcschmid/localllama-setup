@@ -53,7 +53,7 @@ CHAPTER = re.compile(r"\b(?:kapitel|chapter)\s+(" + NUMBER + r")\b", re.I)
 TITLE = re.compile(r'''(?im)^\s*(?:\*\*)?(?:titel|title)\s*:\s*(?:\*\*)?\s*([^\n]{1,180})|(?:\b(?:namens|titled|called)\s+|[„"«])([^\n"“»]{1,180})''')
 NEW_STORY = re.compile(r"\b(?:neue[nrs]?\s+(?:geschichte|[a-zäöüß]*roman|story)|(?:new|another)\s+(?:story|novel))\b", re.I)
 BIBLE = re.compile(r"\b(?:story[ -]?bibel|story bible|series bible)\b", re.I)
-OUTLINE = re.compile(r"\b(?:kapitel(?:übersicht|plan)|chapter outline|(?:plan\w*|outline)\b[^\n!?]{0,100}\b" + NUMBER + r"\s+(?:kapitel|chapters))\b", re.I)
+OUTLINE = re.compile(r"\b(?:kapitel(?:übersicht|plan)|chapter outline|(?:plan\w*|outline)\b[^\n!?]{0,100}\b" + NUMBER + r"\s+(?:kapitel(?:n)?|chapters))\b", re.I)
 WRITE = re.compile(r"\b(?:schreib\w*|verfass\w*|entwirf\w*|write|draft|continue|fortsetz\w*|setze)\b", re.I)
 IMAGE = re.compile(r"\b(?:erstelle\w*|generiere\w*|zeichn\w*|mach\w*|create|generate|draw|paint)\b[^\n.!?]{0,90}\b(?:titelbild|cover|bild|illustration|image|picture|artwork)\b", re.I)
 COVER = re.compile(r"\b(?:titelbild|cover|book cover)\b", re.I)
@@ -74,7 +74,7 @@ TEXT_TARGET = re.compile(r"\b(?:kapiteltext|manuskript|manuscript|chapter text|"
                          r"(?:geschrieben\w*|vorliegend\w*|written|existing)\s+(?:kapitel|text|prose|chapter)|"
                          r"grammatik\w*|rechtschreib\w*|zeichensetz\w*|grammar|spelling|punctuation|human writing|"
                          r"absatz|passage|formulierung\w*|formulier\w*|wortwahl|wording|prosa|prose|fassung|dokument|artikel|devlog|article)\b", re.I)
-CREATE_PLAN = re.compile(r"\b(?:erstell\w*|entwirf\w*|plane|entwickl\w*|anlegen|create|build|draft|design)\b", re.I)
+CREATE_PLAN = re.compile(r"\b(?:erstell\w*|entwirf\w*|plane|entwickl\w*|anlegen|plan|create|build|draft|design)\b", re.I)
 IMPORT_PLAN = re.compile(r"\b(?:übernimm|übernehm\w*|importier\w*|adopt|import|save)\b", re.I)
 QUESTION = re.compile(r"^\s*(?:was|wie|warum|findest|hältst|ist|sind|wäre|wirkt|what|how|why|do you|is|are|would)\b", re.I)
 CHANGE = re.compile(r"\b(?:soll(?:en|te)?|sollten|ändere|ändern|ersetze|change|replace|should|make)\b", re.I)
@@ -142,7 +142,11 @@ def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_c
     target = bool(PLAN_TARGET.search(text) or BIBLE.search(text) and not bible_reference or OUTLINE.search(text))
     prose = TEXT_TARGET.search(text)
     question = QUESTION.search(text)
-    if not question and prose and EDITORIAL.search(text):
+    writing = WRITE.search(text)
+    review = EDITORIAL.search(text)
+    if not question and ARTICLE.search(text) and writing and (not review or writing.start() < review.start()):
+        return "article"
+    if not question and prose and review:
         return "review-story" if re.search(r"\b(?:manuskript|manuscript)\b", text, re.I) and AUDIT.search(text) else "editorial"
     if IMAGE.search(text) and not DRAFT_CHAPTER.search(text):
         return "image"
@@ -167,8 +171,6 @@ def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_c
             return "editorial"
     if DRAFT_CHAPTER.search(text):
         return "chapter"
-    if ARTICLE.search(text) and WRITE.search(text):
-        return "article"
     if GAME.search(text):
         return "game"
     if NEW_STORY.search(text) and not question:
@@ -205,7 +207,7 @@ def story_language(text, fallback):
 
 
 def outline_count(text):
-    match = re.search(r"\b(" + NUMBER + r")\s+(?:kapitel|chapters)\b", text, re.I)
+    match = re.search(r"\b(" + NUMBER + r")\s+(?:kapitel(?:n)?|chapters)\b", text, re.I)
     return number(match[1]) if match else 8 if OUTLINE.search(text) else 0
 
 

@@ -12,6 +12,8 @@ CONFIG = HERE.parent
 
 
 def skill_root():
+    if root := os.environ.get("LLAMA_SETUP_SKILLS"):
+        return Path(root).expanduser() / "human-writing"
     config = CONFIG / "mcp.json"
     if config.is_file():
         skills = json.loads(config.read_text(encoding="utf-8"))["mcpServers"].get("skills")

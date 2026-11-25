@@ -120,7 +120,7 @@ def build_plan(raw, mode, default_lang, image_options, detect_lang):
             for line in illustrations):
         raise PlanError("image_prompt_required")
 
-    story = mode == "story" or (mode != "article" and any(STORY.search(line) for line in writing))
+    story = mode == "story" or (mode != "article" and any(STORY.search(line) and not ARTICLE.search(line) for line in writing))
     title = field(text, "Titel|Title")
     if not title and writing:
         title_match = re.search(rf"\b(?:namens|titled|called|mit dem titel)\s+{QUOTED}", writing[0], re.I)

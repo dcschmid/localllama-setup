@@ -11,6 +11,7 @@ import uuid
 from urllib.error import HTTPError, URLError
 
 import creative_studio_organizer as organizer
+from creative_studio_correction import digest, improvements, patch_text
 import creative_studio_story as story
 from creative_studio_plan import PlanError
 
@@ -37,6 +38,7 @@ BIBLE_RECORDS = {
     "locations": ("name", "description", "geography", "history", "rules"),
     "chronology": ("event", "when", "duration", "travel", "depends_on"),
     "knowledge": ("character", "fact", "learns_when", "how"),
+    "objects": ("name", "quantity", "markings", "initial_holder", "location", "transitions"),
     "threads": ("name", "status", "foreshadowing", "payoff"),
 }
 VISUAL = ("style", "palette", "characters", "wardrobe", "locations", "atmosphere")
@@ -85,6 +87,7 @@ def validate_plan(plan):
     if not isinstance(plan, dict):
         story.error("production_plan_invalid")
     result = clean_group(plan, PLAN)
+    result["audience"] = story.clean(plan.get("audience", ""), 300)
     result["subtitle"] = story.clean(plan.get("subtitle", ""), 180)
     result["afterword"] = story.clean(plan.get("afterword", ""), 4000)
     result["language"] = plan.get("language")
@@ -158,10 +161,24 @@ def work_phase(result):
 
 def public_findings(review):
     findings = (review.get("findings", []) + review.get("local", []))[:45]
-    if review.get("quality_version") != QUALITY_VERSION:
+    if review.get("quality_version", 0) < 2:
         return [{**finding, "severity": "note", "status": "unconfirmed",
                  "claimed_severity": finding.get("severity")} for finding in findings]
     return findings
+
+
+def proof_skills(*groups):
+    selected = {}
+    for group in groups:
+        for proof in group:
+            for skill in (proof or {}).get("skills", []):
+                selected[skill["name"]] = skill["version"]
+    return selected
+
+
+def review_proofs(review):
+    return [proof for key in ("proof", "verification_proof", "language_proof", "language_verification_proof")
+            for proof in review.get(key, [])]
 
 
 def public_job(row):
@@ -180,7 +197,8 @@ def public_job(row):
     if "chapter_results" in report:
         report["chapter_results"] = [
             {**{k: c[k] for k in ("number", "id", "version", "title", "status", "words", "image")},
-             "corrections": c.get("corrections", 0),
+             "corrections": c.get("corrections", 0), "skills": proof_skills(c.get("generation", []),
+                 review_proofs(c.get("review") or {})),
              "findings": public_findings(c.get("review") or {})}
             for c in report["chapter_results"]
         ]
@@ -189,6 +207,11 @@ def public_job(row):
         report["draft_document_id"] = current["document_id"]
     if current.get("review"):
         report["findings"] = public_findings(current["review"])
+    report["skills"] = proof_skills(result.get("model_evidence", []), current.get("generation", []),
+                                    review_proofs(current.get("review") or {}),
+                                    [current["language_windows"][-1]["proof"]] if current.get("language_windows") else [])
+    if report["phase"] == "auditing" and current.get("language_windows"):
+        report["audit_lane"] = "continuity"
     if result.get("pause_reason") == "blocker" and (current.get("review") or {}).get("quality_version") != QUALITY_VERSION:
         report["recheck_available"] = True
     if current.get("corrections"):
@@ -529,7 +552,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         if not isinstance(image, dict):
             story.error("production_plan_invalid")
         visual = {k: story.clean(image.get(k) or default, 80) for k, default in
-                  (("model", ""), ("preset", "none"), ("size", "768x768"), ("cover_size", "768x1024"))}
+                  (("model", ""), ("preset", "none"), ("size", "1024x576"), ("cover_size", "768x1024"))}
         request_id = body.get("request_id")
         if request_id is not None and (not isinstance(request_id, str) or not organizer.ID.fullmatch(request_id)):
             story.error("production_plan_invalid")
@@ -590,66 +613,12 @@ def mutate(conn, pid, action, body, save_document, store_message):
                    store_message, "Manuskriptproduktion", label)
 
 
-QUALITY_VERSION = 2
+QUALITY_VERSION = 3
 QUALITY_FIELDS = ("quote", "related_quote", "issue", "correction")
 
 
 def confirmed_blockers(items):
     return [f for f in items if f.get("severity") == "blocking" and f.get("status") == "confirmed"]
-
-
-def patch_text(text, edits, motifs, fiction, *, local=False, targets=()):
-    if not isinstance(edits, list) or not edits:
-        return text
-    spans = []
-    protected_motifs = [fiction.normalized(motif) for motif in motifs]
-    for edit in edits:
-        if not isinstance(edit, dict):
-            raise PlanError("production_patch_invalid")
-        before, after = edit.get("before"), edit.get("after")
-        if not isinstance(before, str) or not isinstance(after, str) or not before:
-            raise PlanError("production_patch_invalid")
-        if len(before) > 1800 or len(after) > 2600 or fiction.protected(before, protected_motifs):
-            raise PlanError("production_patch_invalid")
-        start = edit.get("start") if local else text.find(before)
-        if (type(start) is not int or start < 0 or not text.startswith(before, start)
-                or (not local and text.find(before, start + 1) >= 0)):
-            raise PlanError("production_patch_invalid")
-        end = start + len(before)
-        if targets and not any(start < t["end"] and end > t["start"] for t in targets if "end" in t):
-            raise PlanError("production_patch_invalid")
-        # An exact substring is insufficient when a replacement contains a full sentence
-        # and the original clause's comma or conjunction still follows it.
-        if after.rstrip().endswith((".", "!", "?")) and re.match(r"\s*[.!?,;:]", text[end:]):
-            raise PlanError("production_patch_boundary")
-        if after and not after[0].isspace() and start and text[start - 1].isalnum() and after[0].isalnum():
-            raise PlanError("production_patch_boundary")
-        if after and not after[-1].isspace() and end < len(text) and text[end].isalnum() and after[-1].isalnum():
-            raise PlanError("production_patch_boundary")
-        if not after and 0 < start < end < len(text) and text[start - 1].isalnum() and text[end].isalnum():
-            raise PlanError("production_patch_boundary")
-        if not local and len(after) > max(240, 2 * len(before) + 80):
-            raise PlanError("production_patch_invalid")
-        spans.append((start, end, after))
-    if not local and sum(end - start for start, end, _ in spans) > min(2400, max(140, len(text) // 4)):
-        raise PlanError("production_patch_invalid")
-    candidate, end_limit = text, len(text)
-    for start, end, after in sorted(spans, reverse=True):
-        if end > end_limit:
-            raise PlanError("production_patch_invalid")
-        candidate = candidate[:start] + after + candidate[end:]
-        end_limit = start
-    if fiction.protected_facts(text) != fiction.protected_facts(candidate):
-        raise PlanError("production_patch_invalid")
-
-    def defects(value):
-        checks, _ = fiction.local_quality(value, motifs)
-        repeated = fiction.repetitions({"draft": value}, motifs, limit=96)
-        return Counter((f["category"], fiction.normalized(f["quote"])) for f in checks + repeated)
-
-    if defects(candidate) - defects(text):
-        raise PlanError("production_patch_regression")
-    return candidate
 
 
 class ProductionWorker:
@@ -693,10 +662,11 @@ class ProductionWorker:
                 "threads and an earned ending. Specify a reusable illustration style, palette, wardrobe and appearance. "
                 "Motifs are exact phrases intended to recur, if any. Give useful compact values (one sentence per field). "
                 "Supply structured bible records for the central named figures, significant sites, key timeline anchors, "
-                "the most important discoveries and any seeded threads. Use brief phrases in records. "
+                "the most important discoveries, notable objects with quantities and state, and seeded threads. "
+                "State the intended audience. Use brief phrases in records. "
                 "Write 'unknown' or the corresponding German word when an age or another detail is intentionally unspecified. "
                 f"Preserve the writer's existing decisions.\n\nBrief:\n{payload['brief']}\n\nPrior plan:\n{previous}",
-                {**fields(PLAN), "subtitle": STR, "bible": story.schema(fields(BIBLE)), "visual": story.schema(fields(VISUAL)),
+                {**fields(PLAN), "audience": STR, "subtitle": STR, "bible": story.schema(fields(BIBLE)), "visual": story.schema(fields(VISUAL)),
                  "bible_records": story.schema({group: array(story.schema(fields(keys)), 8)
                                                 for group, keys in BIBLE_RECORDS.items()}),
                  "motifs": array(STR, 12)}, 5700)
@@ -708,6 +678,7 @@ class ProductionWorker:
             start = len(source["chapters"])
             size = min(4, payload["count"] - start)
             overview = {key: source[key] for key in (*PLAN, "bible")}
+            overview["audience"] = source.get("audience", "")
             records = story.snippet(dump(source.get("bible_records", {})), 7000)
             prior = [{"number": c["number"], "beats": c["beats"], "closing": c["closing"]} for c in source["chapters"]]
             response, proof = self.ask(source["language"], "plan",
@@ -821,7 +792,7 @@ class ProductionWorker:
                 return self.commit(row, result, "completed")
             known = source.get("outline", [])
             proposal.update(language=language, motifs=[])
-            proposal["visual"].update(model="", preset="none", size="768x768", cover_size="768x1024")
+            proposal["visual"].update(model="", preset="none", size="1024x576", cover_size="768x1024")
             if known and len(known) != len(proposal["chapters"]):
                 raise PlanError("story_outline_incomplete")
             for index, chapter in enumerate(proposal["chapters"]):
@@ -882,7 +853,7 @@ class ProductionWorker:
             ledger.append({"number": chapter_result["number"], "summary": chapter_result["summary"],
                            "observations": [{k: m[k] for k in ("status", "kind", "fact")}
                                             for m in chapter_result.get("memory", [])]})
-        return ("APPROVED PLAN AND ESTABLISHED FACTS\n" + dump({key: plan[key] for key in (*PLAN, "bible", "motifs")})
+        return ("APPROVED PLAN AND ESTABLISHED FACTS\n" + dump({**{key: plan[key] for key in (*PLAN, "bible", "motifs")}, "audience": plan.get("audience", "")})
                 + "\nKEY BIBLE RECORDS\n" + story.snippet(dump(plan.get("bible_records", {})), 6800)
                 + "\nCURRENT CHAPTER PLAN\n" + dump(chapter) + "\nPRIOR CHAPTER OBSERVATIONS\n"
                 + story.snippet(dump(ledger), 10_000))
@@ -906,7 +877,8 @@ class ProductionWorker:
                 if saved["version"] != doc["version"] or saved["body"].strip():
                     raise PlanError("story_context_changed")
                 version = organizer.update_document(conn, saved, chapter["title"], text, "Szenenentwurf", "generated", language)
-                current.update(document_id=doc["id"], version=version, audit_windows=[])
+                current.update(document_id=doc["id"], version=version, audit_windows=[],
+                               original_version=version, original_hash=digest(text), automatic_version=version)
                 current.pop("parts", None)
                 result["step"] = "auditing"
             return self.commit(row, result, effect=save)
@@ -964,7 +936,7 @@ class ProductionWorker:
     def finding_fields(self, fiction):
         return {**fields(QUALITY_FIELDS), "category": enum(fiction.DIMENSIONS), "severity": enum(fiction.SEVERITIES)}
 
-    def verify_findings(self, language, findings, passages, canon, *, complete_chapter=False):
+    def verify_findings(self, language, findings, passages, canon, *, complete_chapter=False, role="audit"):
         candidates = [(index, f) for index, f in enumerate(findings) if f["confirmation_eligible"]
                       and (complete_chapter or f["category"] != "scene")]
         if not candidates:
@@ -972,7 +944,7 @@ class ProductionWorker:
         # Verification gets canonical context and exact evidence but never the draft model's verdict.
         claims = [{"index": str(i), **{key: f[key] for key in ("chapter", "category", *QUALITY_FIELDS)}}
                   for i, f in candidates]
-        answer, proof = self.ask(language, "audit",
+        answer, proof = self.ask(language, role,
             "Independently verify these proposed defects. Return a verdict for each supplied index. Confirm a central "
             "conflict only if both exact excerpts establish incompatible facts in context, or chapter-wide evidence "
             "shows a required scene is absent. Confirm grammar or repetition only if objectively wrong here. "
@@ -1004,7 +976,7 @@ class ProductionWorker:
         keys = self.finding_fields(fiction)
         response, proof = self.ask(language, "audit",
             "Review the supplied story passage against its plan and canon. Identify concrete story contradictions, "
-            "required scenes, malformed prose, or significant repetition. An event absent from one window alone is not "
+            "required scenes, viewpoint shifts, or significant narrative repetition. Leave grammar and punctuation to language review. An event absent from one window alone is not "
             "missing from the chapter. In issue explain the exact problem, never write just a category or severity. "
             "In correction give an actionable localized fix. In quote copy an exact contiguous passage. For a possible "
             "blocker copy the conflicting passage or plan requirement verbatim into related_quote. Use an empty string "
@@ -1029,25 +1001,51 @@ class ProductionWorker:
                 "quality_version": QUALITY_VERSION,
                 "unverified_findings": sum(f["status"] == "unconfirmed" for f in findings)}
 
+    def language_window(self, language, text, number, motifs):
+        fiction = self.fiction()[0]
+        response, proof = self.ask(language, "human-audit",
+            "Audit language only. Report objective grammar, tense, syntax, idiom, punctuation or accidental repetition. "
+            "Confirm only what is demonstrable in the supplied language and passage. Preserve deliberate literary "
+            "devices, fragments, voice, dialogue and motifs. Quote the full affected span exactly once. Describe "
+            "subjective stylistic alternatives as editorial. Use an empty related_quote. Return an empty list when clean."
+            "\nMOTIFS\n" + dump(motifs) + "\nPASSAGE\n" + text,
+            {"findings": array(story.schema(self.finding_fields(fiction)), 5)}, 1500)
+        key = str(number)
+        findings = fiction.qualify_findings([{**f, "chapter": key} for f in response["findings"] if isinstance(f, dict)],
+                                           {key: text})
+        verification = self.verify_findings(language, findings, {key: text}, "", role="human-audit")
+        return {"findings": findings, "proof": proof, "verification_proof": verification}
+
     def audit(self, row, plan, chapter, doc, current, result, canon):
         windows_saved = current.get("audit_windows", [])
         review = current.get("review")
         if (current.get("version") != doc["version"] or (review and review.get("quality_version") != QUALITY_VERSION)
                 or any(w.get("quality_version") != QUALITY_VERSION for w in windows_saved)):
-            owned = ("review", "audit_windows", "candidate", "passes", "patches", "candidate_audits", "proposed_corrections")
+            owned = ("review", "audit_windows", "language_windows", "candidate", "candidate_base_hash",
+                     "passes", "patches", "candidate_audits", "proposed_corrections")
             history = {key: current.pop(key) for key in owned if key in current}
             if history:
                 current.setdefault("quality_history", []).append({"version": current.get("version"), **history})
+                # Earlier automatic checkpoints did not carry a separate ownership marker.
+                if ("automatic_version" not in current and current.get("version") == doc["version"]
+                        and doc["version_origin"] == "generated"):
+                    current["automatic_version"] = doc["version"]
             if current.get("version") != doc["version"]:
                 for key in ("image_job", "image_prompt", "image_attempt", "image_state", "image_waiting", "asset",
                             "text_finalized_version", "corrections"):
                     current.pop(key, None)
             current.update(version=doc["version"], document_id=doc["id"])
+        if current.get("candidate_base_hash", digest(doc["body"])) != digest(doc["body"]):
+            raise PlanError("production_patch_stale")
         body = current.get("candidate", doc["body"])
         language = plan["language"]
         fiction = self.fiction()[0]
         windows = list(story.text_windows(body))
         audits = current.setdefault("audit_windows", [])
+        language_audits = current.setdefault("language_windows", [])
+        if len(language_audits) < len(windows):
+            language_audits.append(self.language_window(language, windows[len(language_audits)], chapter["number"], plan["motifs"]))
+            return self.commit(row, result)
         if len(audits) < len(windows):
             summary = "\n".join(w["summary"] for w in audits[-2:])
             audits.append(self.audit_window(language, windows[len(audits)],
@@ -1058,9 +1056,11 @@ class ProductionWorker:
         local = fiction.audit({identifier: body}, language, plan["motifs"])["findings"]
         memory, findings, editorial = [], [], []
         absolute = 0
-        for window, audit in zip(windows, audits):
-            for group, key in ((memory, "memory"), (findings, "findings"), (editorial, "editorial")):
-                for item in audit[key]:
+        for window, audit, language_audit in zip(windows, audits, language_audits):
+            for group, items in ((memory, audit["memory"]), (findings, audit["findings"] + [
+                    f for f in language_audit["findings"] if f["severity"] != "editorial"]),
+                    (editorial, audit["editorial"] + [f for f in language_audit["findings"] if f["severity"] == "editorial"])):
+                for item in items:
                     if "start" in item:
                         start = absolute + item["start"]
                         item = {**item, "start": start, "end": absolute + item["end"],
@@ -1077,27 +1077,34 @@ class ProductionWorker:
                   "summary": story.snippet("\n".join(w["summary"] for w in audits), 2200),
                   "words": words, "proof": [w["proof"] for w in audits],
                   "verification_proof": [w["verification_proof"] for w in audits if w["verification_proof"]],
-                  "unverified_findings": sum(w["unverified_findings"] for w in audits), "quality_version": QUALITY_VERSION}
+                  "language_proof": [w["proof"] for w in language_audits],
+                  "language_verification_proof": [w["verification_proof"] for w in language_audits if w["verification_proof"]],
+                  "hash": digest(body), "unverified_findings": sum(f["status"] == "unconfirmed" for f in findings),
+                  "quality_version": QUALITY_VERSION}
         current.pop("audit_windows", None)
+        current.pop("language_windows", None)
         if "candidate" in current:
-            def rank(report):
-                return (len(confirmed_blockers(report["findings"])),
-                        sum(f["severity"] == "automatic" for f in report["findings"] + report["local"]))
+            def blockers(report):
+                return Counter((f["category"], f["quote"], f.get("related_quote")) for f in confirmed_blockers(report["findings"]))
+
+            def automatic(report):
+                return sum(f["severity"] == "automatic" for f in report["findings"] + report["local"])
             before = current["review"]
             candidate = current.pop("candidate")
+            current.pop("candidate_base_hash", None)
             corrections = current.pop("proposed_corrections", 0)
             comparable = chapter["minimum"] <= words <= chapter["maximum"]
-            accepted = comparable and rank(review) < rank(before)
+            accepted = comparable and improvements(before, review, blockers, automatic)
             current.setdefault("candidate_audits", []).append({"accepted": accepted, "review": review})
             if accepted:
                 def save(conn):
                     saved = story.managed_chapter(conn, doc["project_id"], doc["id"])
-                    if saved["version"] != doc["version"]:
+                    if saved["version"] != doc["version"] or digest(saved["body"]) != digest(doc["body"]):
                         raise PlanError("story_context_changed")
                     current.setdefault("quality_history", []).append({"version": doc["version"], "review": before})
                     current["version"] = organizer.update_document(conn, saved, saved["title"], candidate,
                                                                     "Gezielte Überarbeitung", "generated", language)
-                    current["review"] = review
+                    current.update(review=review, automatic_version=current["version"])
                     current["corrections"] = current.get("corrections", 0) + corrections
                     result["step"] = "reviewed"
                 return self.commit(row, result, effect=save)
@@ -1117,7 +1124,9 @@ class ProductionWorker:
         fiction = self.fiction()[0]
         _, local_edits = fiction.local_quality(text, plan["motifs"])
         passes = current.get("passes", 0)
-        if (local_edits or targeted) and passes < 2 and doc["status"] != "approved":
+        editable = (doc["status"] != "approved" and doc["version_origin"] == "generated"
+                    and current.get("automatic_version") == doc["version"])
+        if (local_edits or targeted) and passes < 2 and editable:
             if local_edits:
                 edits = local_edits
                 record = {"method": "local_text", "edits": edits}
@@ -1142,21 +1151,43 @@ class ProductionWorker:
                     error = (str(exc) if isinstance(exc, PlanError) else
                              "production_upstream_http" if isinstance(exc, HTTPError) else "production_upstream_unavailable")
                     current["passes"] = passes + 1
-                    current.setdefault("patches", []).append({"method": "model_patch", "error": error})
+                    current.setdefault("patches", []).append({"method": "model_patch", "error": error,
+                        "base_version": doc["version"], "base_hash": digest(text)})
                     return self.commit(row, result)
                 record = {"evidence": proof, "method": "model_patch", "edits": edits}
             current["passes"] = passes + 1
+            base_hash = digest(text)
+            record.update(base_version=doc["version"], base_hash=base_hash)
             current.setdefault("patches", []).append(record)
             try:
+                names = [r.get("name") for r in plan.get("bible_records", {}).get("characters", [])]
                 candidate = patch_text(text, edits, plan["motifs"], fiction, local=bool(local_edits),
-                                       targets=() if local_edits else targeted[:5])
+                                       targets=() if local_edits else targeted[:5], base_hash=base_hash,
+                                       canon=canon, language_tools=self.fiction()[1], language=language,
+                                       canonical_names=names)
             except PlanError as exc:
                 record["error"] = str(exc)
             else:
                 if candidate != text:
-                    current.update(candidate=candidate, audit_windows=[], proposed_corrections=len(edits))
+                    record["candidate_hash"] = digest(candidate)
+                    if not local_edits:
+                        answer, proof = self.ask(language, "audit",
+                            "Check the proposed minimal edits against both their original wording and the approved canon. "
+                            "Each edit must resolve a cited confirmed defect. Preserve the point of view, identities, "
+                            "actions, character knowledge and established world state except where a confirmed "
+                            "contradiction has exactly one supported correction. Reject any edit that changes "
+                            "other narrative facts or leaves the defect unchanged. Return yes or no and a specific reason."
+                            "\nCANON\n" + canon + "\nFINDINGS\n" + dump(targeted[:5]) + "\nEDITS\n" + dump(edits),
+                            {"safe": enum(("yes", "no")), "reason": STR}, 850)
+                        record["fidelity_check"] = {**answer, "proof": proof}
+                        if answer["safe"] != "yes" or not fiction.substantive(answer["reason"]):
+                            record["error"] = "production_patch_unverified"
+                            return self.commit(row, result)
+                    current.update(candidate=candidate, candidate_base_hash=base_hash, audit_windows=[],
+                                   language_windows=[], proposed_corrections=len(edits))
                     result["step"] = "auditing"
             return self.commit(row, result)
+        current.setdefault("passes", passes)
         if blockers:
             result.update(pause_reason="blocker", detail=blockers)
             return self.commit(row, result, "paused")
@@ -1194,7 +1225,7 @@ class ProductionWorker:
             passages = {str(index): excerpt for index, excerpt in enumerate(excerpts, 1) if excerpt}
             if not passages:
                 raise PlanError("production_image_evidence")
-            response, proof = self.ask(language, "plan",
+            response, proof = self.ask(language, "image",
                 "Choose the identifier of one supplied passage that depicts a distinctive visual event. "
                 "Compose an English illustration prompt based on that passage. Describe its location, action, objects, "
                 "appearance, clothing and composition. Use only people and elements supported by the chosen passage. "
@@ -1295,6 +1326,8 @@ class ProductionWorker:
                        "review": review, "words": review["words"], "generation": current.get("generation", []),
                        "scenes": current.get("scenes", []), "patches": current.get("patches", []),
                        "candidate_audits": current.get("candidate_audits", []),
+                       "original_version": current.get("original_version", doc["version"]),
+                       "original_hash": current.get("original_hash", digest(doc["body"])), "final_hash": digest(doc["body"]),
                        "quality_history": current.get("quality_history", []), "corrections": current.get("corrections", 0)}
             receipts = result.setdefault("chapter_results", [])
             receipts[chapter["number"] - 1:] = [receipt]
@@ -1327,7 +1360,7 @@ class ProductionWorker:
                          "ending": docs[ch["number"] - 1]["body"][-650:]} for ch in batch]
             carried = story.snippet("\n".join(r["assessment"] for r in reviews), 4200)
             context = dump({key: plan[key] for key in (*PLAN, "bible")}) + "\nEARLIER CONCLUSIONS\n" + carried
-            response, proof = self.ask(plan["language"], "audit",
+            response, proof = self.ask(plan["language"], "whole-audit",
                 "Review the manuscript segment in relation to the approved arc. Check timeline, character "
                 "development, plot, secrets, repetition and whether the ending is earned. Give an overall assessment. "
                 "For each problem cite an exact quote, explain the defect in issue and propose an actionable correction. "
