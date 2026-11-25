@@ -1,0 +1,61 @@
+{
+ "date": "2026-11-25",
+ "verdict": "PASS",
+ "probes": [
+  {
+   "probe": "story-de",
+   "alias": "creative-writing",
+   "language": "de",
+   "ok": true,
+   "seconds": 114.5,
+   "completion_tokens": 181,
+   "excerpt": "Das Licht der nackten Glühbirne über dem Werktisch warf lange Schatten an die Wände der Werkstatt. Lena hielt das Hinterrad fest zwischen den Knien, während sie mit einem Schraubenschlüssel am Kettenantrieb drehte. Ein leises Klicken ertönte jedes Mal, wenn sich die Kette um das "
+  },
+  {
+   "probe": "story-en",
+   "alias": "creative-writing",
+   "language": "en",
+   "ok": true,
+   "seconds": 39.6,
+   "completion_tokens": 150,
+   "excerpt": "The flashlight beam cut through the dark, bouncing off greasy fingers as Maya wrenched on the wrench. \"It's stuck,\" she said, her voice flat against the silence of the garage.\n\n\"Use your weight.\" Elena leaned in closer to help hold the bike steady while her sister strained at a r"
+  },
+  {
+   "probe": "article-de",
+   "alias": "human-writing",
+   "language": "de",
+   "ok": true,
+   "seconds": 39.9,
+   "completion_tokens": 121,
+   "excerpt": "Ein KV-Cache verbraucht massiv VRAM, da die Key-Value-Paare für alle Token im Kontext gespeichert werden müssen, um das Modell beim Generieren nicht jedes Mal neu berechnen zu müssen. Bei langen Kontexten wächst dieser Speicherbedarf linear mit der Anzahl der Token und den Layera"
+  },
+  {
+   "probe": "devlog-en",
+   "alias": "human-writing",
+   "language": "en",
+   "ok": true,
+   "seconds": 2.9,
+   "completion_tokens": 50,
+   "excerpt": "Using FP32 would consume nearly all available memory, leaving no room to run the model itself or process any new tokens. Switching to INT8 KV cache allows us to fit that massive context while still having enough overhead for inference and system stability."
+  },
+  {
+   "probe": "research-facts",
+   "alias": "research-code",
+   "language": "de",
+   "ok": true,
+   "seconds": 39.5,
+   "completion_tokens": 570,
+   "excerpt": "1. 12 Kerne und 24 Threads.\n2. Bis zu 50 TOPS NPU-Leistung.\n3. Radeon 890M integrierte Grafik.*   Subject: AMD Ryzen AI 9 HX 370 (CPU for Framework Laptop 16).\n*   Requirement: Three verifiable facts.\n*   Format: Short, with numbers, no fluff (no \"schmuck\").\n*   Language: German."
+  },
+  {
+   "probe": "research-audit",
+   "alias": "research-code",
+   "language": "de",
+   "ok": true,
+   "seconds": 23.9,
+   "completion_tokens": 700,
+   "excerpt": "*   Input text: \"Gemory 26B hat 30 Layer, davon sind 5 reines Full-Attention-Modelle.\"\n    *   Task: Check for factual errors, list them, and answer with the core statement in one sentence.\n    *   Language: German.\n\n    *   *Subject:* \"Gemory 26B\".\n    *   *Claim 1:* It has 30 l"
+  }
+ ],
+ "note": "Router-QA 2026-11-25. Aliase: story-de/en via creative-writing, article/devlog via human-writing (rendered Human-Writing-Template), research via research-code. research-audit antwortet als Plan-Echo (reasoning-Architektur), Inhalt korrekt bezogen auf 30 Layer/5 SWA. Langform+256K: *-{256k,256k-ladder}.json."
+}

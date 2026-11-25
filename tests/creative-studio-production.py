@@ -856,6 +856,109 @@ class ProductionTests(unittest.TestCase):
             with self.assertRaisesRegex(production.PlanError, "production_patch_invalid"):
                 production.patch_text(fixed, [good], [], skill)
 
+    def test_one_unsafe_model_edit_keeps_the_other_verified_corrections(self):
+        with Fixture() as f:
+            skill = f.worker.fiction()[0]
+            text = ("Er sah kurz zu seiner Schwester hinüber. Juri stand nicht nur da, weil Ada ihn gebeten hatte, "
+                    "sondern because he wanted to be there. Er wollte helfen, und diese Erkenntnis gab ihr Kraft. "
+                    "Der Hafen lag nun sicher hinter ihnen zurück, denn das Schiff fand seinen Platz am Steg "
+                    "und ließ es langsam fest werden.")
+            poisoned = {"before": "sondern because he wanted to be there.",
+                        "after": "sondern weil er dabei sein wollte. Er wollte helfen, und diese Erkenntnis gab ihr Kraft."}
+            valid = {"before": "denn das Schiff fand seinen Platz am Steg und ließ es langsam fest werden.",
+                     "after": "denn die Fähre wurde schließlich sicher am Steg festgemacht."}
+            with self.assertRaisesRegex(production.PlanError, "production_patch_regression"):
+                production.patch_text(text, [poisoned, valid], [], skill)
+            candidate, accepted, rejected = production.patch_text_partial(text, [poisoned, valid], [], skill)
+            self.assertEqual(accepted, [valid])
+            self.assertEqual([(item["edit"], item["error"]) for item in rejected],
+                             [(poisoned, "production_patch_regression")])
+            self.assertEqual(candidate, text.replace(valid["before"], valid["after"]))
+            self.assertIn("because he wanted to be there", candidate)
+            unchanged, none, only_rejected = production.patch_text_partial(text, [poisoned], [], skill)
+            self.assertEqual((unchanged, none, [item["error"] for item in only_rejected]),
+                             (text, [], ["production_patch_regression"]))
+            # The next attempt is told what was rejected, as long as the span still exists in the text.
+            current = {"patches": [{"method": "model_patch", "rejected_edits": rejected}]}
+            hint = production.rejected_edit_feedback(current, candidate)
+            self.assertIn("REJECTED EARLIER EDITS", hint)
+            self.assertIn(poisoned["before"], hint)
+            self.assertEqual(production.rejected_edit_feedback(current, "Ein ganz anderer Text."), "")
+
+    def test_confirmed_finding_with_an_exact_replacement_becomes_a_minimal_edit(self):
+        with Fixture() as f:
+            skill = f.worker.fiction()[0]
+            text = ("Juri stand nicht nur da, weil Ada ihn gebeten hatte, sondern because he wanted to be there. "
+                    "Er wollte helfen, und diese Erkenntnis gab ihr Kraft. Die Crew erkannte das Licht an, was ihre "
+                    "Ankunft bestätigt. Das Wort Licht stand zweimal da. Licht.")
+            findings = [
+                {"quote": "because he wanted to be there", "correction": "ersetze „because he wanted to be there“ durch „weil er dabei sein wollte“"},
+                {"quote": "was ihre Ankunft bestätigt", "correction": 'replace "bestätigt" with "bestätigte"'},
+                {"quote": "Licht", "correction": "ersetze „Licht“ durch „Schein“"},   # not unique in the text
+                {"quote": "Er wollte helfen", "correction": "Den Satz natürlicher formulieren."},   # no exact replacement
+                {"quote": "Er wollte helfen", "correction": "ersetze „anderer Text“ durch „x“"},    # not part of the quote
+            ]
+            edits = production.declared_edits(findings, text)
+            self.assertEqual(edits, [{"before": "because he wanted to be there", "after": "weil er dabei sein wollte"},
+                                     {"before": "bestätigt", "after": "bestätigte"}])
+            candidate, accepted, rejected = production.patch_text_partial(
+                text, edits, [], skill, targets=[{**item, "start": text.find(item["before"]),
+                                                  "end": text.find(item["before"]) + len(item["before"])} for item in edits])
+            self.assertEqual((accepted, rejected), (edits, []))
+            self.assertIn("sondern weil er dabei sein wollte. Er wollte helfen", candidate)
+            self.assertIn("was ihre Ankunft bestätigte.", candidate)
+            self.assertNotIn("because", candidate)
+
+    def test_carried_over_defect_is_dropped_once_its_quote_became_a_longer_word(self):
+        quote = "was ihre Ankunft bestätigt"
+        fixed = "Die Crew erkannte das Licht an, was ihre Ankunft bestätigte. Dann legte das Schiff an."
+        faulty = "Die Crew erkannte das Licht an, was ihre Ankunft bestätigt. Dann legte das Schiff an."
+        self.assertIsNone(production.intact_span(fixed, quote))
+        span = production.intact_span(faulty, quote)
+        self.assertEqual((span["start"], span["end"], span["line"]), (faulty.find(quote), faulty.find(quote) + len(quote), 1))
+        # A later whole-phrase occurrence still keeps the defect.
+        self.assertEqual(production.intact_span(fixed + " Es war so, was ihre Ankunft bestätigt.", quote)["start"],
+                         (fixed + " Es war so, was ihre Ankunft bestätigt.").rfind(quote))
+        self.assertIsNone(production.intact_span("Text ohne das Zitat.", quote))
+
+    def test_retry_audits_the_saved_version_again_when_a_stored_defect_is_stale(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            plan["chapters"][0].update(minimum=10, maximum=150)
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            identifier = f.change("start", version=1, mode="automatic")["id"]
+            doc = production.managed_docs(f.conn, f.pid)[0]
+            quote = "which confirmed the arrival"
+            with f.conn:
+                version = production.organizer.update_document(
+                    f.conn, doc, doc["title"], "The crew saw the light, which confirmed the arrivals at once.", "Fix", "generated")
+                stale = {"quote": quote, "category": "grammar", "severity": "automatic", "status": "confirmed",
+                         "issue": "tense", "correction": "x", "start": 24, "end": 50}
+                f.conn.execute("UPDATE jobs SET state='paused',result=? WHERE id=?", (production.dump({
+                    "step": "reviewed", "number": 1, "plan_version": 1, "pause_reason": "blocker", "detail": [stale],
+                    "current": {"document_id": doc["id"], "version": version, "automatic_version": version, "passes": 2,
+                                "review": {"findings": [stale], "local": [], "quality_version": production.QUALITY_VERSION}},
+                }), identifier))
+            self.assertTrue(production.language_retry_available(json.loads(
+                f.conn.execute("SELECT result FROM jobs WHERE id=?", (identifier,)).fetchone()[0])))
+            f.change("retry", job_id=identifier)
+            result = json.loads(f.conn.execute("SELECT result FROM jobs WHERE id=?", (identifier,)).fetchone()[0])
+            current = result["current"]
+            self.assertEqual(result["step"], "auditing")
+            self.assertNotIn("review", current)
+            self.assertEqual(current["quality_history"][-1]["stale_defects"], [quote])
+            self.assertEqual(current["revision_batches"][-1]["passes"], 2)
+
+    def test_verifier_stating_a_style_choice_does_not_block_as_a_language_defect(self):
+        defect = {"status": "confirmed", "severity": "automatic", "category": "grammar", "quote": "x",
+                  "verification": "Der Bindestrich ist hier eher eine stilistische Entscheidung als ein Fehler."}
+        self.assertTrue(production.optional_language(defect))
+        self.assertEqual(production.language_defects({"findings": [defect]}), [])
+        real = {**defect, "verification": "Der Wechsel von Deutsch zu Englisch ist ein klarer Sprachbruch."}
+        self.assertEqual(production.language_defects({"findings": [real]}), [real])
+
     def test_variant_replaces_only_the_selected_illustration(self):
         with Fixture() as f:
             identifier = f.start()

@@ -1,0 +1,36 @@
+{
+ "model": "story",
+ "target_ctx": 262144,
+ "quick": false,
+ "checks": [
+  true,
+  false,
+  true,
+  true
+ ],
+ "slot": {
+  "n_ctx": 262144,
+  "id": 0,
+  "model": null,
+  "n_ctx_expected": 262144,
+  "n_ctx_ok": true
+ },
+ "longctx": {
+  "approx_input_tokens_target": 245000,
+  "measured_prompt_tokens": 244823,
+  "completion": "KEY-010: alpha10000-delta0189\nKEY-100: alpha100000-delta1890\nKEY-200: null\nKEY-240: null",
+  "seconds": 2633.77,
+  "seconds_per_1k_prompt_tokens": 10.76,
+  "secrets_recovered": false
+ },
+ "longout": {
+  "max_tokens": 8192,
+  "prompt_tokens": 42,
+  "completion_tokens": 4411,
+  "total_tokens": 4453,
+  "under_ctx": true,
+  "seconds": 131.75,
+  "decoded_tokens_per_second": 33.5
+ },
+ "verdict": "BLOCKED"
+}

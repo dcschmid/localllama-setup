@@ -1,0 +1,33 @@
+{
+ "model": "story",
+ "target_ctx": 262144,
+ "quick": false,
+ "checks": [
+  true
+ ],
+ "slot": {
+  "n_ctx": 262144,
+  "id": 0,
+  "model": null,
+  "n_ctx_expected": 262144,
+  "n_ctx_ok": true
+ },
+ "ladder": {
+  "rows": [
+   {
+    "scale": 131072,
+    "prompt_tokens": 131048,
+    "all_facts": false,
+    "seconds": 1352.76,
+    "misses": [
+     "KEY-004",
+     "KEY-040",
+     "KEY-080",
+     "KEY-120"
+    ]
+   }
+  ],
+  "max_all_facts_scale": 0
+ },
+ "verdict": "LADDER_DONE"
+}

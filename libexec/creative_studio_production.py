@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 
 import creative_studio_organizer as organizer
 from creative_studio_chat import SIMULATED_OUTPUT
-from creative_studio_correction import digest, improvements, patch_text
+from creative_studio_correction import digest, improvements, patch_text, patch_text_partial
 import creative_studio_visual as visuals
 import creative_studio_story as story
 from creative_studio_plan import PlanError
@@ -194,8 +194,62 @@ def review_has_required_skills(review):
 
 
 def optional_language(finding):
-    return bool(re.search(r"\b(?:rein stilistisch\w*|optionaler stil|optional style|stylistic preference)\b",
+    return bool(re.search(r"\b(?:rein stilistisch\w*|eher (?:eine )?stilistisch\w*|stilistische[n]? entscheidung|"
+                          r"optionaler stil|optional style|stylistic (?:preference|choice))\b",
                           finding.get("verification") or "", re.I))
+
+
+REPLACEMENT = re.compile(r"\s*(?:ersetze|replace)\s+[„“\"'‚‘«»]\s*(.+?)\s*[“”\"'‘’«»]\s+(?:durch|mit|with|by)\s+"
+                         r"[„“\"'‚‘«»]\s*(.+?)\s*[“”\"'‘’«»]\s*[.!]?\s*", re.I | re.S)
+
+
+def declared_edits(findings, text):
+    """Minimal edits for confirmed findings whose own correction names an exact, unique replacement."""
+    edits = []
+    for finding in findings:
+        match = REPLACEMENT.fullmatch(finding.get("correction") or "")
+        if not match:
+            continue
+        before, after = match.groups()
+        if (before in finding.get("quote", "") and text.count(before) == 1 and before != after
+                and len(before) <= 300 and len(after) <= 2 * len(before) + 80
+                and not any(before in edit["before"] or edit["before"] in before for edit in edits)):
+            edits.append({"before": before, "after": after})
+    return edits
+
+
+def rejected_edit_feedback(current, text):
+    """Name earlier unsafe model edits that still apply to this text, so a retry does not repeat them."""
+    hints = {"production_patch_regression": "it repeated wording that already follows or precedes the span, "
+                                           "or changed markup, language or repetition",
+             "production_patch_boundary": "it broke a sentence boundary or word join",
+             "production_patch_invalid": "it changed facts, names, numbers or protected text, or its span was unclear"}
+    items = []
+    for patch in current.get("patches", []):
+        for item in patch.get("rejected_edits", []):
+            edit = item.get("edit", {})
+            before = edit.get("before")
+            if before and before in text and not any(before[:400] == known["before"] for known in items):
+                items.append({"before": before[:400], "after": str(edit.get("after", ""))[:400],
+                              "reason": hints.get(item.get("error"), item.get("error"))})
+    if not items:
+        return ""
+    return ("\nREJECTED EARLIER EDITS (do not repeat them; replace only the faulty words, never restate the "
+            "neighboring sentence, and make 'after' fit directly into the unchanged text around the span)\n" + dump(items[:3]))
+
+
+def intact_span(body, quote):
+    """Evidence for a carried-over defect only where its quote still stands unchanged.
+
+    A quote that now continues into a longer word, such as the corrected "bestätigte" for the
+    faulty "bestätigt", marks a repaired passage and must not keep the defect alive."""
+    for match in re.finditer(re.escape(quote), body):
+        start, end = match.span()
+        if (quote[:1].isalnum() and start and body[start - 1].isalnum()) or (
+                quote[-1:].isalnum() and end < len(body) and body[end].isalnum()):
+            continue
+        return {"quote": quote, "start": start, "end": end, "line": body.count("\n", 0, start) + 1}
+    return None
 
 
 def language_defects(review):
@@ -574,6 +628,17 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
                 if doc["version"] == current.get("version"):
                     if (current.get("review") or {}).get("quality_version") == QUALITY_VERSION:
                         story.error("production_fix_required", 409)
+                    result["step"] = "auditing"
+            if retry_language:
+                # A stored language defect whose quote no longer stands is stale: audit the saved version again.
+                current = result["current"]
+                saved = story.managed_chapter(conn, pid, current.get("document_id"))
+                stale = [d["quote"] for d in language_defects(current.get("review", {})) if not intact_span(saved["body"], d["quote"])]
+                if stale and saved["version"] == current.get("version"):
+                    current.setdefault("quality_history", []).append(
+                        {"version": current.get("version"), "review": current.pop("review"), "stale_defects": stale})
+                    for key in ("language_windows", "audit_windows"):
+                        current.pop(key, None)
                     result["step"] = "auditing"
             if retry_language or (action == "retry" and result.get("error") == "story_length_failed" and result.get("step") == "reviewed"):
                 current = result["current"]
@@ -1256,7 +1321,7 @@ class ProductionWorker:
                         if f.get("status") in ("confirmed", "refuted")}
             for defect in language_defects(before):
                 identity = (defect["category"], defect["quote"])
-                if identity not in observed and (span := fiction.evidence(body, defect["quote"])):
+                if identity not in observed and (span := intact_span(body, defect["quote"])):
                     review["findings"].append({**defect, **span})
             candidate = current.pop("candidate")
             current.pop("candidate_base_hash", None)
@@ -1376,6 +1441,9 @@ class ProductionWorker:
             if local_edits:
                 edits = local_edits
                 record = {"method": "local_text", "edits": edits}
+            elif declared := declared_edits(targeted[:5], text):
+                edits = declared
+                record = {"method": "finding_correction", "edits": edits}
             else:
                 excerpts = [text[max(0, issue["start"] - 360):issue["end"] + 360]
                             for issue in targeted[:5] if "start" in issue]
@@ -1386,7 +1454,8 @@ class ProductionWorker:
                         "punctuation in the source span. Check both neighbors. Preserve established facts, quotes, numbers, "
                         "motifs, meaning and good prose. Return no edits if a fix needs an author decision. "
                         "Do not rewrite the chapter. Use the story language.\n\n"
-                        + canon + "\nFINDINGS\n" + dump(targeted[:5]) + "\nEXCERPTS\n" + "\n[… ]\n".join(excerpts),
+                        + canon + "\nFINDINGS\n" + dump(targeted[:5]) + "\nEXCERPTS\n" + "\n[… ]\n".join(excerpts)
+                        + rejected_edit_feedback(current, text),
                         {"edits": array(story.schema(fields(("before", "after"))), 4)}, 2200)
                     edits = answer.get("edits")
                     if not isinstance(edits, list):
@@ -1407,10 +1476,16 @@ class ProductionWorker:
             current.setdefault("patches", []).append(record)
             try:
                 names = [r.get("name") for r in plan.get("bible_records", {}).get("characters", [])]
-                candidate = patch_text(text, edits, plan["motifs"], fiction, local=bool(local_edits),
-                                       targets=() if local_edits else targeted[:5], base_hash=base_hash,
-                                       canon=canon, language_tools=self.fiction()[1], language=language,
-                                       canonical_names=names)
+                options = dict(local=bool(local_edits), targets=() if local_edits else targeted[:5], base_hash=base_hash,
+                               canon=canon, language_tools=self.fiction()[1], language=language, canonical_names=names)
+                if local_edits:
+                    candidate = patch_text(text, edits, plan["motifs"], fiction, **options)
+                else:
+                    candidate, edits, rejected = patch_text_partial(text, edits, plan["motifs"], fiction, **options)
+                    if rejected:
+                        record["rejected_edits"] = rejected
+                        if not edits:
+                            raise PlanError(rejected[0]["error"])
             except PlanError as exc:
                 record["error"] = str(exc)
             else:

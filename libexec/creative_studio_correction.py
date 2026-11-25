@@ -40,6 +40,29 @@ def improvements(original, candidate, blockers, automatic):
     return not (after - before) and (sum(after.values()), automatic(candidate)) < (sum(before.values()), automatic(original))
 
 
+def patch_text_partial(text, edits, motifs, tools, **options):
+    """Keep every edit that passes the full patch validation together with the ones kept before.
+
+    One unsafe edit must not discard the other verified corrections. Returns the patched text,
+    the accepted edits and the rejected ones with their error codes. When nothing is accepted the
+    text is returned unchanged."""
+    if not isinstance(edits, list) or not edits:
+        return text, [], []
+    accepted, rejected = [], []
+    for edit in edits:
+        try:
+            patch_text(text, accepted + [edit], motifs, tools, **options)
+        except PlanError as exc:
+            if str(exc) == "production_patch_stale":
+                raise
+            rejected.append({"edit": edit, "error": str(exc)})
+        else:
+            accepted.append(edit)
+    if not accepted:
+        return text, [], rejected
+    return patch_text(text, accepted, motifs, tools, **options), accepted, rejected
+
+
 def patch_text(text, edits, motifs, tools, *, local=False, targets=(), base_hash=None,
                article=False, canon="", language_tools=None, language=None, canonical_names=()):
     if base_hash is not None and digest(text) != base_hash:
