@@ -30,6 +30,21 @@ const nameField = (label: string, name = '') =>
   `<label for="organizer-name">${esc(label)}</label><input class="field" id="organizer-name" name="name" value="${esc(name)}" required maxlength="180" autofocus>`;
 const folderData = (id?: string | null) => `data-folder-destination="${esc(id ?? '')}"`;
 
+type KnowledgeEntry = { id: string; category: string; title: string; content: string; source: string;
+  status: string; version: number; folder_name?: string };
+type KnowledgeView = { folder_id: string; chain: { id: string; name: string }[]; entries: KnowledgeEntry[];
+  own: KnowledgeEntry[]; inherited: KnowledgeEntry[]; conflicts: [KnowledgeEntry, KnowledgeEntry][];
+  suggestions: Array<{ id: string; category: string; title: string; content: string; origin: string }>;
+  profile: Record<string, string> | null; hint: { folder_id: string; name: string; count: number } | null };
+const knowledgePath = (id: string) => '/api/folders/' + id + '/knowledge';
+const knowledgeStatus = (value: string) =>
+  ({ confirmed: 'Bestätigt', reference: 'Referenz', idea: 'Idee', unresolved: 'Ungeklärt' } as Record<string, string>)[value] ?? value;
+const knowledgeRow = (item: KnowledgeEntry, actions: string[]) =>
+  `<li class="knowledge-row"><div class="knowledge-head"><strong>${esc(item.category)} · ${esc(item.title)}</strong>
+  <span class="knowledge-meta">${esc(knowledgeStatus(item.status))} · v${item.version}${item.folder_name ? ' · ' + esc(item.folder_name) : ''}</span></div>
+  <p>${esc(item.content)}</p>${item.source ? `<p class="knowledge-source">Quelle: ${esc(item.source)}</p>` : ''}
+  <div class="knowledge-actions">${actions.join('')}</div></li>`;
+
 export const chatEntry = (chat: Session): Entry => ({
   ...chat, kind: 'chat', name: chat.title || 'Unterhaltung',
 });
@@ -343,6 +358,102 @@ export class Organizer {
       ${preview.notes ? `<p>Notizen · ${preview.notes}</p>` : ''}${images}</details>`,
     operation === 'trash' ? 'In den Papierkorb' : 'Endgültig löschen',
     async () => { await this.mutate(operation, entries, { token: preview.token }); });
+  }
+
+  async knowledgeDialog(entry: Entry) {
+    const view = await json<KnowledgeView>(knowledgePath(entry.id));
+    const statusButton = (item: KnowledgeEntry) =>
+      `<button class="button quiet" type="button" data-knowledge="confirm" data-id="${esc(item.id)}">Bestätigen</button>
+       <button class="button quiet" type="button" data-knowledge="versions" data-id="${esc(item.id)}">Versionen</button>
+       <button class="button quiet" type="button" data-knowledge="delete" data-id="${esc(item.id)}">Löschen</button>`;
+    const categories = ['general', 'fact', 'character', 'place', 'organization', 'rule', 'event', 'term',
+      'reference-document', 'image-reference', 'visual-style', 'idea'];
+    showDialog('Ordnerwissen · ' + entry.name, `<div class="knowledge-panel" data-folder="${esc(entry.id)}">
+      <p>${view.hint ? `Weltwissen aktiv: ${esc(view.hint.name)} (${view.entries.length} Einträge inklusive Vererbung) – Chats in diesem Ordner nutzen es automatisch.`
+        : 'Noch kein Wissen hinterlegt. Leere Ordner funktionieren wie bisher.'}</p>
+      ${view.conflicts.length ? `<p class="knowledge-conflict">${view.conflicts.length} ungeklärte Konflikte zwischen Ordner und Unterordner – beide Fassungen bleiben erhalten und werden als ungeklärt gemeldet.</p>` : ''}
+      <form data-knowledge-form="add"><h3>Eintrag hinzufügen</h3>
+        <div class="knowledge-grid">
+          <label>Kategorie<select class="field" name="category">${categories.map(name => option(name, name)).join('')}</select></label>
+          <label>Titel<input class="field" name="title" maxlength="200" required></label>
+          <label>Status<select class="field" name="status">${option('reference', 'Referenz (unbestätigt)')}${option('confirmed', 'Bestätigter Kanon')}${option('idea', 'Kreative Idee')}${option('unresolved', 'Ungeklärt')}</select></label>
+          <label>Quelle<input class="field" name="source" maxlength="300" placeholder="z. B. Referenzdokument"></label>
+        </div>
+        <label>Inhalt<textarea class="field" name="content" rows="3" maxlength="20000" required></textarea></label>
+        <button class="button primary" type="submit">Hinzufügen</button></form>
+      <details class="knowledge-section" open><summary>Eigene Einträge (${view.own.length})</summary>
+        <ul class="knowledge-list">${view.own.map(item => knowledgeRow(item, [statusButton(item)])).join('') || '<li class="knowledge-empty">Keine eigenen Einträge.</li>'}</ul></details>
+      <details class="knowledge-section"><summary>Geerbt (${view.inherited.length})</summary>
+        <ul class="knowledge-list">${view.inherited.map(item => knowledgeRow(item, [])).join('') || '<li class="knowledge-empty">Keine geerbten Einträge.</li>'}</ul></details>
+      <details class="knowledge-section"${view.suggestions.length ? ' open' : ''}><summary>Vorschläge prüfen (${view.suggestions.length})</summary>
+        <ul class="knowledge-list">${view.suggestions.map(item => `<li class="knowledge-row"><div class="knowledge-head">
+          <strong>${esc(item.category)} · ${esc(item.title)}</strong><span class="knowledge-meta">${esc(item.origin)}</span></div>
+          <p>${esc(item.content)}</p><div class="knowledge-actions">
+          <button class="button quiet" type="button" data-knowledge="accept" data-id="${esc(item.id)}">Bestätigen</button>
+          <button class="button quiet" type="button" data-knowledge="keep" data-id="${esc(item.id)}">Als Referenz</button>
+          <button class="button quiet" type="button" data-knowledge="reject" data-id="${esc(item.id)}">Verwerfen</button></div></li>`).join('')
+          || '<li class="knowledge-empty">Keine offenen Vorschläge. Generierte Fakten landen hier erst nach deiner Bestätigung im Kanon.</li>'}</ul></details>
+      <form data-knowledge-form="profile"><h3>Visuelles Standardprofil (optional)</h3>
+        <div class="knowledge-grid">
+          <label>Vorlage<input class="field" name="template" maxlength="100" value="${esc(view.profile?.template ?? '')}"></label>
+          <label>Format<input class="field" name="ratio" maxlength="20" value="${esc(view.profile?.ratio ?? '')}" placeholder="16:9"></label>
+          <label>Stil<input class="field" name="style" maxlength="400" value="${esc(view.profile?.style ?? '')}"></label>
+          <label>Palette<input class="field" name="palette" maxlength="400" value="${esc(view.profile?.palette ?? '')}"></label>
+        </div><p class="knowledge-source">Chats und Geschichten können das Profil ausdrücklich überschreiben; Profile anderer Geschichten bleiben unverändert.</p>
+        <button class="button" type="submit">Profil speichern</button></form>
+      <p class="knowledge-actions"><button class="button" type="button" data-knowledge="export-markdown">Markdown exportieren</button>
+      <button class="button" type="button" data-knowledge="export-json">JSON exportieren</button></p></div>`, true);
+    const panel = $('[data-folder]', details);
+    if (!panel) return;
+    const rerender = () => void this.knowledgeDialog(entry);
+    panel.querySelectorAll<HTMLFormElement>('form[data-knowledge-form]').forEach(form => {
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(form));
+        const body = form.dataset.knowledgeForm === 'profile' ? { action: 'profile', profile: values }
+          : { action: 'add', ...values };
+        try {
+          await post(knowledgePath(entry.id), body);
+          announce('Ordnerwissen gespeichert.');
+          rerender();
+        } catch (error) {
+          announce(describe(error));
+        }
+      });
+    });
+    panel.addEventListener('click', async event => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-knowledge]');
+      if (!target) return;
+      const kind = target.dataset.knowledge!;
+      const id = target.dataset.id ?? '';
+      try {
+        if (kind === 'export-markdown' || kind === 'export-json') {
+          const format = kind === 'export-json' ? 'json' : 'markdown';
+          const result = await json<{ content: unknown }>(knowledgePath(entry.id) + '?format=' + format);
+          download('ordnerwissen-' + entry.name + '.' + (format === 'json' ? 'json' : 'md'),
+            format === 'json' ? JSON.stringify(result.content, null, 2) : String(result.content),
+            format === 'json' ? 'application/json' : 'text/markdown');
+          return;
+        }
+        if (kind === 'versions') {
+          const history = await post<{ versions: Array<{ version: number; title: string; content: string; status: string; created: number }> }>(
+            knowledgePath(entry.id), { action: 'versions', entry_id: id });
+          details.insertAdjacentHTML('beforeend', `<div class="knowledge-versions"><h3>Frühere Versionen</h3>
+            <ul>${history.versions.map(item => `<li>v${item.version} · ${formatDate(item.created)} · ${esc(item.content.slice(0, 80))}
+            <button class="button quiet" type="button" data-knowledge="restore" data-id="${esc(id)}" data-version="${item.version}">Wiederherstellen</button></li>`).join('')}</ul></div>`);
+          return;
+        }
+        if (kind === 'restore') {
+          await post(knowledgePath(entry.id), { action: 'restore', entry_id: id, version: Number(target.dataset.version) });
+          announce('Version wiederhergestellt.');
+        } else {
+          await post(knowledgePath(entry.id), (kind === 'accept' || kind === 'keep' || kind === 'reject')
+            ? { action: kind, suggestion_id: id } : { action: kind, entry_id: id, status: 'confirmed' });
+          announce(kind === 'delete' ? 'Eintrag gelöscht.' : kind === 'reject' ? 'Vorschlag verworfen.' : 'Gespeichert.');
+        }
+        rerender();
+      } catch (error) { announce(describe(error)); }
+    });
   }
 
   private moveDialog(entries: Entry[]) {
