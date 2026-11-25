@@ -7,6 +7,7 @@ import uuid
 
 import creative_studio_organizer as records
 import creative_studio_story as story
+import creative_studio_visual as visual
 
 # The existing projects and session pointer remain readable by older callers.
 MIGRATION = """
@@ -120,10 +121,13 @@ def ensure_context(conn, session, kind, lang, name=None, *, fresh=False):
     if not fresh:
         if active and (kind != "story" or active["kind"] in ("story", "novel")):
             conn.execute("UPDATE projects SET meta=json_set(meta,'$.chat_owned',json('true')) WHERE id=?", (active["id"],))
+            if active["kind"] in visual.KINDS:
+                visual.ensure(conn, active["id"])
             return active["id"]
         if active and kind == "story" and active["kind"] == "custom":
             # Promote the neutral context without moving any of its contents.
             conn.execute("UPDATE projects SET kind='story',meta=json_set(meta,'$.chat_owned',json('true')) WHERE id=?", (active["id"],))
+            visual.ensure(conn, active["id"])
             return active["id"]
         if not active and len(contexts) == 1 and (kind != "story" or contexts[0]["kind"] in ("story", "novel")):
             return activate(conn, session["id"], contexts[0]["id"])
@@ -132,6 +136,8 @@ def ensure_context(conn, session, kind, lang, name=None, *, fresh=False):
         VALUES(?,?,?,?,'{"chat_owned":true}',?,?)""",
         (pid, (name or session["title"] or "Unterhaltung")[:180], kind, lang, at, at))
     conn.execute("UPDATE sessions SET project_id=?,updated=? WHERE id=?", (pid, at, session["id"]))
+    if kind in visual.KINDS:
+        visual.ensure(conn, pid)
     return pid
 
 

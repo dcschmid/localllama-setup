@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 import creative_studio_organizer as organizer
 from creative_studio_correction import digest, improvements, patch_text
+import creative_studio_visual as visuals
 import creative_studio_story as story
 from creative_studio_plan import PlanError
 
@@ -141,6 +142,32 @@ def latest_plan(conn, pid):
 def job_state(conn, pid):
     return conn.execute("""SELECT * FROM jobs WHERE service='production' AND json_extract(payload,'$.project_id')=?
                            AND json_extract(payload,'$.kind') IN ('plan','story') ORDER BY created DESC LIMIT 1""", (pid,)).fetchone()
+
+
+def visual_observations(conn, pid, chapter, scene):
+    terms = story.words_for_relevance(scene)
+    if not terms or not chapter or chapter <= 1:
+        return []
+    job = conn.execute("""SELECT result FROM jobs WHERE service='production' AND json_extract(payload,'$.project_id')=?
+        AND json_extract(payload,'$.kind')='story' ORDER BY created DESC LIMIT 1""", (pid,)).fetchone()
+    if not job:
+        return []
+    documents = {doc["id"]: doc for doc in managed_docs(conn, pid)}
+    facts = []
+    for item in reversed(json.loads(job["result"]).get("chapter_results", [])):
+        doc = documents.get(item["id"])
+        if not doc or item["number"] >= chapter or item["version"] != doc["version"]:
+            continue
+        for entry in item["memory"]:
+            if (entry.get("status") == "established" and entry.get("kind") in ("wardrobe", "character", "location", "object")
+                    and entry.get("quote") and entry["quote"] in doc["body"]
+                    and len(terms & story.words_for_relevance(entry["fact"] + " " + entry["quote"])) >= 2):
+                fact = {"chapter": item["number"], "fact": entry["fact"][:160]}
+                if fact not in facts:
+                    facts.append(fact)
+                if len(facts) == 4:
+                    return facts
+    return facts
 
 
 def image_slot(result):
@@ -560,7 +587,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         if not isinstance(image, dict):
             story.error("production_plan_invalid")
         visual = {k: story.clean(image.get(k) or default, 80) for k, default in
-                  (("model", ""), ("preset", "none"), ("size", "1024x576"), ("cover_size", "768x1024"))}
+                  (("model", ""), ("preset", "none"), ("size", "1024x576"), ("cover_size", "1024x576"))}
         request_id = body.get("request_id")
         if request_id is not None and (not isinstance(request_id, str) or not organizer.ID.fullmatch(request_id)):
             story.error("production_plan_invalid")
@@ -574,6 +601,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         story.error("not_found", 404)
     if record["state"] != "approved" or body.get("mode") not in ("automatic", "together"):
         story.error("production_approval_required", 409)
+    visuals.ensure(conn, pid)
     review_art = body.get("review_art", body["mode"] == "together")
     if type(review_art) is not bool:
         story.error("production_plan_invalid")
@@ -620,7 +648,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         recovered.pop("whole_review", None)
     recovered.setdefault("step", "writing")
     recovered.setdefault("number", 1)
-    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art}, recovered,
+    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art, "visual_profiles": True}, recovered,
                    store_message, "Manuskriptproduktion", label)
 
 
@@ -633,10 +661,11 @@ def confirmed_blockers(items):
 
 
 class ProductionWorker:
-    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope):
+    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope, *, visual_compose=None):
         self.db, self.lock, self.call, self.fiction = db, lock, call, fiction
         self.image_queue, self.image_verify = image_queue, image_verify
         self.store_message, self.validate_scope = store_message, validate_scope
+        self.visual_compose = visual_compose
 
     def commit(self, row, result, state="running", effect=None, *, retry=False):
         with self.lock, self.db() as conn:
@@ -803,7 +832,7 @@ class ProductionWorker:
                 return self.commit(row, result, "completed")
             known = source.get("outline", [])
             proposal.update(language=language, motifs=[])
-            proposal["visual"].update(model="", preset="none", size="1024x576", cover_size="768x1024")
+            proposal["visual"].update(model="", preset="none", size="1024x576", cover_size="1024x576")
             if known and len(known) != len(proposal["chapters"]):
                 raise PlanError("story_outline_incomplete")
             for index, chapter in enumerate(proposal["chapters"]):
@@ -1056,7 +1085,7 @@ class ProductionWorker:
                     current["automatic_version"] = doc["version"]
             if current.get("version") != doc["version"]:
                 for key in ("image_job", "image_prompt", "image_attempt", "image_state", "image_waiting", "asset",
-                            "text_finalized_version", "corrections"):
+                            "text_finalized_version", "corrections", "resolved_image", "profile_snapshot"):
                     current.pop(key, None)
             current.update(version=doc["version"], document_id=doc["id"])
         if current.get("candidate_base_hash", digest(doc["body"])) != digest(doc["body"]):
@@ -1240,6 +1269,11 @@ class ProductionWorker:
         language = plan["language"]
         visual = plan["visual"]
         cover = chapter is None
+        number = chapter["number"] if chapter else 1
+        profile = None
+        if self.visual_compose and payload.get("visual_profiles"):
+            profile = slot.get("profile_snapshot") or visuals.load(self.db(), payload["project_id"])
+        ratio = profile["ratio"] if profile else visuals.ratio_for(visual["cover_size"] if cover else visual["size"])
         if "image_prompt" not in slot:
             text = source["body"]
             starts = list(range(0, len(text), 900))
@@ -1249,13 +1283,22 @@ class ProductionWorker:
             passages = {str(index): excerpt for index, excerpt in enumerate(excerpts, 1) if excerpt}
             if not passages:
                 raise PlanError("production_image_evidence")
+            scene_bible = {"characters": visual.get("characters"), "locations": visual.get("locations"),
+                           "wardrobe": visual.get("wardrobe")} if not profile else {
+                "style": profile["style"], "chapter_records": visuals.records(profile, number, text),
+                "scene_direction": chapter["illustration"] if chapter else "Use the opening chapter for the cover.",
+                "earlier_observations": visual_observations(self.db(), payload["project_id"], number, text)
+                    if profile["consistency"] else [],
+                "palette_direction": "Choose local colors and lighting from the selected passage."}
             response, proof = self.ask(language, "image",
                 "Choose the identifier of one supplied passage that depicts a distinctive visual event. "
                 "Compose an English illustration prompt based on that passage. Describe its location, action, objects, "
                 "appearance, clothing and composition. Use only people and elements supported by the chosen passage. "
-                "The visual bible sets palette and style. Keep lettering and captions out of the picture. "
-                + ("Design this as a portrait cover with space for a title. " if cover else "Compose a chapter illustration. ")
-                + "\nVISUAL BIBLE\n" + dump(visual) + "\nNUMBERED PASSAGES\n" + dump(passages),
+                "Use only visual facts valid at this scene in the chapter. When clothing or appearance changes, prioritize "
+                "the source passage and the applicable Visual Bible entry over earlier observations. Choose "
+                "scene-local lighting and color. Keep any lettering and captions out of the picture. "
+                + (f"Compose a {ratio} cover with space for typesetting. " if cover else f"Compose a {ratio} chapter illustration. ")
+                + "\nVISUAL BIBLE\n" + story.snippet(dump(scene_bible), 4300) + "\nNUMBERED PASSAGES\n" + dump(passages),
                 {"passage": enum(passages), **fields(("prompt", "alt"))}, 950)
             selected = response.get("passage")
             quote = passages.get(selected) if isinstance(selected, str) else None
@@ -1264,7 +1307,7 @@ class ProductionWorker:
             prompt, alt = response["prompt"].strip(), response["alt"].strip()
             fallback = not prompt
             if fallback:
-                layout = "Portrait book cover" if cover else "Chapter illustration"
+                layout = f"{ratio} book cover" if cover else f"{ratio} chapter illustration"
                 prompt = (f"{layout}. Depict a single visible moment from the passage. "
                           "Use only the people, objects and action in that moment. No lettering.\n"
                           f"Style: {visual['style'][:300]}. Palette: {visual['palette'][:180]}.\n"
@@ -1275,20 +1318,35 @@ class ProductionWorker:
             slot["image_prompt"] = {"prompt": prompt[:2500].strip(), "alt": alt[:400].strip(),
                                     "quote": quote, "source_version": source["version"], "evidence": proof,
                                     "prompt_source": "selected_passage" if fallback else "model"}
+            if profile:
+                slot["profile_snapshot"] = profile
             return self.commit(row, result)
         size = visual["cover_size"] if cover else visual["size"]
         if not slot.get("image_job"):
             key = f"{payload['project_id']}:{result['plan_version']}:{chapter['number'] if chapter else 'cover'}:{source['version']}:{slot.get('image_attempt', 0)}"
             key_id = hashlib.sha256(key.encode()).hexdigest()[:32]
-            request = {"prompt": slot["image_prompt"]["prompt"], "size": size, "preset": visual["preset"] or "none",
-                       "seed": int(key_id[:12], 16) % 2147483647}
-            if visual["model"]:
-                request["model"] = visual["model"]
+            seed = int(key_id[:12], 16) % 2147483647
+            if profile:
+                if "resolved_image" not in slot:
+                    prompt = slot["image_prompt"]
+                    request, metadata = self.visual_compose(payload["project_id"], profile, prompt["prompt"],
+                        prompt["quote"], number, cover=cover, seed=seed)
+                    slot["resolved_image"] = {"request": request, "visual_profile": metadata}
+                    return self.commit(row, result)
+                request = slot["resolved_image"]["request"]
+            else:
+                request = {"prompt": slot["image_prompt"]["prompt"], "size": size,
+                           "preset": visual["preset"] or "none", "seed": seed}
+                if visual["model"]:
+                    request["model"] = visual["model"]
 
             def queue(conn):
-                self.image_queue(conn, request, {"project_id": payload["project_id"], "session_id": payload.get("session_id"),
-                     "document_id": None if cover else source["id"], "cover": cover, "production": row["id"]},
-                     wait=7200, identifier=key_id)
+                metadata = {"project_id": payload["project_id"], "session_id": payload.get("session_id"),
+                            "document_id": None if cover else source["id"], "cover": cover, "production": row["id"],
+                            "alt": slot["image_prompt"]["alt"]}
+                if profile:
+                    metadata["visual_profile"] = slot["resolved_image"]["visual_profile"]
+                self.image_queue(conn, request, metadata, wait=7200, identifier=key_id)
                 slot.update(image_job=key_id, image_state="waiting_gpu")
                 result.pop("next_at", None)
             return self.commit(row, result, effect=queue)
@@ -1312,10 +1370,13 @@ class ProductionWorker:
             slot.update(image_state="completed", image_waiting=None)
             return self.commit(row, result)
         archive = json.loads(job["result"])
+        requested = json.loads(job["payload"])
         image_id = archive.get("image_id")
-        dimensions = self.image_verify(image_id, size)
+        dimensions = self.image_verify(image_id, requested["request"].get("size", size))
         slot["asset"] = {"id": image_id, "dimensions": dimensions, "job_id": job["id"],
-                         "request": archive.get("request") or json.loads(job["payload"])["request"], **slot["image_prompt"]}
+                         "request": archive.get("request") or requested["request"], **slot["image_prompt"]}
+        if metadata := requested.get("meta", {}).get("visual_profile"):
+            slot["asset"]["visual_profile"] = metadata
         result.pop("next_at", None)
         if result["step"] == "art_variant":
             if cover:
@@ -1552,7 +1613,7 @@ class ProductionWorker:
 
 
 def manuscript(conn, pid):
-    organizer.require(conn, "project", pid)
+    project = organizer.require(conn, "project", pid)
     job = conn.execute("""SELECT * FROM jobs WHERE service='production' AND json_extract(payload,'$.project_id')=?
                          AND json_extract(payload,'$.kind')='story' ORDER BY created DESC LIMIT 1""", (pid,)).fetchone()
     if not job:
@@ -1573,6 +1634,17 @@ def manuscript(conn, pid):
                          "words": story.count_words(doc["body"]), "version": doc["version"],
                          "status": "approved" if valid else "review", "image": receipt["image"] if matched else None})
     cover = result.get("cover")
+    selected = json.loads(project["meta"] or "{}").get("manual_cover")
+    if cover and selected and selected != cover["id"] and not organizer.purged_image(conn, selected):
+        pick = conn.execute("""SELECT id,payload,result FROM jobs WHERE service='image' AND state='completed'
+            AND json_extract(result,'$.image_id')=? ORDER BY updated DESC LIMIT 1""", (selected,)).fetchone()
+        if pick:
+            receipt, rendered = json.loads(pick["payload"]), json.loads(pick["result"])
+            request = rendered.get("request") or receipt["request"]
+            if request.get("size"):
+                cover = {"id": selected, "alt": rendered.get("alt") or receipt.get("meta", {}).get("alt") or plan["title"],
+                         "dimensions": rendered.get("dimensions"), "job_id": pick["id"], "request": request,
+                         "visual_profile": receipt.get("meta", {}).get("visual_profile"), "manual": True}
     ready = ready and bool(cover and not organizer.purged_image(conn, cover["id"]))
     return {"title": plan["title"], "subtitle": plan["subtitle"], "afterword": plan["afterword"],
             "language": plan["language"], "cover": cover, "chapters": chapters, "complete": ready,

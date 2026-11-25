@@ -624,7 +624,7 @@ def duplicate_project(conn, original):
     def remap(value):
         if isinstance(value, dict):
             return {key: (mapping.get(item, item) if isinstance(item, str) and key in
-                    ("project_id", "session_id", "document_id", "chat_task_id", "job_id", "image_job_id")
+                    ("project_id", "session_id", "document_id", "chat_task_id", "job_id", "image_job_id", "attachment")
                     else [mapping.get(identifier, identifier) if isinstance(identifier, str) else identifier for identifier in item]
                     if isinstance(item, list) and key in ("chapter_ids", "context_documents")
                     else remap(item)) for key, item in value.items()}
@@ -642,6 +642,10 @@ def duplicate_project(conn, original):
     meta = json.loads(original["meta"] or "{}")
     if isinstance(meta.get("story"), dict) and meta["story"].get("opening"):
         meta["story"]["opening"] = mapping.get(meta["story"]["opening"])
+    if profile := meta.get("visual_profile"):
+        profile["id"] = new
+        profile["version"] = 1
+        profile["bible"] = remap(profile.get("bible", {}))
     clone("projects", original, name=name, created=at, updated=at, archived_at=None,
           meta=json.dumps(meta, ensure_ascii=False))
     for kind, records in contents.items():

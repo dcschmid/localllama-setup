@@ -1,8 +1,9 @@
+import { receiptMarkup, type VisualReceipt } from './visual';
 import { esc, json, post } from './core';
 import { button, dialogForm, download, markdown, productionErrors, showDialog } from './studio-ui';
 
 type Section = Record<string, string>;
-type Image = { id: string; alt: string };
+type Image = { visual_profile?: VisualReceipt; id: string; alt: string };
 type Finding = { quote: string; issue: string; severity?: string; chapter?: string; category?: string; status?: string;
   method?: string; correction?: string; related_quote?: string; verification?: string; line?: number };
 type Chapter = { id: string; number: number; title: string; version: number; words: number; status: string;
@@ -60,8 +61,7 @@ const bibleRecordLabels: Record<string, { label: string; fields: Section }> = {
     foreshadowing: 'Foreshadowing', payoff: 'Payoff' } },
 };
 const visualLabels = { style: 'Stil', palette: 'Palette', characters: 'Aussehen', wardrobe: 'Kleidung',
-  locations: 'Schauplätze', atmosphere: 'Atmosphäre', model: 'Bildmodell', preset: 'Preset',
-  size: 'Kapitelformat', cover_size: 'Titelbildformat' };
+  locations: 'Schauplätze', atmosphere: 'Atmosphäre' };
 const chapterFields = { title: 'Titel', perspective: 'Erzählperspektive', opening: 'Ausgangssituation',
   conflict: 'Hauptkonflikt', beats: 'Handlungsschritte', development: 'Charakterentwicklung', revelations: 'Neue Informationen',
   tension: 'Spannungsentwicklung', closing: 'Kapitelabschluss', continuity: 'Kontinuitätsinformationen', illustration: 'Illustrationsmotiv' };
@@ -147,7 +147,7 @@ export function planDialog(info: ProductionInfo, pid: string) {
       return `<details><summary>${esc(group.label)}</summary>${values.map(row =>
         section(row.name ?? row.event ?? row.character, group.fields, row)).join('')}</details>`;
     }).join('')
-    + section('Visual Bible', visualLabels, plan.visual) + `<details><summary>Kapitelübersicht</summary>
+    + section('Bildideen aus der Planung', visualLabels, plan.visual) + `<details><summary>Kapitelübersicht</summary>
     ${plan.chapters.map(c => section(c.number + '. ' + c.title + ' · ' + c.minimum + '–' + c.maximum + ' Wörter', chapterFields, c)).join('')}
     </details>` + (!info.historical && info.narrative.length ? `<details><summary>Story-Bibel aus geschriebenen Kapiteln</summary>
     ${info.narrative.map(c => `<details><summary>${c.number}. ${esc(c.title)}</summary><p>${esc(c.summary)}</p>
@@ -164,7 +164,8 @@ export function planDialog(info: ProductionInfo, pid: string) {
       + (issueMarkup(info.impact.findings) || '<p>Die Prüfung hat keine Konflikte belegt.</p>') + '</details>' : '')
     + (active && info.job?.kind === 'story' && info.job.plan_version && info.job.plan_version !== info.version
       ? '<p>Die laufende Produktion verwendet weiterhin Planversion ' + String(info.job.plan_version) + '.</p>' : '')
-    + '<div class="editor-actions">' + (info.historical ? '' : button('production-edit', 'Plan bearbeiten', undefined, 'button', pid)
+    + '<div class="editor-actions">' + (info.historical ? '' : button('visual-profile', 'Bildstil', undefined, 'button', pid)
+      + button('production-edit', 'Plan bearbeiten', undefined, 'button', pid)
       + button('production-audit-plan', 'Planung prüfen', undefined, 'button', pid)
       + (info.approved ? (!active ? button('production-start-together', 'Gemeinsam schreiben', undefined, 'button', pid)
         + button('production-start-automatic', 'Geschichte vollständig erstellen', undefined, 'button primary', pid) : '')
@@ -185,7 +186,7 @@ export function editPlanDialog(info: ProductionInfo, submit: (values: object) =>
       Object.entries(plan.bible_records ?? {}).filter(([, values]) => values.length).map(([key, values]) =>
         group(bibleRecordLabels[key].label, values.map((row, index) => group(row.name ?? row.event ?? row.character,
           controls('bible-record-' + key + '-' + index + '-', bibleRecordLabels[key].fields, row))).join(''))).join('')) +
-    group('Visual Bible', controls('visual-', visualLabels, plan.visual)) +
+    group('Bildideen aus der Planung', controls('visual-', visualLabels, plan.visual)) +
     group('Kapitelübersicht', plan.chapters.map(c => group(c.number + '. ' + c.title,
       controls('chapter-' + c.number + '-', chapterFields, c) +
       integer('minimum-' + c.number, 'Mindestens Wörter', c.minimum, 20000) +
@@ -196,7 +197,8 @@ export function editPlanDialog(info: ProductionInfo, submit: (values: object) =>
       const records = Object.fromEntries(Object.entries(plan.bible_records ?? {}).map(([key, values]) => [key,
         values.map((_, index) => collect('bible-record-' + key + '-' + index + '-', bibleRecordLabels[key].fields))]));
       return submit({ version: info.version, plan: { ...plan, ...collect('plan-', mainLabels), bible: collect('bible-', bibleLabels),
-        bible_records: records, visual: collect('visual-', visualLabels), motifs: String(data.get('motifs')).split('\n').map(s => s.trim()).filter(Boolean),
+        bible_records: records, visual: { ...plan.visual, ...collect('visual-', visualLabels) },
+        motifs: String(data.get('motifs')).split('\n').map(s => s.trim()).filter(Boolean),
         chapters: plan.chapters.map(c => ({ ...c, ...collect('chapter-' + c.number + '-', chapterFields),
           minimum: Number(data.get('minimum-' + c.number)), maximum: Number(data.get('maximum-' + c.number)) })) } });
     });
@@ -257,7 +259,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
       return `<details data-production-chapter="${ch.number}" data-job-detail="chapter-${ch.number}"${items.length === 1 ? ' open' : ''}>
         <summary>${ch.number}. ${esc(ch.title)} · ${number.format(ch.words)} Wörter · ${doc && doc.version !== ch.version ? 'Erneut prüfen' :
           ch.status === 'approved' ? 'Geprüft' : 'Zur Freigabe'}</summary>
-        ${ch.image ? media(ch.image.id, ch.image.alt, false) + button('variant', 'Bildvariante erstellen', undefined, 'button quiet', ch.image.id) : ''}
+        ${ch.image ? media(ch.image.id, ch.image.alt, false) + receiptMarkup(ch.image.visual_profile) + button('variant', 'Bildvariante erstellen', undefined, 'button quiet', ch.image.id) : ''}
         ${ch.corrections ? `<p>${ch.corrections} Textfehler automatisch korrigiert.</p>` : ''}
         ${ch.findings?.length || skillMarkup(ch.skills) ? `<details data-job-detail="chapter-${ch.number}-quality"><summary>Prüfdetails</summary>
           ${skillMarkup(ch.skills)}${ch.findings?.length ? issueMarkup(ch.findings) : ''}</details>` : ''}

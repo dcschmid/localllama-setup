@@ -92,6 +92,7 @@ class Fixture:
         self.conn = self.backend["db"]()
         self.worker = self.backend["production_worker"]
         self.worker.call = fake_model
+        self.worker.visual_compose = None
         self.worker.image_verify = lambda image, size: [int(side) for side in size.split("x")]
         return self
 
@@ -506,6 +507,44 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(end["chapter_results"][0]["image"]["id"], first_image)
             self.assertEqual(len(production.managed_docs(f.conn, f.pid)), 2)
             self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 3)
+
+    def test_story_uses_visual_profile_for_two_chapters_and_cover(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            plan["chapters"].append({**plan["chapters"][0], "title": "The last drawer",
+                                     "beats": "Nera carries the key into the corridor."})
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            f.change("start", version=1, mode="automatic", review_art=False)
+            received = []
+
+            def compose(pid, profile, subject, passage, number, *, cover, seed):
+                self.assertEqual(pid, f.pid)
+                self.assertIn(passage, PROSE)
+                self.assertEqual(profile["ratio"], "16:9")
+                received.append((number, cover))
+                return ({"model": profile["model"], "prompt": subject, "size": "1024x576", "seed": seed},
+                        {"id": profile["id"], "template": profile["template"], "version": profile["version"]})
+
+            f.worker.visual_compose = compose
+            self.assertEqual(f.drive(checkpoints=120)["state"], "completed")
+            self.assertEqual(received, [(1, False), (2, False), (1, True)])
+            result = production.manuscript(f.conn, f.pid)
+            assets = [result["cover"], *(chapter["image"] for chapter in result["chapters"])]
+            self.assertTrue(all(asset["dimensions"] == [1024, 576] for asset in assets))
+            self.assertTrue(all(asset["visual_profile"]["template"] == "anima-aesthetic" for asset in assets))
+            self.assertTrue(all("images/" + asset["id"] in production.manuscript_text(result, "mdx", local_images=True)
+                                for asset in assets))
+            scene = "Mara found the key beneath a sheet of paper near the drawer."
+            observed = production.visual_observations(f.conn, f.pid, 2, scene)
+            self.assertEqual(observed, [{"chapter": 1, "fact": "Mara found the key in the drawer."}])
+            self.assertEqual(production.visual_observations(f.conn, f.pid, 1, scene), [])
+            self.assertEqual(production.visual_observations(f.conn, f.pid, 2, "A snowstorm closes the road."), [])
+            selected = assets[1]["id"]
+            with f.conn:
+                f.conn.execute("UPDATE projects SET meta=json_set(meta,'$.manual_cover',?) WHERE id=?", (selected, f.pid))
+            self.assertEqual(production.manuscript(f.conn, f.pid)["cover"]["id"], selected)
 
     def test_eight_chapter_checkpoints_complete_in_order_and_export_nine_images(self):
         with Fixture() as f:

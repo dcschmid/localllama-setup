@@ -1,3 +1,4 @@
+import { receiptMarkup, visualProfileDialog, type VisualReceipt } from './visual';
 import { ApiError, api, chat, esc, json, post, prefs, stream, type Document, type Msg, type Project, type Session } from './core';
 import { Organizer, chatEntry, type Entry, type ManagedView } from './organizer';
 import { chapterMenu, chapterPlanDialog, chapterTools, requestDialog, settingsDialog,
@@ -7,16 +8,16 @@ import { artReviewDialog, editPlanDialog, exportManuscript, manuscript, manuscri
   productionInfo, productionJob, proposeDialog, type ProductionJob } from './production';
 import { icon, type IconName } from './icons';
 import { projectTitle, routeIntent, suggestions, tools, type Intent, type Mode, type Tool } from './intent';
-import { $, announce, button, describe, details, dialogForm, download, formatDate, iconButton, imageUrl, main, mark, markdown, safeImageId, showDialog, sourceLink } from './studio-ui';
+import { $, announce, button, describe, details, dialogForm, download, formatDate, iconButton, imageUrl, main, mark, markdown, safeImageId, showDialog, sourceLink, visualErrors } from './studio-ui';
 
 type DocSummary = Pick<Document, 'id' | 'title' | 'kind' | 'status' | 'updated' | 'version' | 'folder_id' | 'story_number'> & { project_id?: string };
 type Attachment = { id: string; name: string; folder_id?: string; size: number };
 type ProjectDetail = Project & { documents: DocSummary[]; attachments?: Attachment[]; chats?: Session[] };
 type Memory = { kind: string; key: string; body: string };
 type ImageItem = { id: string; name?: string; folder_id?: string | null; trashed?: boolean;
-  request?: { prompt?: string }; created?: number };
+  alt?: string; visual_profile?: VisualReceipt; request?: { prompt?: string }; created?: number };
 type ImageJob = { id?: string; status: string; image_id?: string; progress?: number; error?: string;
-  request?: { prompt?: string }; dimensions?: [number, number]; waiting_reason?: string };
+  alt?: string; visual_profile?: VisualReceipt; request?: { prompt?: string }; dimensions?: [number, number]; waiting_reason?: string };
 type Task = { status: string; project_id?: string; document_id?: string; error?: string; image?: ImageJob;
   requirements: { language?: 'de' | 'en'; word_range?: [number, number]; image_size?: string };
   steps: Record<string, { status: string; name?: string; error?: string;
@@ -273,7 +274,7 @@ const taskErrors: Record<string, string> = {
   variant_source_missing: 'In dieser Unterhaltung ist noch kein fertiges Bild für eine Variante verfügbar.',
   gpu_wait_timeout: 'Der Bilddienst blieb während der Wartezeit belegt.',
 };
-const taskFailure = (code?: string) => code?.startsWith('writing_skill_missing:') ?
+const taskFailure = (code?: string) => code?.startsWith('visual_') ? visualErrors[code.split(':')[0]] : code?.startsWith('writing_skill_missing:') ?
   'Der lokale Schreibskill fehlt: ' + code.split(':')[1] : taskErrors[code ?? ''];
 
 function taskContent(id: string) {
@@ -325,7 +326,7 @@ function taskContent(id: string) {
       ${button('open-doc', 'Entwurf öffnen', 'text', 'button', doc.id)}</section>` : ''}
     ${savedImage && image?.image_id ? `<section class="task-result" aria-label="Gespeichertes Bild">
       <p>Bild erstellt${image.dimensions ? ' · ' + image.dimensions.join(' × ') : ''}</p>
-      ${imageMedia(image.image_id, image.request?.prompt ?? 'Generiertes Bild')}</section>` : ''}
+      ${imageMedia(image.image_id, image.alt ?? image.request?.prompt ?? 'Generiertes Bild')}${receiptMarkup(image.visual_profile)}</section>` : ''}
     ${!savedImage && imageStatus && imageStatus !== 'skipped' ? `<p class="job-title">${esc(imageStates[imageStatus] ??
       (imageStatus === 'pending' ? 'Bildauftrag vorgesehen' : 'Bildauftrag läuft'))}</p>
       ${imageStatus === 'failed' ? '<p>' + esc(taskFailure(imageError) || 'Der Bilddienst hat den Auftrag nicht abgeschlossen.') + '</p>' : ''}
@@ -342,7 +343,8 @@ function jobContent(kind: string, id: string) {
   if (kind === 'image') {
     const job = imageJobs.get(id);
     if (!job) return '<p>Bildauftrag wird geladen …</p>';
-    if (job.status === 'completed' && safeImageId(job.image_id)) return imageMedia(job.image_id, job.request?.prompt ?? 'Generiertes Bild');
+    if (job.status === 'completed' && safeImageId(job.image_id)) return imageMedia(job.image_id, job.alt ?? job.request?.prompt ?? 'Generiertes Bild') +
+      receiptMarkup(job.visual_profile);
     return `<p class="job-title">${esc(imageStates[job.status] ?? 'Bildauftrag läuft')}</p>
       ${job.status === 'failed' ? `<p>${job.error === 'gpu_wait_timeout' ? 'Der Bilddienst blieb belegt. Sende den Wunsch bei Bedarf erneut.' : 'Prüfe die Bildeinstellungen oder versuche es erneut.'}</p>` : ''}
       ${job.status === 'completed' ? '<p>Das Bild ist derzeit nicht verfügbar.</p>' : ''}
@@ -397,7 +399,8 @@ function chatView() {
         ${session ? organizer.menuButton(chatEntry(session)) : ''}</div><div class="project-context">
         ${project && project.kind !== 'custom' ? `<span class="chat-context">${storyProject(project) ? 'Geschichte' : esc(kindLabel(project.kind))}</span>` : ''}
         ${session ? button('contents', 'Inhalte', 'book') : ''}
-        ${storyProject(project) ? button('production-plan', 'Story-Planung', 'book', 'button quiet', project?.id) : ''}
+        ${storyProject(project) ? button('production-plan', 'Story-Planung', 'book', 'button quiet', project?.id)
+          + button('visual-profile', 'Bildstil', undefined, 'button quiet', project?.id) : ''}
       </div></header>
       <div class="transcript" role="group" aria-label="Chatverlauf">${transcript()}
         ${busy ? `<article class="message assistant">${mark()}<div class="message-content"><h2>Studio</h2><div class="prose" id="streaming">Antwort wird vorbereitet …</div></div></article>` : ''}
@@ -693,7 +696,8 @@ function selectTool(choice: Mode, prefill: boolean) {
 
 function openTools() {
   showDialog('Werkzeugoptionen', `<div class="dialog-actions">
-    ${button('image-options', 'Bildoptionen', 'picture', 'button')}
+    ${storyProject(project) ? button('visual-profile', 'Bildstil', 'picture', 'button', project?.id)
+      : button('image-options', 'Bildoptionen', 'picture', 'button')}
     ${button('research-options', 'Rechercheoptionen', 'research', 'button')}
     ${project?.kind === 'game' ? button('game-role', 'Rolle ändern', 'game', 'button') : ''}</div>`);
 }
@@ -1207,9 +1211,12 @@ async function imageInfo(id: string, linked = false) {
 async function previewImage(id: string) {
   if (!safeImageId(id)) return;
   const item = await imageInfo(id, true);
-  showDialog('Bildvorschau', `<img class="large-image" src="${imageUrl(id)}" alt="${esc(item.request?.prompt ?? 'Generiertes Bild')}">
+  showDialog('Bildvorschau', `<img class="large-image" src="${imageUrl(id)}" alt="${esc(item.alt ?? item.request?.prompt ?? 'Generiertes Bild')}">
+    ${receiptMarkup(item.visual_profile)}
+    <p><a class="button" href="${imageUrl(id)}" download="illustration-${id}.png">Bild herunterladen</a></p>
     ${item.trashed ? '<p>Das Bild liegt im Papierkorb und wird noch verwendet.</p>' : `<div class="dialog-actions">${button('save-image', 'Zum Chat hinzufügen', undefined, 'button', id)}
       ${button('insert-image', 'In Dokument einfügen', undefined, 'button', id)}
+      ${project && ['story', 'novel'].includes(project.kind) ? button('cover-image', 'Als Titelbild verwenden', undefined, 'button', id) : ''}
       ${button('regen', 'Erneut generieren', undefined, 'button', id)}${button('variant', 'Variante erstellen', undefined, 'button', id)}
       ${organizer.menuButton({ kind: 'image', id, name: item.name ?? item.request?.prompt ?? 'Bild', folder_id: item.folder_id })}</div>`}`);
 }
@@ -1560,6 +1567,7 @@ async function handleProduction(action: string, value: string) {
 
 async function handle(action: string, value: string) {
   if (action.startsWith('production-')) { await handleProduction(action, value); return; }
+  if (action === 'visual-profile' && validId(value)) { await visualProfileDialog(value); return; }
   if (action === 'write-unwritten' && /^[1-9]\d*$/.test(value)) { await submit('Schreibe Kapitel ' + value, 'story'); return; }
   if (action.startsWith('story-')) { await handleStory(action, value); return; }
   if (action.startsWith('organizer-')) { await organizer.handle(action, value); return; }
@@ -1674,6 +1682,13 @@ async function handle(action: string, value: string) {
     case 'more-images': await loadImages(); break;
     case 'preview-image': await previewImage(value); break;
     case 'save-image': await storeImage(value); break;
+    case 'cover-image':
+      if (project && safeImageId(value)) {
+        await post('/api/projects/' + project.id, { cover: value });
+        setStatus('Titelbild gespeichert.');
+        announce('Titelbild gespeichert.');
+      }
+      break;
     case 'insert-image': await insertImage(value); break;
     case 'editor-images': await selectImageForEditor(); break;
     case 'regen': case 'variant': await runAgain(value, action === 'variant'); break;

@@ -85,16 +85,25 @@ class Planner(unittest.TestCase):
         self.assertEqual(len(stages["writing"]["diagnostics"]), 3)
 
     def test_png_dimensions_are_required_before_success(self):
+        import zlib
         verify = studio["verify_image_file"]
         image_id = "a" * 32
-        header = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 1024, 576)
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+        header = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1024, 576, 8, 0, 0, 0, 0))
+        png = header + chunk(b"IDAT", zlib.compress(bytes(1025 * 576))) + chunk(b"IEND", b"")
+        contents = png
         with patch.dict(verify.__globals__, {
             "http_json": lambda *args, **kw: (200, {"id": image_id, "request": {"size": "1024x576"}}),
-            "open_upstream": lambda *args, **kw: io.BytesIO(header),
+            "open_upstream": lambda *args, **kw: io.BytesIO(contents),
         }):
             self.assertEqual(verify(image_id, "1024x576"), [1024, 576])
             with self.assertRaisesRegex(PlanError, "image_dimensions_mismatch"):
                 verify(image_id, "1024x1024")
+            for contents in (png[:-12], png[:-1] + bytes([png[-1] ^ 1])):
+                with self.assertRaisesRegex(PlanError, "image_invalid_png"):
+                    verify(image_id, "1024x576")
 
     def test_editorial_preserves_protected_fragments_and_browser_offsets(self):
         self.assertEqual(studio["editorial_range"]("a🪶bc", [1, 4]), (1, 3))

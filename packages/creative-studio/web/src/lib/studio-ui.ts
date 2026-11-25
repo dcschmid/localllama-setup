@@ -52,7 +52,21 @@ export function dialogForm(title: string, fields: string, submit: string, onSubm
   });
 }
 
+export const visualErrors: Record<string, string> = {
+  visual_model_unavailable: 'Das gewählte Bildmodell ist lokal nicht installiert.',
+  visual_format_unavailable: 'Das Bildmodell unterstützt das gewählte Seitenverhältnis in dieser Konfiguration nicht.',
+  visual_recipe_unavailable: 'Das Guided Preset ist für dieses Modell im lokalen Katalog nicht verfügbar.',
+  visual_profile_changed: 'Das Bildprofil wurde geändert. Öffne es erneut.',
+  visual_profile_invalid: 'Prüfe Profilname, Einstellungen und Kapitelbereich.',
+  visual_story_required: 'Wähle die Geschichte aus, zu der das Bild gehört.',
+  visual_chapter_unwritten: 'Das Kapitel braucht einen gespeicherten Text für diese Illustration.',
+  visual_reference_invalid: 'Die Bildreferenz ist ungültig oder gehört zu einer anderen Geschichte.',
+  visual_reference_unavailable: 'Das Modell unterstützt für diese Installation keine verifizierte Bildvorlage.',
+  visual_compose_invalid: 'Der lokale Bilddienst hat die Kombination aus Motiv und Einstellungen abgelehnt.',
+};
+
 export const productionErrors: Record<string, string> = {
+  ...visualErrors,
   production_approval_required: 'Gib zuerst die Story-Planung frei.',
   production_plan_changed: 'Die Planung oder ein Kapitel wurde geändert. Öffne die aktuelle Planversion.',
   production_plan_checkpoint_conflict: 'Dieser Entwurf betrifft bereits begonnene Kapitel oder die Grundplanung. Die Produktion bleibt pausiert und beim bisherigen Plan.',
@@ -152,7 +166,7 @@ const errors: Record<string, string> = {
 };
 
 export function describe(error: unknown, fallback = 'Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.') {
-  return error instanceof ApiError ? errors[error.code] ?? fallback : fallback;
+  return error instanceof ApiError ? errors[error.code] ?? visualErrors[error.code.split(':')[0]] ?? fallback : fallback;
 }
 
 export function safeImageId(value: unknown): value is string {

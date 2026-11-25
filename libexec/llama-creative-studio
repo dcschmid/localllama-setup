@@ -29,6 +29,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
+import creative_studio_visual as visual
 import creative_studio_organizer as organizer
 import creative_studio_production as production
 import creative_studio_story as story
@@ -162,6 +163,11 @@ def advance_image(job_id):
         return
     payload = jload(row["payload"], {})
     production_id = payload.get("meta", {}).get("production")
+    durable = bool(production_id or payload.get("meta", {}).get("visual_profile"))
+    attempt = payload.get("gpu_attempt", 0)
+    idempotency_key = hashlib.sha256(f"{job_id}:gpu:{attempt}".encode()).hexdigest()[:32] if attempt else job_id
+    if not row["external_id"] and payload.get("not_before", 0) > now():
+        return
     parent = conn.execute("SELECT state FROM jobs WHERE id=?", (production_id,)).fetchone() if production_id else None
     if parent and parent["state"] == "cancelled":
         if row["external_id"]:
@@ -175,7 +181,7 @@ def advance_image(job_id):
                 conn.commit()
                 return
         elif row["state"] == "submitting":
-            accepted = recover_image_submission(job_id, payload["request"])
+            accepted = recover_image_submission(idempotency_key, payload["request"])
             if accepted:
                 with conn:
                     conn.execute("UPDATE jobs SET external_id=? WHERE id=?", (accepted["id"], job_id))
@@ -198,9 +204,9 @@ def advance_image(job_id):
     else:
         deadline = payload.get("deadline")
         if row["state"] == "submitting":
-            result = recover_image_submission(job_id, payload["request"]) if production_id else None
+            result = recover_image_submission(idempotency_key, payload["request"]) if durable else None
             if not result:
-                if production_id and (not deadline or now() <= deadline):
+                if durable and (not deadline or now() <= deadline):
                     _, service = http_json(IMAGES + "/studio/api/status", timeout=8)
                     if service.get("job_idempotency") is True:
                         result = {"status": "waiting_gpu"}
@@ -210,10 +216,10 @@ def advance_image(job_id):
             reason = jload(row["result"], {}).get("waiting_reason") or "gpu_wait_timeout"
             result = {"status": "failed", "error": reason}
         else:
-            result = submit_queued_image(conn, job_id, payload["request"], durable=bool(payload.get("meta", {}).get("production")))
+            result = submit_queued_image(conn, job_id, payload["request"], durable=durable, idempotency_key=idempotency_key)
             if not result:
                 return
-    if result.get("status") == "completed" and (payload.get("meta", {}).get("chat_task_id") or production_id):
+    if result.get("status") == "completed" and (payload.get("meta", {}).get("chat_task_id") or durable):
         try:
             result["dimensions"] = verify_image_file(result.get("image_id"), payload["request"].get("size"))
         except urllib.error.HTTPError as exc:
@@ -224,6 +230,19 @@ def advance_image(job_id):
             return
         except PlanError as exc:
             result = {**result, "status": "failed", "error": str(exc)}
+    if (durable and row["external_id"] and result.get("status") == "failed" and not result.get("image_id")
+            and "gpu is occupied" in str(result.get("error", "")).lower() and attempt < 3
+            and now() < payload.get("deadline", 0)):
+        payload.update(gpu_attempt=attempt + 1, not_before=now() + 12 * (attempt + 1))
+        with conn:
+            conn.execute("""UPDATE jobs SET external_id=NULL,state='waiting_gpu',payload=?,result=?,updated=? WHERE id=?""",
+                         (json.dumps(payload), json.dumps({"status": "waiting_gpu", "waiting_reason": "gpu_occupied",
+                          "previous_attempt": row["external_id"]}), now(), job_id))
+        return
+    if payload.get("meta", {}).get("visual_profile"):
+        result["visual_profile"] = payload["meta"]["visual_profile"]
+    if payload.get("meta", {}).get("alt"):
+        result["alt"] = payload["meta"]["alt"]
     if result.get("status"):
         external_id = result.get("id")
         if not isinstance(external_id, str) or not organizer.ID.fullmatch(external_id):
@@ -246,8 +265,9 @@ def advance_image(job_id):
                               json.dumps({"document_id": document_id, "image_id": image, "job_id": job_id,
                                           "session_id": payload["meta"].get("session_id")}), now()))
             if payload["meta"].get("cover"):
-                conn.execute("UPDATE projects SET updated=?,meta=json_set(meta,'$.cover',?) WHERE id=?",
-                             (now(), image, pid))
+                conn.execute("""UPDATE projects SET updated=?,meta=json_set(meta,'$.cover',?)
+                             WHERE id=? AND (?=0 OR json_extract(meta,'$.cover') IS NULL)""",
+                             (now(), image, pid, int(bool(production_id))))
             else:
                 conn.execute("UPDATE projects SET updated=? WHERE id=?", (now(), pid))
         conn.commit()
@@ -262,16 +282,16 @@ def recover_image_submission(identifier, request):
             raise
     # Older image-service builds ignore Idempotency-Key. Recover an accepted request by its exact settings.
     _, jobs = http_json(IMAGES + "/studio/api/jobs", timeout=8)
-    matches = [job for job in jobs if all(job.get("request", {}).get(key) == value for key, value in request.items())]
+    matches = [job for job in jobs if job.get("status") not in ("failed", "cancelled")
+               and all(job.get("request", {}).get(key) == value for key, value in request.items())]
     return matches[0] if len(matches) == 1 else None
 
 
-def submit_queued_image(conn, job_id, request, *, durable=False):
+def submit_queued_image(conn, job_id, request, *, durable=False, idempotency_key=None):
+    key = idempotency_key or job_id
     if not _llm_lock.acquire(blocking=False):
         return None
     try:
-        if durable and (existing := recover_image_submission(job_id, request)):
-            return existing
         last = conn.execute("""SELECT service,alias,event FROM gpu_log WHERE event IN ('acquire','release','idle_model_release')
                              ORDER BY id DESC LIMIT 1""").fetchone() if durable else None
         writer = last["alias"] if last and (last["service"], last["event"]) == ("story-production", "release") else None
@@ -282,7 +302,7 @@ def submit_queued_image(conn, job_id, request, *, durable=False):
             conn.execute("UPDATE jobs SET state='submitting',updated=? WHERE id=?", (now(), job_id))
         try:
             _, accepted = http_json(IMAGES + "/studio/api/jobs", "POST", request,
-                                    headers={"Idempotency-Key": job_id} if durable else None, timeout=30)
+                                    headers={"Idempotency-Key": key} if durable else None, timeout=30)
             job = accepted.get("id") if isinstance(accepted, dict) else None
             if isinstance(job, str) and ID.fullmatch(job) and accepted.get("status"):
                 return accepted
@@ -300,7 +320,7 @@ def submit_queued_image(conn, job_id, request, *, durable=False):
         except (OSError, ValueError):
             pass
         if durable:
-            return recover_image_submission(job_id, request)
+            return recover_image_submission(key, request)
         return {"status": "failed", "error": "image_submission_uncertain"}
     finally:
         _llm_lock.release()
@@ -510,13 +530,102 @@ def queue_image(conn, request, meta, wait=1200, *, identifier=None):
 
 
 def image_request_from(body):
-    return {k: body[k] for k in ("recipe", "subject", "quality", "prompt", "model", "size", "seed",
+    return {k: body[k] for k in ("recipe", "subject", "scene", "details", "aspect_ratio", "quality", "prompt", "model", "size", "seed",
                                 "preset", "mode", "image_id", "mask_id", "steps", "cfg_scale", "sampler",
                                 "negative_prompt", "strength", "feather") if k in body}
 
 
+def visual_catalog():
+    try:
+        _, catalog = http_json(IMAGES + "/studio/api/catalog", timeout=15)
+    except (OSError, ValueError) as exc:
+        raise PlanError("image_service_unreachable") from exc
+    return catalog
+
+
+def upload_visual_reference(conn, pid, attachment):
+    row = organizer.require(conn, "attachment", attachment, include_data=True)
+    if row["project_id"] != pid:
+        raise PlanError("visual_reference_invalid")
+    cache = conn.execute("SELECT body FROM memories WHERE project_id=? AND kind='visual-reference' AND key=?",
+                         (pid, attachment)).fetchone()
+    if cache and ID.fullmatch(cache["body"]):
+        return cache["body"]
+    _, result = http_json(IMAGES + "/studio/api/uploads", "POST",
+                          {"data": base64.b64encode(row["data"]).decode()}, timeout=30)
+    identifier = result.get("id", "")
+    if not ID.fullmatch(identifier):
+        raise PlanError("visual_reference_invalid")
+    with conn:
+        conn.execute("INSERT OR IGNORE INTO memories(id,project_id,kind,key,body,created) "
+                     "VALUES(?,?,'visual-reference',?,?,?)", (uuid.uuid4().hex, pid, attachment, identifier, now()))
+    return identifier
+
+
+def compose_visual(pid, profile, subject, passage, number, *, cover=False, seed=None):
+    catalog = visual_catalog()
+    observations = production.visual_observations(db(), pid, number, subject + " " + passage) if profile["consistency"] else ()
+    body, metadata, size = visual.prepare(profile, catalog, subject, passage, number, cover=cover, seed=seed,
+        upload=lambda attachment: upload_visual_reference(db(), pid, attachment), observations=observations)
+    try:
+        _, composed = http_json(IMAGES + "/studio/api/compose", "POST", body, timeout=30)
+    except urllib.error.HTTPError as exc:
+        detail = jload(exc.read(), {}).get("error")
+        if exc.code in (400, 404, 409, 422):
+            raise PlanError("visual_compose_invalid" + (": " + str(detail)[:180] if detail else "")) from exc
+        raise
+    if composed.get("model") != metadata["model"] or composed.get("size") != size:
+        raise PlanError("visual_format_unavailable")
+    composed = {key: value for key, value in image_request_from(composed).items()
+                if key not in ("recipe", "subject", "scene", "details", "aspect_ratio", "quality")}
+    model, _ = visual.available(catalog, profile)
+    if model.get("negative"):
+        negative = ", ".join(filter(None, [composed.get("negative_prompt"),
+                                            "lettering, typography, watermark, letterbox, black bars, inset frame",
+                                            profile["negative"]]))
+        # Some older guided recipes set these exclusions for all styles.
+        if metadata["template"] == "graphic-novel":
+            negative = ", ".join(term.strip() for term in negative.split(",")
+                                 if term.strip().casefold() not in ("comic", "manga"))
+        composed["negative_prompt"] = negative
+    metadata["settings"] = {key: composed[key] for key in ("size", "seed", "steps", "cfg_scale", "sampler") if key in composed}
+    return composed, metadata
+
+
+def story_image_request(pid, brief, supplied, doc=None, *, cover=False, profile=None, previous_scene=""):
+    conn = db()
+    profile = profile or visual.load(conn, pid)
+    riff = profile["template"].startswith("riff-racers")
+    if style := visual.choice(brief, riff=riff):
+        if style != profile["template"]:
+            profile = {**profile, **{key: value for key, value in visual.template(style).items()
+                                      if key not in ("bible", "ratio", "consistency", "consistency_rules")}}
+    if aspect := visual.requested_ratio(brief):
+        profile = {**profile, "ratio": aspect}
+    elif supplied.get("size"):
+        profile = {**profile, "ratio": visual.ratio_for(supplied["size"])}
+    source = doc["body"] if doc else ""
+    if cover and not source:
+        rows = story.chapters(conn, pid, bodies=True)
+        source = next((row["body"] for row in rows if row["body"].strip()), "")
+        if not source:
+            record = production.latest_plan(conn, pid)
+            source = json.loads(record["plan"]).get("central_conflict", "") if record else ""
+    if doc and not source.strip():
+        raise PlanError("visual_chapter_unwritten")
+    parts = [part.strip() for part in source.split("\n\n") if part.strip()]
+    terms = story.words_for_relevance(brief)
+    passage = max(parts, key=lambda part: len(terms & story.words_for_relevance(part)), default="")[:1400]
+    number = 1 if cover else doc["story_number"] if doc else None
+    if doc and not number and (named := chats.CHAPTER.search(doc["title"])):
+        number = chats.number(named[1])
+    return compose_visual(pid, profile, brief, passage or previous_scene, number, cover=cover, seed=supplied.get("seed"))
+
+
 def verify_image_file(image_id, requested_size):
     import struct
+    import zlib
+
     if not isinstance(image_id, str) or not ID.fullmatch(image_id):
         raise PlanError("image_archive_missing")
     _, metadata = http_json(IMAGES + "/studio/api/gallery/" + image_id, timeout=15)
@@ -524,13 +633,27 @@ def verify_image_file(image_id, requested_size):
         raise PlanError("image_archive_missing")
     req = urllib.request.Request(f"{IMAGES}/studio/api/files/{image_id}", headers={"Accept": "image/png"})
     with open_upstream(req, timeout=20) as response:
-        header = response.read(24)
-    if len(header) != 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        png = response.read(32 * 1024 * 1024 + 1)
+    if not 57 <= len(png) <= 32 * 1024 * 1024 or png[:8] != b"\x89PNG\r\n\x1a\n" or png[8:16] != b"\x00\x00\x00\x0dIHDR":
         raise PlanError("image_invalid_png")
-    width, height = struct.unpack(">II", header[16:24])
+    width, height = struct.unpack_from(">II", png, 16)
     if not width or not height or (requested_size and f"{width}x{height}" != requested_size):
         raise PlanError("image_dimensions_mismatch")
-    return [width, height]
+    offset = 8
+    data = False
+    while offset + 12 <= len(png):
+        length, kind = struct.unpack_from(">I4s", png, offset)
+        end = offset + 8 + length
+        if end + 4 > len(png) or zlib.crc32(png[offset + 4:end]) != struct.unpack_from(">I", png, end)[0]:
+            break
+        offset = end + 4
+        if kind == b"IDAT" and length:
+            data = True
+        if kind == b"IEND":
+            if data and length == 0 and offset == len(png):
+                return [width, height]
+            break
+    raise PlanError("image_invalid_png")
 
 
 @lru_cache(maxsize=1)
@@ -815,7 +938,7 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
 
 
 production_worker = production.ProductionWorker(db, _lock, production_model, production_skill,
-    queue_image, verify_image_file, store_message, running_work)
+    queue_image, verify_image_file, store_message, running_work, visual_compose=compose_visual)
 
 
 def article_model(lang, role, prompt, tokens, schema=None):
@@ -1364,7 +1487,13 @@ def advance_article(task_id, plan, payload, result):
         task_result(conn, task_id, result)
 
 
-def previous_image(conn, session_id, task_id):
+def previous_image(conn, session_id, task_id, project_id=None):
+    if project_id:
+        row = conn.execute("""SELECT payload,result FROM jobs WHERE service='image' AND state='completed'
+            AND json_extract(payload,'$.meta.project_id')=? AND json_extract(payload,'$.meta.session_id')=?
+            ORDER BY updated DESC LIMIT 1""", (project_id, session_id)).fetchone()
+        if row and (identifier := jload(row["result"], {}).get("image_id")) and ID.fullmatch(identifier):
+            return identifier, jload(row["payload"], {}).get("meta", {})
     rows = conn.execute("SELECT meta FROM messages WHERE session_id=? AND role='assistant'"
                         " ORDER BY created DESC", (session_id,)).fetchall()
     for row in rows:
@@ -1383,7 +1512,9 @@ def previous_image(conn, session_id, task_id):
         result = jload(job["result"], {})
         image_id = result.get("image_id")
         if isinstance(image_id, str) and ID.fullmatch(image_id):
-            return image_id, jload(job["payload"], {}).get("meta", {})
+            image_meta = jload(job["payload"], {}).get("meta", {})
+            if project_id is None or image_meta.get("project_id") == project_id:
+                return image_id, image_meta
     return None
 
 
@@ -1474,13 +1605,18 @@ def advance_task(row):
                 "cover": bool(image.get("cover"))}
         image_request = dict(image["request"])
         try:
+            story_context = bool(meta["project_id"] and organizer.require(conn, "project", meta["project_id"])["kind"] in visual.KINDS)
+            previous_scene = ""
             if image["variant"]:
-                source = previous_image(conn, payload["session_id"], task_id)
+                source = previous_image(conn, payload["session_id"], task_id, meta["project_id"] if story_context else None)
                 if not source:
                     raise PlanError("variant_source_missing")
                 source_id, source_meta = source
                 _, archived = http_json(IMAGES + "/studio/api/gallery/" + source_id, timeout=15)
-                image_request = {**image_request_from(archived["request"]), **image_request}
+                if story_context:
+                    previous_scene = source_meta.get("visual_brief") or source_meta.get("alt") or archived["request"].get("prompt", "")[:900]
+                else:
+                    image_request = {**image_request_from(archived["request"]), **image_request}
                 image_request.pop("seed", None)
                 meta["origin_image_id"] = source_id
                 if not meta["document_id"] and meta["project_id"] == source_meta.get("project_id"):
@@ -1492,9 +1628,18 @@ def advance_task(row):
                     brief = (brief + "\nIllustrate the setting of the story.\n" +
                              (excerpt[:950] or plan["writing"]["instruction"][:950]))
                 image_request["prompt"] = brief[:2800]
+            if story_context:
+                doc = organizer.require(conn, "document", meta["document_id"]) if meta["document_id"] else None
+                image_request.pop("size", None)
+                meta["visual_brief"] = previous_scene or image["brief"]
+                image_request, meta["visual_profile"] = story_image_request(meta["project_id"], image["brief"],
+                    image_request, doc, cover=meta["cover"], profile=image.get("visual_profile"), previous_scene=previous_scene)
+                result["requirements"]["image_size"] = image_request["size"]
+                if doc:
+                    meta["alt"] = doc["title"]
             with _lock, conn:
                 organizer.check_image_links(conn, meta)
-                result["image_job_id"] = queue_image(conn, image_request, meta)
+                result["image_job_id"] = queue_image(conn, image_request, meta, wait=7200 if story_context else 1200)
                 steps["image"] = {"status": "queued"}
                 task_result(conn, task_id, result)
             return
@@ -1729,6 +1874,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._get(parts[1:])
         except organizer.OrganizerError as exc:
             return self._json({"error": str(exc)}, exc.status)
+        except PlanError as exc:
+            return self._json({"error": str(exc)}, 422)
 
     def do_POST(self):
         if self._path()[:1] != ["api"]:
@@ -1742,6 +1889,9 @@ class Handler(BaseHTTPRequestHandler):
         except organizer.OrganizerError as exc:
             db().rollback()
             return self._json({"error": str(exc)}, exc.status)
+        except PlanError as exc:
+            db().rollback()
+            return self._json({"error": str(exc)}, 422)
 
     def _get(self, parts):
         conn = db()
@@ -1826,6 +1976,23 @@ class Handler(BaseHTTPRequestHandler):
                 (SELECT COUNT(*) FROM live_documents WHERE project_id=p.id) AS document_count
                 FROM live_projects p WHERE p.archived_at IS NULL ORDER BY updated DESC""").fetchall()
             return self._json([row_json(r, ("tags", "meta")) for r in rows])
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "visual-profile":
+            pid = parts[1]
+            profile = visual.load(conn, pid)
+            catalog = visual_catalog()
+            reusable = [row_json(r, ("meta",)) for r in conn.execute("""SELECT id,name,meta FROM live_projects
+                WHERE id<>? AND kind IN ('story','novel') AND json_type(meta,'$.visual_profile')='object'
+                ORDER BY name LIMIT 100""", (pid,))]
+            return self._json({"profile": profile,
+                "templates": [{**visual.template(key), "bible": None} for key in visual.TEMPLATES],
+                "models": [{**{key: m[key] for key in ("id", "name", "negative", "verified_modes", "license") if key in m},
+                            "license_url": m.get("license_url") or m.get("source"),
+                            "formats": [{"id": ratio, "size": size} for ratio, size in visual.supported_formats(m).items()]}
+                           for m in catalog.get("models", []) if m.get("installed")],
+                "recipes": [{k: r[k] for k in ("id", "model", "name") if k in r} for r in catalog.get("recipes", [])],
+                "reusable": [{"id": r["id"], "name": r["name"], "profile_name": r["meta"]["visual_profile"]["name"]}
+                             for r in reusable],
+                "attachments": [dict(row) for row in conn.execute("SELECT id,name FROM live_attachments WHERE project_id=?", (pid,))]})
         if len(parts) == 2 and parts[0] == "projects":
             row = conn.execute("SELECT * FROM live_projects WHERE id=?", (parts[1],)).fetchone()
             if not row:
@@ -2022,6 +2189,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_local(self, parts, body):
         conn = db()
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "visual-profile":
+            catalog = visual_catalog()
+            with conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return self._json({"profile": visual.save(conn, parts[1], body, catalog)})
         if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "context":
             with conn:
                 session = organizer.require(conn, "chat", parts[1])
@@ -2060,6 +2232,8 @@ class Handler(BaseHTTPRequestHandler):
                           body.get("lang") or "de", body.get("description") or "",
                           json.dumps(body.get("tags") or []), json.dumps(meta),
                           now(), now(), folder))
+            if (body.get("kind") or "custom") in visual.KINDS:
+                visual.ensure(conn, pid)
             conn.commit()
             return self._json({"id": pid}, 201)
         if parts[:1] == ["projects"] and len(parts) == 2:
@@ -2075,8 +2249,8 @@ class Handler(BaseHTTPRequestHandler):
             organizer.check_image_links(conn, {"cover": cover})
             with conn:
                 result = conn.execute("""UPDATE projects SET name=COALESCE(?,name), updated=?,
-                    meta=CASE WHEN ? IS NULL THEN meta ELSE json_set(meta, '$.cover', ?) END
-                    WHERE id=?""", (name.strip() if name is not None else None, now(), cover, cover, parts[1]))
+                    meta=CASE WHEN ? IS NULL THEN meta ELSE json_set(meta, '$.cover', ?, '$.manual_cover', ?) END
+                    WHERE id=?""", (name.strip() if name is not None else None, now(), cover, cover, cover, parts[1]))
             return self._json({"id": parts[1]} if result.rowcount else {"error": "project_not_found"},
                               200 if result.rowcount else 404)
         if parts == ["documents"]:
@@ -2240,7 +2414,12 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError):
             return self._json({"error": "image_service_unreachable"}, 502)
         placement = conn.execute("SELECT name,folder_id FROM studio_images WHERE id=?", (identifier,)).fetchone()
-        return self._json({**image, **(dict(placement) if placement else {}), "trashed": hidden})
+        proof = conn.execute("""SELECT result FROM jobs WHERE service='image' AND state='completed'
+                             AND json_extract(result,'$.image_id')=? ORDER BY updated DESC LIMIT 1""",
+                             (identifier,)).fetchone()
+        info = jload(proof["result"], {}) if proof else {}
+        return self._json({**image, **(dict(placement) if placement else {}), "trashed": hidden,
+                           **{k: info[k] for k in ("visual_profile", "alt") if k in info}})
 
     def _upload_attachment(self, body):
         conn = db()
@@ -2298,13 +2477,18 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError):
                 raise organizer.OrganizerError("image_export_failed", 422) from None
         if fmt != "zip":
-            return self._json({"name": f"{slug}.{fmt}", "text": production.manuscript_text(document, fmt)})
+            return self._json({"name": f"{slug}.{fmt}", "text": production.manuscript_text(document, fmt, local_images=True)})
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             for extension in ("md", "mdx"):
                 archive.writestr(f"{slug}.{extension}", production.manuscript_text(document, extension, local_images=True))
             for image_id, png in images.items():
                 archive.writestr(f"images/{image_id}.png", png)
+            archive.writestr("images/metadata.json", json.dumps([
+                {"path": f"images/{asset['id']}.png", "alt": asset["alt"],
+                 "model": asset["request"].get("model"), "seed": asset["request"].get("seed"),
+                 "size": asset["request"].get("size"), "visual_profile": asset.get("visual_profile")}
+                for asset in assets.values()], ensure_ascii=False, indent=2))
         return self._json({"name": slug + ".zip", "base64": base64.b64encode(buffer.getvalue()).decode()})
 
     def _export(self, body):
@@ -2538,6 +2722,20 @@ class Handler(BaseHTTPRequestHandler):
         has_prose = any(row["body"].strip() and (ordinal is not None or row["kind"] == "chapter") for row in requested_docs)
         story_context = mode == "story" or bool(context and context["kind"] in ("story", "novel"))
         action = chats.requested_action(text, mode, has_plan=has_plan, has_prose=has_prose, story_context=story_context)
+        if context and context["kind"] in visual.KINDS:
+            profile = visual.load(conn, tentative)
+            selected_style = visual.choice(text, riff=profile["template"].startswith("riff-racers"))
+            if selected_style and visual.STYLE_CHANGE.search(text):
+                pid = chats.activate(conn, sid, tentative)
+                saved = visual.save(conn, pid, {"version": profile["version"], "template": selected_style}, visual_catalog())
+                conn.execute("INSERT INTO jobs(id,service,state,payload,created,updated) VALUES(?,'visual_profile','completed',?,?,?)",
+                             (ident, json.dumps({"session_id": sid, "chat_input": fingerprint}), now(), now()))
+                store_message(conn, sid, "user", text)
+                store_message(conn, sid, "assistant", "Bildstil für neue Illustrationen: " + saved["name"])
+                return {"handled": True, "context_id": pid, "visual_profile": saved}, mode, text, pid
+            if action in ("chat", "planning-discuss", "auto") and (visual.VARIANT.search(text) or
+                    selected_style and re.search(r"\b(?:szene|scene|render|bild|image)\b", text, re.I)):
+                action = "image"
         fresh = selected is None and bool(chats.NEW_STORY.search(text)) and action in ("outline", "chapter", "story")
 
         if selected is not None:
@@ -2606,14 +2804,15 @@ class Handler(BaseHTTPRequestHandler):
                     WHERE session_id=? AND role='user' ORDER BY created DESC LIMIT 5""", (sid,))]
                 brief = (text + ("\n\nEarlier author messages:\n" + "\n".join(reversed(prior_notes)) if prior_notes and not fresh else ""))[:8000]
                 if (chats.PLAN_TARGET.search(text) or chats.outline_count(text) > 1) and (fresh or not has_plan):
-                    visual = {key: value for key, value in body.get("image_options", {}).items()
-                              if key in ("model", "preset")}
+                    visual_options = {key: value for key, value in body.get("image_options", {}).items()
+                                      if key in ("model", "preset")}
                     aspect = re.search(r"\b(\d{1,2}:\d{1,2})\b", text)
                     if aspect and aspect[1] in FORMATS:
-                        visual["size"] = FORMATS[aspect[1]]
+                        visual_options["size"] = FORMATS[aspect[1]]
+                        visual_options["cover_size"] = FORMATS[aspect[1]]
                     result, _ = production.mutate(conn, pid, "propose", {
                         "session_id": sid, "brief": brief, "count": chats.outline_count(text) or 8,
-                        "language": language, "request_id": ident, "image": visual,
+                        "language": language, "request_id": ident, "image": visual_options,
                         **chats.length_range(text),
                     }, save_document, store_message)
                     conn.execute("UPDATE jobs SET payload=json_set(payload,'$.chat_input',?) WHERE id=?", (fingerprint, ident))
@@ -2675,7 +2874,7 @@ class Handler(BaseHTTPRequestHandler):
         if action in ("image", "research", "story", "article", "game"):
             pid = chats.ensure_context(conn, session, action, lang, chats.title(text, session["title"]), fresh=fresh)
         if action == "image" and chats.COVER.search(text):
-            return None, "image", chats.cover_prompt(conn, pid, text), pid
+            return None, "image", text, pid
         return None, action if action in ("image", "research", "story", "article", "game", "chat") else mode, text, pid
 
     def _dispatch_chat(self, body):
@@ -2734,8 +2933,12 @@ class Handler(BaseHTTPRequestHandler):
             plan["project_name"] = ""
             if "image" in plan and chats.COVER.search(text):
                 plan["image"]["cover"] = True
-                if pinned:
+                if pinned and organizer.require(conn, "project", pinned)["kind"] not in visual.KINDS:
                     plan["image"]["brief"] = chats.cover_prompt(conn, pinned, text)
+            if "image" in plan and pinned and organizer.require(conn, "project", pinned)["kind"] in visual.KINDS:
+                plan["image"]["visual_profile"] = visual.load(conn, pinned)
+                plan["image"]["variant"] |= bool(not chats.COVER.search(text) and not chats.CHAPTER.search(text)
+                                              and visual.VARIANT.search(text))
         session = conn.execute("SELECT project_id FROM sessions WHERE id=?", (session_id,)).fetchone()
         if not session:
             return self._json({"error": "session_not_found"}, 404)
@@ -2812,7 +3015,7 @@ class Handler(BaseHTTPRequestHandler):
                 db().commit()
         return self._chat_stream(payload, persist)
 
-    def _image_generate(self, body):
+    def _image_generate(self, body, *, previous_scene=""):
         request = image_request_from(body)
         meta = {k: body[k] for k in ("project_id", "document_id", "alt", "title", "session_id", "origin_image_id") if k in body}
         try:
@@ -2824,6 +3027,23 @@ class Handler(BaseHTTPRequestHandler):
             if meta.get("session_id") and not meta.get("project_id"):
                 session = organizer.require(conn, "chat", meta["session_id"])
                 meta["project_id"] = chats.ensure_context(conn, session, "image", "de")
+            organizer.check_image_links(conn, meta)
+            if meta.get("project_id") and organizer.require(conn, "project", meta["project_id"])["kind"] in visual.KINDS:
+                doc = organizer.require(conn, "document", meta["document_id"]) if meta.get("document_id") else None
+                if doc and doc["project_id"] != meta["project_id"]:
+                    raise organizer.OrganizerError("visual_story_required")
+                profile = visual.ensure(conn, meta["project_id"])
+            else:
+                profile = None
+        if profile:
+            brief = str(request.get("prompt", "Illustration"))
+            request, meta["visual_profile"] = story_image_request(meta["project_id"], brief,
+                request, doc, cover=body.get("cover") is True, profile=profile, previous_scene=previous_scene)
+            meta["visual_brief"] = previous_scene or brief
+            if body.get("cover") is True:
+                meta["cover"] = True
+        with _lock, db() as conn:
+            organizer.validate_scope(conn, **{key: meta.get(key) for key in ("project_id", "session_id", "document_id")})
             organizer.check_image_links(conn, meta)
             job_id = queue_image(conn, request, meta, wait_s)
             store_job_messages(conn, body, job_id, "image", "Bildauftrag", request.get("prompt", "Bild"))
@@ -2865,9 +3085,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _image_regen(self, body):
-        """Regenerate from a stored gallery image: replay its exact request.
-        Seed is stable only within one runtime version (recipe_version check
-        stays with the image service fingerprint)."""
+        """Replay an archived request or recompose it for the active story."""
         image_id = body.get("image_id") or ""
         if not isinstance(image_id, str) or not re.fullmatch(r"[a-f0-9]{32}", image_id) or organizer.purged_image(db(), image_id):
             return self._json({"error": "image_not_found"}, 404)
@@ -2880,9 +3098,24 @@ class Handler(BaseHTTPRequestHandler):
         request = dict(meta["request"])
         if body.get("variant"):
             request.pop("seed", None)
-        return self._image_generate({**request, "origin_image_id": image_id, **{
-            k: body[k] for k in ("project_id", "document_id", "alt", "title", "session_id", "user_content")
-            if k in body}})
+        conn = db()
+        project_id = body.get("project_id")
+        project = conn.execute("SELECT kind FROM live_projects WHERE id=?", (project_id,)).fetchone()
+        previous_scene = ""
+        scope = {k: body[k] for k in ("project_id", "document_id", "alt", "title", "session_id", "user_content") if k in body}
+        if project and project["kind"] in visual.KINDS:
+            saved = conn.execute("""SELECT json_extract(payload,'$.meta') FROM jobs WHERE service='image' AND state='completed'
+                AND json_extract(result,'$.image_id')=? AND json_extract(payload,'$.meta.project_id')=?
+                ORDER BY updated DESC LIMIT 1""", (image_id, project_id)).fetchone()
+            source = jload(saved[0], {}) if saved else {}
+            previous_scene = source.get("visual_brief") or request.get("prompt", "")[:1400]
+            if source.get("document_id"):
+                scope.setdefault("document_id", source["document_id"])
+            if source.get("alt"):
+                scope.setdefault("alt", source["alt"])
+            request = {**({"seed": request["seed"]} if "seed" in request else {}),
+                       "prompt": body.get("user_content") or "Render a new version of the selected scene."}
+        return self._image_generate({**request, "origin_image_id": image_id, **scope}, previous_scene=previous_scene)
 
     # ---- deep research (zero-cost, sandboxed, checkpointed) ------------------
     def _research(self, body, *, job_id=None, chat_input=None):
@@ -3266,7 +3499,7 @@ def cmd_install() -> None:
         shutil.copyfile(Path(__file__).resolve(), backend / "llama-creative-studio")
         for module in ("creative_studio_plan.py", "creative_studio_organizer.py", "creative_studio_story.py",
                        "creative_studio_chat.py", "creative_studio_production.py", "creative_studio_skills.py",
-                       "creative_studio_correction.py", "creative_studio_article.py"):
+                       "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py"):
             shutil.copyfile(src / "libexec" / module, backend / module)
         print(f"installed (repeatable): data {DATA}, state {STATE}")
 
@@ -3329,6 +3562,7 @@ def cmd_uninstall(purge=False):
                  Path.home() / ".local/libexec/creative_studio_skills.py",
                  Path.home() / ".local/libexec/creative_studio_correction.py",
                  Path.home() / ".local/libexec/creative_studio_article.py",
+                 Path.home() / ".local/libexec/creative_studio_visual.py",
                  Path.home() / ".config/systemd/user" / UNIT,
                  Path.home() / ".local/share/applications/creative-studio.desktop"):
         path.unlink(missing_ok=True)
