@@ -553,6 +553,9 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
                     if (current.get("review") or {}).get("quality_version") == QUALITY_VERSION:
                         story.error("production_fix_required", 409)
                     result["step"] = "auditing"
+            if action == "retry" and result.get("error") == "story_length_failed" and result.get("step") == "reviewed":
+                current = result["current"]
+                current.setdefault("revision_batches", []).append({"passes": current.pop("passes", 0), "retried_at": time.time()})
             if result.get("error") in ("production_audit_evidence", "production_manuscript_blocked"):
                 current = result.get("current", {})
                 if result.get("step") == "manuscript" and result.get("whole_review", {}).get("quality_version") != QUALITY_VERSION:
@@ -1155,7 +1158,7 @@ class ProductionWorker:
         if (current.get("version") != doc["version"] or (review and review.get("quality_version") != QUALITY_VERSION)
                 or any(w.get("quality_version") != QUALITY_VERSION for w in windows_saved)):
             owned = ("review", "audit_windows", "language_windows", "candidate", "candidate_base_hash",
-                     "passes", "patches", "candidate_audits", "proposed_corrections")
+                     "passes", "patches", "candidate_audits", "proposed_corrections", "short_expansion", "short_expansion_count", "revision_batches")
             history = {key: current.pop(key) for key in owned if key in current}
             if history:
                 current.setdefault("quality_history", []).append({"version": current.get("version"), **history})
@@ -1249,32 +1252,48 @@ class ProductionWorker:
         return self.commit(row, result)
 
     def chapter_expansion(self, row, doc, current, result, canon, language, passes, low, high):
-        text = doc["body"]
+        original = doc["body"]
+        text = current.get("short_expansion", original)
+        original_hash = digest(original)
         words = story.count_words(text)
-        target = min(high - words, low - words + min(60, (high - low) // 2))
-        anchors = [block[-140:] for block in text.rstrip().split("\n\n")[:-1] if len(block.strip()) >= 35]
+        minimum, maximum = low - words, high - words
+        target = min(maximum, minimum + min(150, (high - low) // 2))
+        anchors = [block.rstrip()[-120:] for block in text.split("\n\n")[:-1] if len(block.strip()) >= 35]
+        if len(anchors) > 8:
+            anchors = [anchors[n * (len(anchors) - 1) // 7] for n in range(8)]
         if not anchors:
-            anchors = [text.rstrip()[-140:]]
+            anchors = [text.rstrip()[-120:]]
         answer, proof = self.ask(language, "rewrite",
-            f"Add around {target} words of story prose from a missing planned beat or a necessary consequence. "
-            "Choose one anchor verbatim from the list. The addition goes directly after it. "
-            "Use the story language, point of view and tense. Keep the existing ending and all established facts. "
-            "No introductions, headings, repeated events, commentary or filler.\n" + canon + "\nANCHORS\n" + dump(anchors)
-            + "\nEXISTING CHAPTER\n" + story.snippet(text, 16000),
+            f"Write an additional scene of about {target} words, at least {minimum} and at most {maximum} words. "
+            "Show a missing planned beat or a necessary consequence through actions and dialogue. "
+            "Select an exact anchor from the list and write only the new scene that goes directly after it. "
+            "Use the story language, point of view and tense. Preserve the chapter ending and established facts. "
+            "Use the available space for the character's choices and reactions. Omit headings, commentary and filler.\n"
+            + "CHAPTER PLAN\n" + doc["story_plan"] + "\nCANON\n" + story.snippet(canon, 3300)
+            + "\nANCHORS\n" + dump(anchors) + "\nEXISTING CHAPTER\n" + story.snippet(text, 9000),
             {"anchor": enum(anchors), "addition": STR}, min(5600, max(600, target * 4 + 300)))
         addition, anchor = answer["addition"].strip(), answer["anchor"]
         current["passes"] = passes + 1
-        patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": digest(text), "evidence": proof}
+        patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": original_hash,
+                 "input_hash": digest(text), "words_before": words, "addition_words": story.count_words(addition), "evidence": proof}
         current.setdefault("patches", []).append(patch)
         if (anchor in anchors and text.count(anchor) == 1 and addition and not SIMULATED_OUTPUT.search(addition)
                 and not story.PRODUCTION_ASIDE.search(addition) and not story.repeats(addition, text)):
             end = text.index(anchor) + len(anchor)
             candidate = text[:end] + "\n\n" + addition + text[end:]
-            if low <= story.count_words(candidate) <= high:
+            words_after = story.count_words(candidate)
+            patch.update(words_after=words_after)
+            if words < words_after <= high:
                 patch.update(candidate_hash=digest(candidate), edits=[{"after_anchor": anchor, "addition": addition}])
-                current.update(candidate=candidate, candidate_base_hash=digest(text), audit_windows=[],
-                               language_windows=[], proposed_corrections=1)
-                result["step"] = "auditing"
+                additions = current.get("short_expansion_count", 0) + 1
+                if words_after < low:
+                    current.update(short_expansion=candidate, short_expansion_count=additions)
+                else:
+                    current.update(candidate=candidate, candidate_base_hash=original_hash, audit_windows=[],
+                                   language_windows=[], proposed_corrections=additions)
+                    current.pop("short_expansion", None)
+                    current.pop("short_expansion_count", None)
+                    result["step"] = "auditing"
                 return self.commit(row, result)
         patch["error"] = "story_length_failed"
         return self.commit(row, result)
@@ -1547,7 +1566,8 @@ class ProductionWorker:
                        "original_hash": current.get("original_hash", digest(doc["body"])), "final_hash": digest(doc["body"]),
                        "quality_history": current.get("quality_history", []), "corrections": current.get("corrections", 0),
                        "audit_id": audit_identifier(row["id"], doc, review),
-                       "revision_id": f"{doc['id']}:{doc['version']}" if current.get("corrections") else None}
+                       "revision_id": f"{doc['id']}:{doc['version']}" if current.get("corrections") else None,
+                       "revision_batches": current.get("revision_batches", [])}
             receipts = result.setdefault("chapter_results", [])
             receipts[chapter["number"] - 1:] = [receipt]
             result["last_completed"] = chapter["number"]

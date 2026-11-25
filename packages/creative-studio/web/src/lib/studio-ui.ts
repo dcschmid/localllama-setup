@@ -95,6 +95,8 @@ export const productionErrors: Record<string, string> = {
   image_dimensions_mismatch: 'Die Bilddatei hat ein anderes Format als angefordert.',
   image_job_not_found: 'Der gespeicherte Bildauftrag war beim Abruf nicht verfügbar.',
   gpu_wait_timeout: 'Für den Bildauftrag wurde innerhalb der Wartezeit kein GPU-Slot frei.',
+  image_service_unreachable: 'Der lokale Bilddienst ist nicht erreichbar.',
+  backend_not_ready: 'Der lokale Bilddienst ist noch nicht bereit.',
   production_upstream_http: 'Der lokale Modell- oder Bilddienst hat den Aufruf mit einem HTTP-Fehler beendet.',
   production_upstream_unavailable: 'Der lokale Modell- oder Bilddienst war vorübergehend nicht erreichbar.',
   production_checkpoint_write: 'Der Arbeitsschritt konnte nicht in der lokalen Datenbank gespeichert werden.',

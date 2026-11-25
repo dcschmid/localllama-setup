@@ -225,7 +225,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   if (job.status === 'cancelled') label = 'Produktion abgebrochen';
   const controls = job.status === 'paused' && job.pause_reason === 'art' ?
     button('production-approve-art', 'Illustrationen prüfen', undefined, 'button primary', job.id)
-    : job.art_review_pending ? button('production-approve-art', 'Illustrationen prüfen', undefined, 'button quiet', job.id)
+    : job.status === 'completed' && job.art_review_pending ? button('production-approve-art', 'Illustrationen prüfen', undefined, 'button quiet', job.id)
     : job.status === 'paused' ?
     button('production-resume', job.pause_reason === 'chapter' ? 'Kapitel freigeben und fortsetzen' :
       job.recheck_available ? 'Gespeichertes Kapitel erneut prüfen' : 'Fortsetzen', undefined, 'button', job.id)

@@ -237,7 +237,7 @@ class ProductionTests(unittest.TestCase):
                 if role == "write":
                     return short, {}, "stop"
                 if role == "rewrite" and "anchor" in schema["properties"]:
-                    return json.dumps({"anchor": short[-140:], "addition": addition}), {}, "stop"
+                    return json.dumps({"anchor": short[-120:], "addition": addition}), {}, "stop"
                 return fake_model(lang, role, prompt, tokens, schema)
 
             f.worker.call = expanding
@@ -251,6 +251,34 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(production.managed_docs(f.conn, f.pid)[0]["body"], short + "\n\n" + addition)
             f.change("approve-art", job_id=row["id"])
             self.assertEqual(f.drive()["state"], "completed")
+
+    def test_short_scene_expansions_accumulate_before_rechecking(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            plan["chapters"][0].update(minimum=60, maximum=90)
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            f.change("start", version=1, mode="automatic")
+            additions = iter(("Mara checked the shadows behind the cupboard for any movement.",
+                              "Nera set the lantern beside the open drawer to light the faded record."))
+
+            def expanding(lang, role, prompt, tokens, schema=None):
+                if role == "rewrite" and "anchor" in schema["properties"]:
+                    anchor = schema["properties"]["anchor"]["enum"][0]
+                    return json.dumps({"anchor": anchor, "addition": next(additions)}), {}, "stop"
+                return fake_model(lang, role, prompt, tokens, schema)
+
+            f.worker.call = expanding
+            row = f.drive()
+            result = json.loads(row["result"])
+            receipt = result["chapter_results"][0]
+            self.assertEqual(receipt["corrections"], 2)
+            self.assertEqual(len(receipt["patches"]), 2)
+            self.assertLess(receipt["patches"][0]["words_after"], 60)
+            self.assertEqual(receipt["patches"][1]["words_before"], receipt["patches"][0]["words_after"])
+            self.assertTrue(receipt["candidate_audits"][0]["accepted"])
+            self.assertGreaterEqual(receipt["words"], 60)
 
     def test_in_range_words_and_both_audit_proofs_gate_completion(self):
         with Fixture() as f:
