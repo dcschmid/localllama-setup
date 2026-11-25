@@ -1507,11 +1507,17 @@ async function handleProduction(action: string, value: string) {
     await refresh();
     return;
   }
-  if ((action === 'production-approve' || action.startsWith('production-start-')) && pid) {
+  if ((action === 'production-approve' || action === 'production-approve-start' || action.startsWith('production-start-')) && pid) {
     const info = await productionInfo(pid);
     if (action === 'production-approve') {
       await productionAct(pid, 'approve-plan', { version: info.version, accept_impact: true });
       planDialog(await productionInfo(pid), pid);
+    } else if (action === 'production-approve-start') {
+      // One step for the common case: release exactly the shown plan version and start the real production.
+      await productionAct(pid, 'approve-plan', { version: info.version, accept_impact: true });
+      await productionAct(pid, 'start', { version: info.version, session_id: session?.id, mode: 'automatic' });
+      if (details.open) details.close();
+      await refresh();
     } else {
       await productionAct(pid, 'start', { version: info.version, session_id: session?.id,
         mode: action.endsWith('-together') ? 'together' : 'automatic' });

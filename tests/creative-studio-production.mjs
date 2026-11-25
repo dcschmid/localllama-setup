@@ -93,8 +93,41 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   assert.equal(briefReport[0].payload.count, 3);
   assert.equal(briefReport[0].payload.minimum, 900);
   assert.equal(briefReport[0].payload.maximum, 1200);
+  // A free-wording release must release exactly the stored plan and start one real production.
+  const api = async path => (await page.request.get(base + path)).json();
+  const planInChat = async title => {
+    const chat = await (await page.request.post(base + '/api/sessions', { data: { title } })).json();
+    await page.goto(base + '/#chat/' + chat.id);
+    await page.locator('#prompt').fill('Ich möchte eine vollständige Geschichte erstellen.\n# Das Glas\nEin Kapitel, 38–60 Wörter. Zeige mir zuerst die Planung.');
+    await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+    await expect(page.locator('[data-kind=production-job]')).toBeVisible();
+    await expect.poll(async () => (await api(`/api/sessions/${chat.id}`)).project_id, { timeout: 30_000 }).toBeTruthy();
+    const project = (await api(`/api/sessions/${chat.id}`)).project_id;
+    await expect.poll(async () => (await api(`/api/production/${project}`)).stage, { timeout: 60_000 }).toBe('PLAN_READY');
+    return { chat: chat.id, project };
+  };
+  const typed = await planInChat('Freigabe im Chat');
+  const release = 'Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen. '
+    + 'Prüfe und korrigiere die Texte automatisch und stelle mir am Ende die Markdown- und MDX-Dateien zum Herunterladen bereit.';
+  await page.locator('#prompt').fill(release);
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  await expect(page.locator('[data-kind=production-job]').nth(1)).toBeVisible({ timeout: 30_000 });
+  const released = await api(`/api/production/${typed.project}`);
+  assert.equal(released.approved, true);
+  assert.ok(['PRODUCTION_RUNNING', 'PRODUCTION_COMPLETED', 'PRODUCTION_PAUSED'].includes(released.stage), released.stage);
+  const kinds = (await api(`/api/production/${typed.project}/report`)).map(job => job.payload.kind);
+  assert.equal(kinds.filter(kind => kind === 'story').length, 1, kinds.join());
+  assert.ok(!kinds.includes('planning'), 'the release must not run a planning review: ' + kinds.join());
+  await expect(page.getByText('Planung prüfen', { exact: true })).toHaveCount(0);
+
+  // The web UI offers the same in one click on the plan dialog.
+  const clicked = await planInChat('Ein-Klick-Freigabe');
+  await page.getByRole('button', { name: 'Planung öffnen' }).click({ timeout: 30_000 });
+  await dialog.getByRole('button', { name: 'Freigeben und vollständig erstellen' }).click();
+  await expect(page.locator('[data-kind=production-job]').nth(1)).toBeVisible({ timeout: 30_000 });
+  assert.ok(['PRODUCTION_RUNNING', 'PRODUCTION_COMPLETED', 'PRODUCTION_PAUSED'].includes((await api(`/api/production/${clicked.project}`)).stage));
   assert.deepEqual(errors, []);
-  console.log('Firefox production workflow, chat image, manuscript and ZIP passed.');
+  console.log('Firefox production workflow, chat release, one-click release, chat image, manuscript and ZIP passed.');
 } finally {
   await browser.close();
   await rm(output, { recursive: true, force: true });

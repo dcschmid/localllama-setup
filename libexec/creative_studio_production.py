@@ -363,6 +363,20 @@ def public_job(row, *, artifacts=None):
             "project_id": payload["project_id"]}
 
 
+def workflow_stage(record, reviewing, job):
+    """Workflow position derived only from the stored plan record and the latest stored job."""
+    if job and job["kind"] == "story" and job["status"] != "cancelled" and (
+            job["status"] in ("queued", "running") or not record or job.get("plan_version") in (None, record["version"])):
+        return {"queued": "PRODUCTION_RUNNING", "running": "PRODUCTION_RUNNING", "paused": "PRODUCTION_PAUSED",
+                "failed": "PRODUCTION_FAILED", "incomplete": "PRODUCTION_INCOMPLETE",
+                "completed": "PRODUCTION_COMPLETED"}[job["status"]]
+    if reviewing:
+        return "PLANNING"
+    if not record:
+        return "NO_PLAN"
+    return "PLAN_APPROVED" if record["state"] == "approved" else "PLAN_READY"
+
+
 def plan_info(conn, pid, version=None, *, artifact_valid=None):
     organizer.require(conn, "project", pid)
     record, job = latest_plan(conn, pid), job_state(conn, pid)
@@ -386,12 +400,13 @@ def plan_info(conn, pid, version=None, *, artifact_valid=None):
     reviewing = conn.execute("""SELECT 1 FROM jobs WHERE service='production' AND json_extract(payload,'$.project_id')=?
         AND json_extract(payload,'$.kind') IN ('plan','planning') AND json_extract(payload,'$.action') IS NOT 'discuss'
         AND state IN ('queued','running') LIMIT 1""", (pid,)).fetchone()
+    public = public_job(job, artifacts=artifact_valid(job) if artifact_valid else None) if job else None
     return {"plan": json.loads(record["plan"]) if record else None, "version": record["version"] if record else None,
-            "reviewing": bool(reviewing),
+            "reviewing": bool(reviewing), "stage": workflow_stage(latest_plan(conn, pid), bool(reviewing), public),
             "approved": bool(record and record["state"] == "approved"),
             "historical": bool(record and record["version"] != latest), "history": history, "narrative": narrative,
             "impact": json.loads(record["impact"]) if record else None,
-            "job": public_job(job, artifacts=artifact_valid(job) if artifact_valid else None) if job else None}
+            "job": public}
 
 
 def plan_version(conn, pid, plan, impact):
@@ -793,8 +808,9 @@ def mutate(conn, pid, action, body, save_document, store_message, *, artifact_va
         recovered.pop("exports", None)
     recovered.setdefault("step", "writing")
     recovered.setdefault("number", 1)
+    typed = body.get("user_text")
     return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art, "visual_profiles": True}, recovered,
-                   store_message, "Manuskriptproduktion", label)
+                   store_message, "Manuskriptproduktion", typed.strip()[:4000] if isinstance(typed, str) and typed.strip() else label)
 
 
 QUALITY_VERSION = 3
@@ -1019,7 +1035,10 @@ class ProductionWorker:
                 "revision. Each change provides a complete replacement value for one existing field. Use section story, "
                 "bible or chapter and a string chapter number. Preserve chapter numbering, language and unaddressed fields. "
                 "If only chat notes are available, review those notes and omit changes. "
-                "Leave findings empty when they cannot be supported. Do not draft chapters."
+                "Leave findings empty when they cannot be supported. Do not draft chapters in this review. If the request asks to "
+                "write the story or to export files, do not claim a model limitation: state that the studio production "
+                "writes, checks, illustrates and exports the story after the plan is approved ('Geschichte vollständig erstellen'), "
+                "and review the plan only."
                 "\nSOURCE\n" + (material if base else story.snippet(material, 68000)) + "\nREQUEST\n" + payload["request"],
                 {"answer": STR, "findings": array(story.schema(fields(("chapter", "quote", "issue", "correction"))), 10),
                  "changes": array(story.schema(fields(("section", "chapter", "field", "value"))), 16)}, 4300)

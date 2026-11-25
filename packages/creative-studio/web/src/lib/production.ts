@@ -22,7 +22,7 @@ export type ProductionJob = {
   skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
   pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
-export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean;
+export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean; stage?: string;
   history: Array<{ version: number; state: string }>;
   narrative: Array<{ number: number; summary: string; title: string; memory: Array<{ status: string; kind: string; fact: string; quote: string }> }>;
   impact?: { findings: Finding[]; outline_findings?: Finding[]; versions?: Record<string, number>;
@@ -174,7 +174,8 @@ export function planDialog(info: ProductionInfo, pid: string) {
         + button('production-start-automatic', 'Geschichte vollständig erstellen', undefined, 'button primary', pid) : '')
         + (adoptable ? button('production-adopt-plan', 'Freigegebene Version übernehmen und fortsetzen', undefined, 'button primary',
           info.job!.id + ':' + info.version) : '')
-        : button('production-approve', 'Planung freigeben', undefined, 'button primary', pid))) + '</div>', true);
+        : button('production-approve', 'Planung freigeben', undefined, 'button', pid)
+          + button('production-approve-start', 'Freigeben und vollständig erstellen', undefined, 'button primary', pid))) + '</div>', true);
 }
 
 export function editPlanDialog(info: ProductionInfo, submit: (values: object) => Promise<void>) {

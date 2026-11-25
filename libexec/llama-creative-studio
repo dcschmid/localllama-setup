@@ -2833,6 +2833,14 @@ class Handler(BaseHTTPRequestHandler):
     def _resolve_chat_first(self, body, conn, session, mode, lang, fingerprint):
         text, sid, ident = body["text"], session["id"], body["request_id"]
         command = chats.command(text)
+        if not command:
+            # An explicit release of the existing plan, in free wording, outranks the planning review.
+            owned = [item for item in chats.context_list(conn, sid) if item["kind"] in visual.KINDS]
+            chosen = body.get("context_id") or session["project_id"]
+            if not any(item["id"] == chosen for item in owned):
+                chosen = owned[0]["id"] if len(owned) == 1 else None
+            known = production.latest_plan(conn, chosen) if chosen else None
+            command = chats.production_command(text, known["state"] if known else "unknown" if len(owned) > 1 else None)
         if command:
             contexts = [item for item in chats.context_list(conn, sid) if item["kind"] in visual.KINDS]
             pid = body.get("context_id") or session["project_id"]
@@ -2853,15 +2861,22 @@ class Handler(BaseHTTPRequestHandler):
             if not record:
                 raise organizer.OrganizerError("production_approval_required", 409)
             if command == "approve":
+                store_message(conn, sid, "user", text)
                 if record["state"] != "approved":
                     production.mutate(conn, pid, "approve-plan", {"version": record["version"]}, save_document, store_message)
-                    store_message(conn, sid, "user", text)
                     store_message(conn, sid, "assistant", "Die Story-Planung ist freigegeben. Du kannst jetzt die vollständige Produktion starten.")
+                else:
+                    store_message(conn, sid, "assistant", f"Die Story-Planung (Version {record['version']}) ist bereits freigegeben. "
+                                  "Schreibe „Geschichte vollständig erstellen“, um die Produktion zu starten.")
                 return {"handled": True, "project_id": pid}, mode, text, pid
             previous = production.job_state(conn, pid)
             if previous and previous["state"] in production.ACTIVE and json.loads(previous["payload"])["kind"] == "story":
                 return {"handled": True, "production_id": previous["id"], "project_id": pid}, mode, text, pid
-            result, _ = production.mutate(conn, pid, "start", {"session_id": sid, "version": record["version"], "mode": command},
+            if record["state"] != "approved":
+                # The instruction releases exactly the latest plan version of this story; open impacts still need the plan dialog.
+                production.mutate(conn, pid, "approve-plan", {"version": record["version"]}, save_document, store_message)
+            result, _ = production.mutate(conn, pid, "start", {"session_id": sid, "version": record["version"], "mode": command,
+                                                               "user_text": text},
                                           save_document, store_message, artifact_valid=artifacts_available)
             return {"handled": True, "production_id": result["id"], "project_id": pid}, mode, text, pid
 

@@ -3,6 +3,7 @@
 import json
 import re
 import time
+import unicodedata
 import uuid
 
 import creative_studio_organizer as records
@@ -109,6 +110,56 @@ def command(text):
     if MANUSCRIPT_EXPORT.fullmatch(phrase):
         return "export"
     return None
+
+
+# An explicit release of an existing plan, in free wording. It outranks the planning review,
+# because "Planung ... Prüfe und korrigiere die Texte" is part of the production, not a review request.
+_FILLER = r"(?:(?:bitte|jetzt|nun|gleich|sofort|mir|uns|noch|now|please|just)\s+)*"
+_VERB = r"(?:erstell\w*|schreib\w*|verfass\w*|produzier\w*|generier\w*|generate|write|create|produce|draft)"
+_WHOLE = (r"(?:(?:die|diese|meine|unsere|the|this|my|our)\s+)?"
+          r"(?:(?:ganze|gesamte|vollständige|komplette|fertige|full|complete|whole|entire|finished)\s+)?"
+          r"(?:geschichte|story|manuskript|manuscript|roman|novel)"
+          r"|(?:alle|sämtliche|all)\s+(?:(?:\d+|ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?"
+          r"(?:kapitel\w*|chapters)")
+_NOT_A_REWRITE = (r"(?!\s+(?:um|neu|weiter|fort|kürzer|länger|anders|besser|zusammen|again|over|shorter|longer|"
+                  r"differently|better|further))")
+WHOLE_START = re.compile(r"^\s*(?:(?:und|and|dann|then)\s+)?" + _FILLER + _VERB + r"\s+" + _FILLER + r"(?:" + _WHOLE + r")\b" + _NOT_A_REWRITE, re.I)
+NAMED_START = re.compile(r"^\s*(?:bitte\s+)?(?:starte\w*|start|beginne\w*|begin|launch|run)\s+(?:die\s+|the\s+|mit\s+der\s+)?"
+                         r"(?:(?:vollständige|komplette|full|complete)\s+)?(?:manuskript\w*|story[ -]?production|produktion|geschichtsproduktion)\b", re.I)
+FULL_START = re.compile(r"\b(?:vollständig|komplett|in full|completely)\s+(?:schreib\w*|erstell\w*|ausschreib\w*|write|produz\w*)"
+                        r"|\b(?:schreib\w*|erstell\w*|write)\b[^.!?\n]{0,24}\b(?:vollständig|komplett|in full|completely)\b", re.I)
+WEAK_START = re.compile(r"^\s*(?:bitte\s+)?(?:start(?:e)?\s+(?:writing|mit dem schreiben)|(?:begin|beginne)\s+(?:writing|mit dem schreiben|zu schreiben)|"
+                        r"schreib\s+los|leg\s+los|fang\s+an|go\s+ahead)\b", re.I)
+APPROVAL_CLAUSE = re.compile(
+    r"\b(?:planung|plan|gliederung|outline|exposé|kapitelplan|kapitelübersicht)\b[^.!?\n]{0,40}\b(?:freigegeben|freigeben|genehmigt|akzeptiert|bestätigt|approved|accepted)\b"
+    r"|\bich\s+(?:gebe|habe)\b[^.!?\n]{0,50}\b(?:frei|freigegeben)\b|\bi\s+(?:approve|accept)\b|\b(?:approved|freigegeben)\b"
+    r"|\bgib\b[^.!?\n]{0,30}\bfrei\b|\bpasst\s+so\b|\beinverstanden\b|\bsieht\s+gut\s+aus\b|\blooks\s+good\b", re.I)
+NEGATION = re.compile(r"\b(?:nicht|kein\w*|nie|never|not|no|unapproved)\b|n't\b", re.I)
+HOLD = re.compile(r"\b(?:aber|jedoch|allerdings|but|however|vorher|zuerst|bevor|before|first|falls|wenn|if|sobald|erst)\b", re.I)
+TOGETHER = re.compile(r"\b(?:gemeinsam schreiben|write together|kapitel für kapitel|chapter by chapter)\b", re.I)
+
+
+def production_command(text, plan_state):
+    """Classify an explicit release of the existing story plan.
+
+    Returns "automatic" or "together" to approve the latest plan version and start the real
+    production, "approve" for an approval without a start request, or None when the message is
+    absent of a clear instruction, is a question, a condition or a negation, or no plan exists."""
+    if plan_state not in ("proposal", "approved", "unknown"):
+        return None
+    phrase = " ".join(unicodedata.normalize("NFKC", text).split())
+    if not phrase or "?" in phrase or HOLD.search(phrase) or QUESTION.match(phrase):
+        return None
+    clauses = [part.strip() for part in re.split(r"[.!?;:,\n]+", phrase) if part.strip()]
+    approval = any(APPROVAL_CLAUSE.search(part) and not NEGATION.search(part) for part in clauses)
+    strong = any((WHOLE_START.match(part) or NAMED_START.match(part) or FULL_START.search(part)) and not NEGATION.search(part)
+                 for part in clauses)
+    weak = any(WEAK_START.match(part) and not NEGATION.search(part) for part in clauses)
+    if TOGETHER.search(phrase) and (approval or plan_state == "approved") and not NEGATION.search(phrase):
+        strong = True
+    if strong or (weak and (approval or plan_state == "approved")):
+        return "together" if TOGETHER.search(phrase) else "automatic"
+    return "approve" if approval else None
 
 
 def production_brief(text):

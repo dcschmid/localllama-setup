@@ -83,6 +83,80 @@ class ChatTests(unittest.TestCase):
             self.assertEqual({d["id"] for d in choices["choices"]}, {first, second})
             self.assertEqual(dispatch(f, sid, "Prüfe Kapitel 1.", chapter_id=second)["editorial"]["id"], second)
 
+    def test_free_wording_release_is_classified_before_the_planning_review(self):
+        real = ("Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen. "
+                "Prüfe und korrigiere die Texte automatisch und stelle mir am Ende die Markdown- und MDX-Dateien zum Herunterladen bereit.")
+        # This message used to become the planning review ("Planung" + "Prüfe").
+        self.assertEqual(chats.requested_action(real, "auto", has_plan=True, has_prose=False, story_context=True), "planning-audit")
+        starts = (real, "Die Planung ist freigegeben. Erstelle jetzt die Geschichte.", "Passt so, bitte vollständig schreiben.",
+                  "Starte die Manuskriptproduktion.", "Schreibe jetzt alle drei Kapitel.", "Generate the full story now.",
+                  "I approve the outline. Start writing.", "Geschichte vollständig erstellen")
+        for text in starts:
+            for state in ("proposal", "approved"):
+                with self.subTest(text=text[:50], state=state):
+                    self.assertEqual(chats.production_command(text, state), "automatic")
+        self.assertEqual(chats.production_command("Planung freigegeben, gemeinsam schreiben.", "proposal"), "together")
+        self.assertEqual(chats.production_command("Start writing", "approved"), "automatic")
+        for text in ("Die Planung ist freigegeben.", "Ich gebe die Planung frei.", "I approve the outline."):
+            self.assertEqual(chats.production_command(text, "proposal"), "approve")
+        # Questions, conditions, negations, single chapters, rewrites and planning work never start a production.
+        for text in ("Prüfe die Planung auf Widersprüche.", "Schreibe Kapitel 1.", "Schreibe das nächste Kapitel.",
+                     "Ist die Planung freigegeben?", "Die Planung ist noch nicht freigegeben.", "Schreibe nicht die ganze Geschichte.",
+                     "Die Planung ist freigegeben, aber ändere Kapitel 2.", "Schreibe alle Kapitel neu.",
+                     "Schreibe die Geschichte weiter.", "Erstelle ein Titelbild für die Geschichte.",
+                     "Wenn die Planung passt, schreibe die Geschichte.", "Überarbeite die Planung und prüfe die Handlung.",
+                     "Start writing", "Was passiert in Kapitel 3?"):
+            with self.subTest(text=text):
+                self.assertIsNone(chats.production_command(text, "proposal"))
+        self.assertIsNone(chats.production_command(real, None))   # no stored plan: nothing to release
+
+    def test_chat_release_approves_the_stored_plan_and_starts_one_real_job(self):
+        example = runpy.run_path(str(ROOT / "tests/creative-studio-production.py"))["example_plan"]()
+        real = ("Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen. "
+                "Prüfe und korrigiere die Texte automatisch und stelle mir am Ende die Markdown- und MDX-Dateien zum Herunterladen bereit.")
+
+        def jobs(f):
+            with closing(sqlite3.connect(f.db)) as conn:
+                return [(json.loads(p)["kind"], json.loads(p).get("action"), state) for p, state in conn.execute(
+                    "SELECT payload,state FROM jobs WHERE service='production' ORDER BY created")]
+
+        with Fixture() as f:
+            pid = f.req("/projects", {"name": "Thunderforge", "kind": "story", "lang": "de"})["id"]
+            sid = f.req("/sessions", {"title": "Thunderforge", "project_id": pid})["id"]
+            with closing(sqlite3.connect(f.db)) as conn, conn:
+                conn.execute("INSERT INTO story_production_plans(project_id,version,state,plan,impact,created) VALUES(?,?,?,?,?,?)",
+                             (pid, 1, "proposal", json.dumps(example), "{}", 1.0))
+            self.assertEqual(f.req(f"/production/{pid}")["stage"], "PLAN_READY")
+            # A review request still reviews the plan and starts nothing.
+            dispatch(f, sid, "Prüfe die Planung auf Widersprüche.", mode="auto")
+            self.assertEqual([kind for kind, *_ in jobs(f)], ["planning"])
+            self.assertEqual(f.req(f"/production/{pid}")["plan"] is not None, True)
+            first = dispatch(f, sid, real, mode="auto")
+            self.assertTrue(first["handled"] and first["production_id"] and first["project_id"] == pid)
+            info = f.req(f"/production/{pid}")
+            self.assertTrue(info["approved"])
+            self.assertEqual(info["version"], 1)
+            self.assertEqual(info["stage"], "PRODUCTION_RUNNING")
+            self.assertEqual(info["job"]["id"], first["production_id"])
+            self.assertEqual([kind for kind, *_ in jobs(f)], ["planning", "story"])
+            # Repeating the instruction neither duplicates the job nor starts another review.
+            again = dispatch(f, sid, real, mode="auto")
+            self.assertEqual(again["production_id"], first["production_id"])
+            self.assertEqual([kind for kind, *_ in jobs(f)], ["planning", "story"])
+            with closing(sqlite3.connect(f.db)) as conn:
+                said = [row[0] for row in conn.execute("SELECT content FROM messages WHERE session_id=? AND role='user' ORDER BY created,rowid", (sid,))]
+            self.assertIn(real, said)
+
+    def test_chat_release_without_a_stored_plan_does_not_start_production(self):
+        real = "Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen."
+        with Fixture() as f:
+            pid = f.req("/projects", {"name": "Thunderforge", "kind": "story", "lang": "de"})["id"]
+            sid = f.req("/sessions", {"title": "Thunderforge", "project_id": pid})["id"]
+            answer = dispatch(f, sid, real, mode="auto")
+            self.assertNotIn("production_id", answer)
+            with closing(sqlite3.connect(f.db)) as conn:
+                self.assertEqual(conn.execute("SELECT count(*) FROM jobs WHERE service='production' AND json_extract(payload,'$.kind')='story'").fetchone()[0], 0)
+
     def test_chat_owned_content_follows_folder_and_trash(self):
         with Fixture() as f:
             sid = f.req("/sessions", {"title": "A mixed chat"})["id"]

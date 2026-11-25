@@ -58,3 +58,23 @@ Der Lauf verwendete eine isolierte Studio-Instanz auf Port 18711 mit dem lokalen
 | Platzhalter | Weder `Simuliert`, `würde hier` noch `example.invalid` in Markdown oder MDX |
 
 Grenzen: Der Lauf brauchte sechs Aktionen **Erneut versuchen**. Kapitel 2 und 3 hielten wegen `story_length_failed` an, und Kapitel 3 viermal wegen bestätigter Sprachbefunde. Die Kapitelübergänge, Bildaufträge, Zusammenstellung und der Export liefen ohne Befehle. Die beiden letzten Blockerklassen sind erst in diesem Lauf behoben worden. Ein vollständiger Lauf ohne Wiederholungen steht deshalb noch aus. Die Bilder zeigen die passenden Szenen. Gesichter und Hände wirken im Anima-Malstil teils verzerrt.
+
+## Nachtrag: Freigabe im Chat startete die Planungsprüfung (25. November 2026, Chat „Thunderforge“)
+
+Die Nachricht „Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen. Prüfe und korrigiere die Texte automatisch …“ löste zweimal den Auftrag „Planung prüfen“ aus (`f5a53193…`, `cc541396…`). Plan Version 2 war beim zweiten Mal bereits `approved`. Das Studio hatte kein Kapitel und keinen Produktionsauftrag angelegt.
+
+**Ursache, belegt durch Nachspielen der gespeicherten Nachricht:**
+
+- `chats.command()` verglich die Nachricht per `fullmatch` mit wenigen festen Sätzen. Der lange Satz ergab `None`. Von den sechs Beispielen aus dem Auftrag lieferte nur „Starte die Manuskriptproduktion.“ einen Befehl.
+- `requested_action` wertete „Planung“ als Planungsziel und „Prüfe“ als Prüfauftrag und wählte `planning-audit`. „Erstelle jetzt die Geschichte“ führte allein zur Aktion `outline`.
+- „Do not draft chapters.“ steht nur im Prompt der Planungsprüfung. Das Modell zitierte die Regel, weil die Freigabe dort ankam. Der Skill-Resolver lädt die Planungsregeln (`story-planning`, `story-bible`) ausschließlich in der Phase `plan`. In `generate`, `audit` und `rewrite` stehen sie nicht. Planungsregeln gelangen also nicht in die Produktion.
+
+**Änderungen:**
+
+- `production_command` in `libexec/creative_studio_chat.py` erkennt die Freigabe in freier Wortwahl, getrennt nach Satzteilen. Fragen, Bedingungen, Verneinungen, einzelne Kapitel und Überarbeitungen starten nichts. Ohne gespeicherte Planung passiert nichts.
+- `_resolve_chat_first` wertet sie vor der Planungsprüfung aus. Ist die Planung noch ein Vorschlag, gibt das Studio genau diese Version frei und startet den Auftrag in einer Transaktion. Läuft bereits ein Auftrag, wird dessen ID zurückgegeben. Der getippte Text bleibt als Nutzernachricht erhalten.
+- `stage` in `plan_info` leitet den Zustand aus Plan und Auftrag ab.
+- Die Planungsprüfung behauptet bei einer Fehlleitung keine Modellgrenze mehr und verweist auf die Produktion.
+- Die Weboberfläche hat im Plan-Dialog den Button **Freigeben und vollständig erstellen**.
+
+**Prüfung:** Die echte Nachricht erzeugt auf einer Kopie der Live-Datenbank einen Produktionsauftrag für Plan Version 2 (`PRODUCTION_RUNNING`). Dafür liefen Modell- und Bilddienst nicht. Neue Tests in `tests/creative-studio-chat.py` (Tabelle der Formulierungen, End-to-End gegen einen Serverprozess) und `tests/creative-studio-production.mjs` (Firefox: Chat-Freigabe und Ein-Klick-Button).
