@@ -34,7 +34,8 @@ try {
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Planung freigeben' }).click();
   await dialog.getByRole('button', { name: 'Geschichte vollständig erstellen' }).click();
-  await page.getByRole('button', { name: 'Illustrationen prüfen' }).click({ timeout: 30_000 });
+  await expect(page.getByText('Geschichte fertig', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Illustrationen prüfen' }).click();
   await dialog.getByText('Titelbild', { exact: true }).click();
   await expect(dialog.getByRole('img', { name: 'Mara and Nera at the open drawer' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Bildserie freigeben' }).click();

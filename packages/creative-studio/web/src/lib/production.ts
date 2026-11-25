@@ -16,7 +16,7 @@ export type ProductionJob = {
   id: string; project_id: string; status: string; kind: 'plan' | 'planning' | 'story'; step: string; number?: number; total?: number;
   phase?: string; image_state?: string; image_waiting?: string; retry?: { attempt: number; code: string };
   answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
-  skills?: Record<string, string>; audit_lane?: string;
+  skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
   pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
 export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean;
@@ -217,6 +217,7 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   if (job.status === 'cancelled') label = 'Produktion abgebrochen';
   const controls = job.status === 'paused' && job.pause_reason === 'art' ?
     button('production-approve-art', 'Illustrationen prüfen', undefined, 'button primary', job.id)
+    : job.art_review_pending ? button('production-approve-art', 'Illustrationen prüfen', undefined, 'button quiet', job.id)
     : job.status === 'paused' ?
     button('production-resume', job.pause_reason === 'chapter' ? 'Kapitel freigeben und fortsetzen' :
       job.recheck_available ? 'Gespeichertes Kapitel erneut prüfen' : 'Fortsetzen', undefined, 'button', job.id)

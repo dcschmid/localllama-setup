@@ -1,5 +1,7 @@
 # Human Writing im Creative Studio
 
+Die [modulare Schreibpipeline](WRITING_PIPELINE.md) beschreibt die aktuelle Auswahl aus Human Writing, Story Writing und Article Writing sowie die automatische Korrektur für generierte Entwürfe.
+
 Im geöffneten Dokument startet **Text prüfen** den Audit. **Text verbessern** erstellt einen Vorschlag für das Dokument oder eine markierte Passage. Im Vergleich stehen Original und Vorschlag mit hervorgehobenen Änderungen und redaktionellen Begründungen. Bei stabiler Absatzstruktur lassen sich einzelne Änderungen zur Übernahme auswählen.
 
 **Überarbeitung übernehmen** speichert eine neue Version. **Vorschlag verwerfen** schließt den Vorschlag. Unter **Versionen** lassen sich Fassungen öffnen, vergleichen und als neue Version wiederherstellen. Der **Prüfverlauf** enthält Prüfberichte und den Status bisheriger Vorschläge. **Human Writing aktiv** öffnet die Nachweise der letzten Skill-Nutzung am Dokument.

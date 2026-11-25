@@ -9,8 +9,10 @@ import tempfile
 import time
 import unittest
 import uuid
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "libexec"))
@@ -69,6 +71,7 @@ class WritingTests(unittest.TestCase):
         self.assertEqual(chats.requested_action("Plan a story with eight chapters.", "auto"), "outline")
         self.assertEqual(chats.outline_count("Schreibe eine Mystery-Geschichte mit acht Kapiteln."), 8)
         self.assertEqual(skills.document_domain("doc"), "general")
+        self.assertEqual(chats.requested_action("Verbessere diesen Text.", "auto"), "editorial")
 
     def test_only_selected_rules_reach_router_and_are_hashed(self):
         studio = self.studio
@@ -136,6 +139,26 @@ class WritingTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid"):
                     correction.patch_text(text, edits, [], self.fiction, targets=[target], article=True)
 
+    def test_short_grammar_label_can_be_verified_from_a_detailed_correction(self):
+        worker = self.studio["production_worker"]
+        text = "Das Licht tanzte über den rostigen Kettenlaufwerk."
+        quote = "den rostigen Kettenlaufwerk"
+
+        def fake(lang, role, prompt, tokens, schema):
+            if "verdicts" in schema["properties"]:
+                answer = {"verdicts": [{"index": "0", "status": "confirmed",
+                                       "reason": "Laufwerk ist ein neutrales Substantiv."}]}
+            else:
+                answer = {"findings": [{"quote": quote, "category": "grammar", "severity": "editorial",
+                                        "issue": "Grammatik (Kasus)", "related_quote": "",
+                                        "correction": "Bei Ortsangaben steht hier der Dativ und die neutrale Form dem."}]}
+            return json.dumps(answer), {"role": role}, "stop"
+
+        worker.call = fake
+        result = worker.language_window("de", text, 1, [])
+        self.assertEqual(result["findings"][0]["status"], "confirmed")
+        self.assertEqual(result["findings"][0]["severity"], "automatic")
+
     def test_story_evidence_needs_two_passages(self):
         cases = (
             ("Nadia knew how to open the box.", "Nadia does not learn the code until Chapter 6."),
@@ -162,7 +185,7 @@ class WritingTests(unittest.TestCase):
             with self.subTest(before=before), self.assertRaisesRegex(ValueError, "patch_invalid"):
                 correction.patch_text(TECHNICAL, [{"before": before, "after": after}], [], self.fiction, article=True)
 
-    def dispatch_direct(self, text, language, instruction, claim=None, supported=True):
+    def dispatch_direct(self, text, language, instruction, claim=None, supported=True, fail_first_plan=False):
         sid, pid, task = (uuid.uuid4().hex for _ in range(3))
         studio = self.studio
         with self.conn:
@@ -178,6 +201,10 @@ class WritingTests(unittest.TestCase):
                 "VALUES(?,'chat_task','queued',?,?,?,?)", (task, json.dumps(payload), json.dumps(result), time.time(), time.time()))
 
         def fake(lang, role, prompt, tokens, schema=None):
+            nonlocal fail_first_plan
+            if role == "plan" and fail_first_plan:
+                fail_first_plan = False
+                raise HTTPError("http://localhost", 500, "local model load failed", None, BytesIO())
             proof = {"alias": "stub", "role": role}
             if role == "write":
                 return text, proof, "stop"
@@ -226,6 +253,13 @@ class WritingTests(unittest.TestCase):
         self.assertEqual(job["review"]["fact"]["claims"][0]["source_url"], URL)
         original = self.conn.execute("SELECT body FROM doc_versions WHERE document_id=? AND version=1", (doc["id"],)).fetchone()
         self.assertEqual(original["body"], ENGLISH)
+
+    def test_article_recovers_from_one_router_failure_without_duplicate_draft(self):
+        state, doc = self.dispatch_direct(ENGLISH, "en", "Write a researched article using the dossier offline.",
+                                          "The result is a JSON formatted string", fail_first_plan=True)
+        self.assertEqual(state["publishing"], "ready")
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM documents WHERE kind='article'").fetchone()[0], 1)
+        self.assertEqual(doc["version"], 2)
 
     def test_technical_article_preserves_markdown_and_unresolved_claim(self):
         job, doc = self.dispatch_direct(TECHNICAL, "en", "Write a researched technical article using the dossier, offline.",

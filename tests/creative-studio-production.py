@@ -109,6 +109,8 @@ class Fixture:
     def change(self, action, **values):
         with self.conn:
             body = {"session_id": self.sid, **values}
+            if action == "start":
+                body.setdefault("review_art", True)
             return production.mutate(self.conn, self.pid, action, body,
                                      self.backend["save_document"], self.backend["store_message"])[0]
 
@@ -504,6 +506,73 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(end["chapter_results"][0]["image"]["id"], first_image)
             self.assertEqual(len(production.managed_docs(f.conn, f.pid)), 2)
             self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 3)
+
+    def test_eight_chapter_checkpoints_complete_in_order_and_export_nine_images(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            first = plan["chapters"][0]
+            plan["chapters"] = [{**first, "title": f"Drawer {num}", "beats": f"Mara examines drawer {num}."}
+                                for num in range(1, 9)]
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            ident = f.change("start", version=1, mode="automatic", review_art=False)["id"]
+            end = f.drive(checkpoints=210)
+            self.assertEqual(end["state"], "completed")
+            self.assertTrue(production.public_job(end)["art_review_pending"])
+            self.assertEqual(f.change("approve-art", job_id=ident)["status"], "completed")
+            self.assertFalse(production.public_job(production.job_state(f.conn, f.pid)).get("art_review_pending"))
+            manuscript = production.manuscript(f.conn, f.pid)
+            self.assertTrue(manuscript["complete"])
+            self.assertEqual([c["number"] for c in manuscript["chapters"]], list(range(1, 9)))
+            self.assertTrue(manuscript["whole_review"]["repetitions"])
+            assets = [manuscript["cover"], *[c["image"] for c in manuscript["chapters"]]]
+            self.assertEqual(len({asset["id"] for asset in assets}), 9)
+            for fmt in ("md", "mdx"):
+                text = production.manuscript_text(manuscript, fmt, local_images=True)
+                self.assertTrue(all(f"images/{asset['id']}.png" in text for asset in assets))
+
+    def test_canon_backed_quantity_fix_is_verified_and_saved_as_new_version(self):
+        with Fixture() as f:
+            f.create()
+            plan = example_plan()
+            canon = "There are exactly three keys in the drawer."
+            plan["chapters"][0]["continuity"] = canon
+            f.change("save-plan", plan=plan)
+            f.change("approve-plan", version=1)
+            f.change("start", version=1, mode="automatic")
+            original = PROSE.replace("she found the key", "she found four keys")
+
+            def model(lang, role, prompt, tokens, schema=None):
+                if role == "write":
+                    return original, {"role": role}, "stop"
+                properties = schema["properties"]
+                if "safe" in properties:
+                    return production.dump({"safe": "yes", "reason": "Only the count changes to the approved three."}), {}, "stop"
+                answer, proof, finish = fake_model(lang, role, prompt, tokens, schema)
+                result = json.loads(answer)
+                if "summary" in properties:
+                    result["findings"] = [{
+                        "category": "continuity", "severity": "blocking", "quote": "four keys", "related_quote": canon,
+                        "issue": "A fourth key appears against the explicit drawer count.",
+                        "correction": "Use three keys as established in the approved chapter plan."},
+                    ] if "four keys" in prompt.split("CHAPTER PASSAGE")[-1] else []
+                if "verdicts" in properties:
+                    result["verdicts"] = [{"index": "0", "status": "confirmed",
+                                          "reason": "The plan allows exactly three keys in the drawer."}]
+                if "edits" in properties:
+                    result["edits"] = [{"before": "four keys", "after": "three keys"}]
+                return production.dump(result), proof, finish
+
+            f.worker.call = model
+            job = f.drive()
+            chapter = json.loads(job["result"])["chapter_results"][0]
+            doc = production.managed_docs(f.conn, f.pid)[0]
+            self.assertEqual(chapter["corrections"], 1)
+            self.assertEqual(doc["body"], original.replace("four keys", "three keys"))
+            self.assertEqual(chapter["final_hash"], production.digest(doc["body"]))
+            self.assertEqual(chapter["patches"][0]["base_hash"], production.digest(original))
+            self.assertTrue(chapter["candidate_audits"][0]["accepted"])
 
     def test_manual_chapter_version_is_not_automatically_overwritten(self):
         with Fixture() as f:

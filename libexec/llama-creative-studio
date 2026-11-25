@@ -678,9 +678,9 @@ def model_reply(payload, context, lang, mode, timeout=240):
     return text.strip(), evidence, choice.get("finish_reason")
 
 
-def writing_rules(lang, genre, mode):
+def writing_rules(lang, genre, mode, *, lane="combined"):
     domain = {"fiction": "story", "editorial": "article"}.get(genre, "general")
-    return skills.resolve(SKILLS, lang, domain, mode)
+    return skills.resolve(SKILLS, lang, domain, mode, lane=lane)
 
 
 def story_model(lang, mode, prompt, tokens, schema=None):
@@ -886,8 +886,8 @@ def editorial_integrity(before, after, protect_quotes):
     return signatures(before) == signatures(after)
 
 
-def editorial_genre(doc):
-    domain = skills.document_domain(doc["kind"])
+def editorial_genre(doc, instruction=""):
+    domain = skills.document_domain(doc["kind"], instruction)
     if domain == "general" and doc["kind"] == "doc":
         project = db().execute("SELECT kind FROM projects WHERE id=?", (doc["project_id"],)).fetchone()
         domain = skills.document_domain(project["kind"]) if project else domain
@@ -953,12 +953,12 @@ def editorial_schema(mode):
     return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
-def model_editorial_json(prompt, model, language, genre, mode, limit):
+def model_editorial_json(prompt, model, language, genre, mode, limit, *, lane="combined"):
     answer, evidence, finish = model_reply({
         "model": model, "messages": [{"role": "user", "content": prompt}], "stream": False,
         "temperature": .35, "max_tokens": limit, "chat_template_kwargs": {"enable_thinking": False},
         "response_format": {"type": "json_schema", "schema": editorial_schema(mode)},
-    }, writing_rules(language, genre, mode), language, mode)
+    }, writing_rules(language, genre, mode, lane=lane), language, mode)
     if finish == "length":
         raise PlanError("editorial_output_truncated")
     try:
@@ -984,7 +984,7 @@ def editorial_model(doc, body, source, start, end):
     if not excerpt.strip():
         raise PlanError("editorial_request_invalid")
     language = editorial_language(excerpt, doc["lang"], requested_language)
-    genre = editorial_genre(doc)
+    genre = editorial_genre(doc, instruction)
     tag = "editorial" if genre == "general" else genre
     if mode != "rewrite":
         lint = style_audit(excerpt, language, genre)
@@ -1011,14 +1011,19 @@ def editorial_model(doc, body, source, start, end):
                  "and subtext, point of view, originality, world plausibility and chapter ending" if mode == "review" else
                  "tension, pacing, character voices, dialogue, and consistency of point of view" if genre == "fiction"
                  else "clarity, argument structure and voice")
-        request = (f"Review the passage in German. Consider {focus}. Also check generic language, sentence rhythm, "
-                   "overloaded metaphors, clichés, repetition and logical continuity. Choose only high-value points. "
+        continuity_only = (genre == "fiction" and re.search(r"\b(?:Kontinuität|continuity)\b", instruction, re.I)
+                           and not re.search(r"\b(?:Grammatik|Stil|Sprache|grammar|style|language)\b", instruction, re.I))
+        review_focus = ("Compare the passage against established story facts and the approved plan. "
+                        "Check temporal, spatial and character continuity. Credit intentional ambiguity."
+                        if continuity_only else f"Consider {focus}, language, repetition and logical continuity.")
+        request = ("Review the passage in German. " + review_focus + " Choose only high-value points. "
                    "Provide three or four actionable observations and one or two strengths. Put examples worth keeping "
                    "in strengths. If a description uses a worn simile or stacks imagery, explain its effect. " + references +
                    "Assess deliberate devices in context. Keep German notes brief and grounded in the passage.")
         try:
             audit, evidence = model_editorial_json(f"[{language}][audit][{tag}]\n" + request + source_overview +
-                                                  source_context + passage, "human-audit", language, genre, "audit", 2500)
+                                                  source_context + passage, "human-audit", language, genre, "audit", 2500,
+                                                  lane="domain" if continuity_only else "combined")
             result["observations"] = editorial_records(audit.get("observations"), excerpt, ("topic", "note", "suggestion"))
             result["strengths"] = editorial_records(audit.get("strengths"), excerpt, ("note",))
             result["evidence"] = evidence
@@ -1237,6 +1242,7 @@ def advance_article(task_id, plan, payload, result):
     language = writing["lang"]
 
     def checkpoint(next_step, status):
+        result.pop("upstream_attempt", None)
         state["step"] = next_step
         result["steps"]["writing"].update(status=status)
         with _lock, conn:
@@ -1286,6 +1292,7 @@ def advance_article(task_id, plan, payload, result):
             state.update(original_version=1, version=1, original_hash=correction.digest(text),
                          validation_issues=validation["issues"], step="audit-language")
             result["document_id"] = did
+            result.pop("upstream_attempt", None)
             result["steps"]["writing"].update(status="validating")
             task_result(conn, task_id, result)
         return
@@ -1321,6 +1328,7 @@ def advance_article(task_id, plan, payload, result):
                 state["review"] = report
                 state["base_hash"] = report["hash"]
             state["step"] = "revise"
+            result.pop("upstream_attempt", None)
             result["steps"]["writing"].update(status="revising")
             task_result(conn, task_id, result)
         return
@@ -1426,9 +1434,18 @@ def advance_task(row):
                 return advance_article(task_id, plan, payload, result)
             except production.WaitForResource:
                 result["next_at"] = now() + 5
-                with _lock, conn:
-                    task_result(conn, task_id, result)
-                return
+            except (urllib.error.URLError, TimeoutError) as exc:
+                if isinstance(exc, urllib.error.HTTPError):
+                    exc.close()
+                attempt = result.get("upstream_attempt", 0)
+                if attempt >= production.RETRY_LIMIT or (
+                        isinstance(exc, urllib.error.HTTPError) and exc.code not in production.RETRY_HTTP):
+                    raise PlanError("writing_service_unavailable") from exc
+                result = jload(db().execute("SELECT result FROM jobs WHERE id=?", (task_id,)).fetchone()["result"], {})
+                result.update(upstream_attempt=attempt + 1, next_at=now() + 25 * (attempt + 1))
+            with _lock, conn:
+                task_result(conn, task_id, result)
+            return
     if "writing" in plan and steps["document"]["status"] == "pending":
         try:
             text = write_task(task_id, plan, payload, result)

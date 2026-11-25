@@ -758,7 +758,7 @@ async function editorialFromChat(input: EditorialChat, text: string, epoch: numb
   for (const run of runs) {
     await record('assistant', run.mode === 'rewrite' ? 'Ein Überarbeitungsvorschlag liegt zur Freigabe vor.'
       : run.state === 'partial' ? 'Die lokalen Prüfbefunde sind verfügbar. Details zur Modellprüfung stehen im Bericht.'
-        : 'Der Human Writing Audit liegt im Prüfverlauf.', { kind: 'editorial-run', document_id: id, run_id: run.id, mode: run.mode });
+        : 'Die Textprüfung liegt im Prüfverlauf.', { kind: 'editorial-run', document_id: id, run_id: run.id, mode: run.mode });
   }
 }
 

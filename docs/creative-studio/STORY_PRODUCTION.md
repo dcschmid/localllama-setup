@@ -6,7 +6,7 @@ Wähle im Chat **Geschichte / Roman** und öffne **Geschichte planen**. Beschrei
 
 Im Chat steht der laufende Schritt. Du kannst pausieren, fortsetzen, abbrechen oder einen fehlgeschlagenen Schritt wiederholen. Ein bereits laufender Einzelaufruf kann noch auslaufen. Er unterbricht keinen anderen Dienst. Nach einem Studio-Neustart setzt der Job an seinem gespeicherten Schritt an. Dokumentversionen und bereits abgeschlossene Bilder sind über ihre IDs zugeordnet.
 
-Öffne das Manuskript über den Produktionsauftrag. Sobald die Textprüfung und Sichtprüfung abgeschlossen sind, stehen Markdown, MDX und ein ZIP mit beiden Fassungen und den PNG-Dateien bereit. Das ZIP enthält relative Bildpfade. Für ein Astro-Projekt kannst du die MDX-Datei und ihren Ordner `images` gemeinsam übernehmen. [Astro MDX-Dokumentation](https://v5.docs.astro.build/en/guides/integrations-guide/mdx/)
+Öffne das Manuskript über den Produktionsauftrag. Neue automatische Aufträge stellen es nach Textprüfung und technischer Bildprüfung in Markdown, MDX und als ZIP mit beiden Fassungen und den PNG-Dateien bereit. Die Sichtprüfung kann anschließend aus dem Chat aufgerufen werden. Bei gemeinsamen Aufträgen gibt der Nutzer die Bildserie vor dem Export frei. Das ZIP enthält relative Bildpfade. Für ein Astro-Projekt kannst du die MDX-Datei und ihren Ordner `images` gemeinsam übernehmen. [Astro MDX-Dokumentation](https://v5.docs.astro.build/en/guides/integrations-guide/mdx/)
 
 ## Modellrollen
 
@@ -21,7 +21,7 @@ Die Anwendung liest `story-model-roles.json` optional aus dem Creative-Studio-Ko
 }
 ```
 
-Ohne Datei verwenden die Rollen die verfügbaren Schreibaliase `creative-writing`, `story` oder `human-writing`. Die Produktionsdiagnose unter `/api/production/<Projekt-ID>/report` enthält den tatsächlich verwendeten Alias, die Modell-ID, GGUF-Variante, Quantisierung, Router- und Samplingparameter sowie die Version und Prüfsummen der geladenen Human-Writing-Regeln. Der Router rendert den Prompt und tokenisiert ihn vor der Generierung. Chapter-Batches verwenden relevante Bibeldaten und kurze Zusammenfassungen. [llama.cpp Server-API](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
+Ohne Datei verwendet die Analyse bevorzugt `research`. Die Planung und Texterstellung wählen aus `creative-writing`, `story` und `human-writing`. Die Produktionsdiagnose unter `/api/production/<Projekt-ID>/report` enthält den tatsächlich verwendeten Alias, die Modell-ID, GGUF-Variante, Quantisierung, Router- und Samplingparameter sowie Versionen und Prüfsummen der nachweislich geladenen Regeln aus Human Writing und Story Writing. Der Router rendert den Prompt und tokenisiert ihn vor der Generierung. Chapter-Batches verwenden relevante Bibeldaten und kurze Zusammenfassungen. [llama.cpp Server-API](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
 
 Das Studio wartet, solange ein Inferenzslot belegt ist oder der Bilddienst rendert. Für Bildjobs gelten die GPU-Prüfungen der vorhandenen Warteschlange. Der Produktionsjob entlädt keine Modelle und ändert keine llama.cpp-Profile. Ein Alias mit langer Leerlauffrist kann die Bildgenerierung verzögern.
 

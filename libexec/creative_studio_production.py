@@ -54,6 +54,7 @@ MAX_CHAPTER_WORDS = 20_000
 STR = story.STR
 LOG = logging.getLogger(__name__)
 RETRY_LIMIT = 2
+RETRY_HTTP = frozenset((408, 429, 500, 502, 503, 504))
 
 
 class WaitForResource(Exception):
@@ -184,7 +185,7 @@ def review_proofs(review):
 def public_job(row):
     payload, result = json.loads(row["payload"]), json.loads(row["result"] or "{}")
     keys = ("step", "number", "error", "detail", "pause_reason", "plan_version", "chapter_results", "cover", "whole_review",
-            "answer", "planning_findings", "compared_chapters", "proposal_stale", "retry")
+            "answer", "planning_findings", "compared_chapters", "proposal_stale", "retry", "art_review_pending")
     report = {key: result[key] for key in keys if key in result}
     report["phase"] = result.get("failure_phase") or work_phase(result)
     slot = image_slot(result)
@@ -390,14 +391,21 @@ def mutate(conn, pid, action, body, save_document, store_message):
             story.error("story_chat_mismatch", 409)
     job = job_state(conn, pid)
     if action in ("approve-art", "regenerate-art"):
-        if not job or job["id"] != body.get("job_id") or job["state"] != "paused":
+        if not job or job["id"] != body.get("job_id"):
             story.error("production_transition_invalid", 409)
         result = json.loads(job["result"])
-        if result.get("step") != "art_review":
+        optional_review = job["state"] == "completed" and result.get("art_review_pending") is True
+        if not optional_review and (job["state"] != "paused" or result.get("step") != "art_review"):
             story.error("production_transition_invalid", 409)
+        if optional_review and not manuscript(conn, pid)["complete"]:
+            story.error("production_transition_invalid", 409)
+        result.pop("art_review_pending", None)
         if action == "approve-art":
             result["whole_review"]["art_review"] = {"method": "visual-review", "reviewed_at": time.time(),
                 "images": [result["cover"]["id"], *(c["image"]["id"] for c in result["chapter_results"])]}
+            if optional_review:
+                conn.execute("UPDATE jobs SET result=?,updated=? WHERE id=?", (dump(result), time.time(), job["id"]))
+                return {"id": job["id"], "status": "completed"}, 200
             result["whole_review"].pop("verified_assets", None)
             result.update(step="manuscript")
         else:
@@ -566,6 +574,9 @@ def mutate(conn, pid, action, body, save_document, store_message):
         story.error("not_found", 404)
     if record["state"] != "approved" or body.get("mode") not in ("automatic", "together"):
         story.error("production_approval_required", 409)
+    review_art = body.get("review_art", body["mode"] == "together")
+    if type(review_art) is not bool:
+        story.error("production_plan_invalid")
     existing = {row["story_number"]: row for row in managed_docs(conn, pid)}
     legacy = [row for row in story.chapters(conn, pid, bodies=True) if row["id"] not in {d["id"] for d in existing.values()}]
     numbers = set(existing)
@@ -609,7 +620,7 @@ def mutate(conn, pid, action, body, save_document, store_message):
         recovered.pop("whole_review", None)
     recovered.setdefault("step", "writing")
     recovered.setdefault("number", 1)
-    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"]}, recovered,
+    return add_job(conn, sid, pid, {"kind": "story", "plan": plan, "mode": body["mode"], "review_art": review_art}, recovered,
                    store_message, "Manuskriptproduktion", label)
 
 
@@ -1006,13 +1017,26 @@ class ProductionWorker:
         response, proof = self.ask(language, "human-audit",
             "Audit language only. Report objective grammar, tense, syntax, idiom, punctuation or accidental repetition. "
             "Confirm only what is demonstrable in the supplied language and passage. Preserve deliberate literary "
-            "devices, fragments, voice, dialogue and motifs. Quote the full affected span exactly once. Describe "
-            "subjective stylistic alternatives as editorial. Use an empty related_quote. Return an empty list when clean."
+            "devices, fragments, voice, dialogue and motifs. Quote the shortest unique affected phrase. In issue, "
+            "explain the concrete rule broken in a complete sentence. In correction, specify exactly what to change. "
+            "Use grammar for objectively incorrect syntax, tense, inflection or misuse of an established idiom. "
+            "Put subjective stylistic alternatives at note severity. Use an empty related_quote. Return an empty list when clean."
             "\nMOTIFS\n" + dump(motifs) + "\nPASSAGE\n" + text,
             {"findings": array(story.schema(self.finding_fields(fiction)), 5)}, 1500)
         key = str(number)
-        findings = fiction.qualify_findings([{**f, "chapter": key} for f in response["findings"] if isinstance(f, dict)],
-                                           {key: text})
+        claims = []
+        for item in response["findings"]:
+            if not isinstance(item, dict):
+                continue
+            finding = {**item, "chapter": key}
+            # Some reviewers put the full explanation in the correction field.
+            # The independent check still has to establish an objective defect.
+            if (finding.get("category") in ("grammar", "punctuation", "repetition")
+                    and not fiction.substantive(finding.get("issue"))
+                    and fiction.substantive(finding.get("correction"))):
+                finding["issue"] = finding["correction"]
+            claims.append(finding)
+        findings = fiction.qualify_findings(claims, {key: text})
         verification = self.verify_findings(language, findings, {key: text}, "", role="human-audit")
         return {"findings": findings, "proof": proof, "verification_proof": verification}
 
@@ -1337,7 +1361,7 @@ class ProductionWorker:
                 result["pause_reason"] = "chapter"
         return self.commit(row, result, "paused" if together else "running", save)
 
-    def full_review(self, row, plan, docs, result):
+    def full_review(self, row, plan, docs, result, *, review_art):
         chapter_results = result["chapter_results"]
         whole = result.setdefault("whole_review", {"quality_version": QUALITY_VERSION})
         if whole.get("quality_version") != QUALITY_VERSION:
@@ -1395,9 +1419,10 @@ class ProductionWorker:
             return self.commit(row, result)
         image_ids = [asset["id"] for asset in assets]
         if whole.get("art_review", {}).get("images") != image_ids:
-            # The installed image service validates files. Semantic image inspection needs a visual reviewer.
-            result.update(step="art_review", pause_reason="art")
-            return self.commit(row, result, "paused")
+            if review_art:
+                result.update(step="art_review", pause_reason="art")
+                return self.commit(row, result, "paused")
+            result["art_review_pending"] = True
         whole["words"] = sum(chapter["words"] for chapter in chapter_results)
         result["step"] = "done"
         result.pop("current", None)
@@ -1431,7 +1456,7 @@ class ProductionWorker:
                 result.update(step="cover", cover_work={"image_attempt": int(time.time())})
                 result.pop("whole_review", None)
                 return self.commit(row, result)
-            return self.full_review(row, plan, docs, result)
+            return self.full_review(row, plan, docs, result, review_art=payload.get("review_art", True))
         chapter, doc = plan["chapters"][index], docs[index]
         current = result.setdefault("current", {})
         if step in ("awaiting_chapter", "advance"):
@@ -1491,9 +1516,10 @@ class ProductionWorker:
             code = "production_step_failed"
             detail = {"exception": type(exc).__name__}
             if isinstance(exc, HTTPError):
-                retryable = exc.code in (408, 429, 502, 503, 504)
+                retryable = exc.code in RETRY_HTTP
                 code = "image_archive_missing" if phase == "image_archive" and exc.code == 404 else "production_upstream_http"
                 detail["http_status"] = exc.code
+                exc.close()
             elif isinstance(exc, sqlite3.Error):
                 retryable = getattr(exc, "sqlite_errorcode", -1) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
                 code = "production_checkpoint_write"
@@ -1505,7 +1531,8 @@ class ProductionWorker:
                 code = "production_upstream_unavailable"
             tries = result.get("retry", {}).get("attempt", 0)
             if retryable and tries < RETRY_LIMIT:
-                result.update(retry={"attempt": tries + 1, "code": code}, next_at=time.time() + (tries + 1) * 2)
+                delay = 25 if isinstance(exc, HTTPError) and exc.code == 500 else 2
+                result.update(retry={"attempt": tries + 1, "code": code}, next_at=time.time() + (tries + 1) * delay)
                 self.commit(row, result, retry=True)
             else:
                 result.update(error=code, failure_phase=phase, detail=detail)

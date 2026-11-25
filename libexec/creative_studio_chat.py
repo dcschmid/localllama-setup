@@ -73,7 +73,7 @@ PLAN_CONTENT = re.compile(r"\b(?:handlung|figuren?entwicklung|figuren?wissen|cha
 TEXT_TARGET = re.compile(r"\b(?:kapiteltext|manuskript|manuscript|chapter text|"
                          r"(?:geschrieben\w*|vorliegend\w*|written|existing)\s+(?:kapitel|text|prose|chapter)|"
                          r"grammatik\w*|rechtschreib\w*|zeichensetz\w*|grammar|spelling|punctuation|human writing|"
-                         r"absatz|passage|formulierung\w*|formulier\w*|wortwahl|wording|prosa|prose|fassung|dokument|artikel|devlog|article)\b", re.I)
+                         r"absatz|passage|formulierung\w*|formulier\w*|wortwahl|wording|prosa|prose|text|fassung|dokument|artikel|devlog|article)\b", re.I)
 CREATE_PLAN = re.compile(r"\b(?:erstell\w*|entwirf\w*|plane|entwickl\w*|anlegen|plan|create|build|draft|design)\b", re.I)
 IMPORT_PLAN = re.compile(r"\b(?:übernimm|übernehm\w*|importier\w*|adopt|import|save)\b", re.I)
 QUESTION = re.compile(r"^\s*(?:was|wie|warum|findest|hältst|ist|sind|wäre|wirkt|what|how|why|do you|is|are|would)\b", re.I)
