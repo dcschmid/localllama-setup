@@ -755,21 +755,18 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
         if not alias:
             raise PlanError("production_role_unavailable")
         spec = models[alias]
-        # Studio shares the real router and image service. A role switch only starts after active inference ends.
+        # The router can queue work on the same alias. Changing models waits for other inference to finish.
         for other in models.values():
             if other["state"] in ("loading", "unloading"):
                 raise production.WaitForResource()
-            if other["state"] == "loaded":
-                try:
-                    _, slots = http_json(ROUTER + "/slots?" + urlencode({"model": other["alias"]}), timeout=6)
-                except urllib.error.HTTPError:
-                    if other["alias"] != alias:
-                        raise production.WaitForResource() from None
-                except (OSError, ValueError):
-                    raise production.WaitForResource() from None
-                else:
-                    if not isinstance(slots, list) or any(s.get("is_processing", True) for s in slots):
-                        raise production.WaitForResource()
+            if other["state"] != "loaded" or other["alias"] == alias:
+                continue
+            try:
+                _, slots = http_json(ROUTER + "/slots?" + urlencode({"model": other["alias"]}), timeout=6)
+            except (OSError, ValueError):
+                raise production.WaitForResource() from None
+            if not isinstance(slots, list) or any(not isinstance(slot, dict) or slot.get("is_processing", True) for slot in slots):
+                raise production.WaitForResource()
         _, image_health = http_json(IMAGES + "/health", timeout=6)
         if image_health.get("busy") or db().execute("""SELECT 1 FROM jobs WHERE service='image'
                 AND state IN ('submitting','queued','loading','generating') LIMIT 1""").fetchone():

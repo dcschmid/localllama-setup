@@ -76,10 +76,13 @@ class WritingTests(unittest.TestCase):
 
         def router(url, method="GET", body=None, **_kwargs):
             if url.endswith("/v1/models"):
-                return 200, {"data": [{"id": "creative-writing", "status": {"args": ["--ctx-size", "8192"]}},
+                return 200, {"data": [{"id": "creative-writing", "status": {
+                                      "args": ["--ctx-size", "8192"], "value": "loaded"}},
                                       {"id": "research", "status": {"args": ["--ctx-size", "8192"]}}]}
             if url.endswith("/health"):
                 return 200, {"busy": False}
+            if url.endswith("/slots?model=creative-writing"):
+                return 200, [{"is_processing": False}]
             if url.endswith("/apply-template"):
                 return 200, {"prompt": "\n".join("<|turn>" + m["role"] + "\n" + m["content"] for m in body["messages"])}
             if url.endswith("/tokenize"):

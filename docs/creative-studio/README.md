@@ -9,6 +9,8 @@ bestehende Skillset. Kein Cloud-Zwang, keine zweiten Engines.
 - Konfiguration: `~/.config/creative-studio`
 - Backups: `~/.local/state/creative-studio/backups` (sqlite3-Tar.gz)
 
+Der [Bericht zur Schreibpipeline](WRITING_PIPELINE.md) dokumentiert die aktiven Skills, automatische Korrekturen und die Abnahmeläufe.
+
 ## Im Studio arbeiten
 
 Beginne im Chat mit einem freien Auftrag oder einem der vier Vorschläge. Das Studio erkennt Schreibaufträge, Deep Research, Bildwünsche und Spielideen anhand der Formulierung. Die **Tätigkeit** am Eingabefeld ist optional. Im Standardmodus erkennt das Studio die Aufgabe. Auch mit gewählter Tätigkeit kannst du im selben Chat etwa ein Bild oder eine Recherche anfordern. **Werkzeugoptionen** öffnet Bild- und Rechercheeinstellungen. [Ablauf und technische Diagnose](INTEGRATION.md)

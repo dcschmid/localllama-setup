@@ -505,6 +505,25 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(len(production.managed_docs(f.conn, f.pid)), 2)
             self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 3)
 
+    def test_manual_chapter_version_is_not_automatically_overwritten(self):
+        with Fixture() as f:
+            f.start()
+            for _ in range(16):
+                f.worker.tick()
+                doc = production.managed_docs(f.conn, f.pid)[0]
+                if doc["body"]:
+                    break
+            else:
+                self.fail("Draft was not saved")
+            manual = PROSE.replace("paper. She", "paper., but she")
+            with f.conn:
+                version = production.organizer.update_document(f.conn, doc, doc["title"], manual, "Manual", "user")
+            job = f.drive()
+            self.assertEqual(job["state"], "paused")
+            saved = production.managed_docs(f.conn, f.pid)[0]
+            self.assertEqual((saved["body"], saved["version"], saved["version_origin"]), (manual, version, "user"))
+            self.assertEqual(json.loads(job["result"])["chapter_results"][0]["corrections"], 0)
+
     def test_model_patches_reject_bad_joins_overlap_and_new_duplicates(self):
         with Fixture() as f:
             skill = f.worker.fiction()[0]
