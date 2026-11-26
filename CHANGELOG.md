@@ -23,6 +23,27 @@
   Thunderforge nach Import `reference`, Neustart-Persistenz); Organizer-,
   Story-, Chat-, Produktions- und Writing-Suiten grün.
 
+## 2026.11-creative - Creative Studio rollout completed, ladder proof, QA smoke
+
+- Two-model production verified in place (no downloads): HauhauCS QAT
+  research-code sha 3c131334…d73c, Gemory story sha 4991d114…4442, both equal
+  their HF LFS OIDs; licenses documented in MODEL-LICENSES.md (gemma tag /
+  apache-2.0).
+- `tests/gemma4-256k-check.py --ladder`: proportional-probe ladder added;
+  results in docs/results/*-256k-ladder.json. Verdict stays BLOCKED with a
+  measured cause: both GGUFs ship hybrid attention (25/30 full layers,
+  sliding_window 1024, KV 512/256 B) - byte-verified from metadata, not
+  config. f32 KV at 256K OOMs on 8 GiB (measured); q8_0 stays.
+- docs/PERFORMANCE.md rewritten to the two-model production knobs + measured
+  prefill 93-97 t/s / decode 30.1/33.5 t/s; trio-era numbers kept as history.
+- Open WebUI: `libexec/owui-migrate-creative-studio.py` (idempotent, python
+  backup) registered Research & Analysis 256K / Creative Writing DE/EN 256K
+  roles on the live aliases and repointed the orphaned riff-racers base
+  (hemmingway -> story). Nine legacy GGUF weights deleted same day on user
+  release over the open Dual-PASS gate (~101 GB freed; SHA list in
+  ~/restore/2026-11-24-gemma4-256k-migration/models-sha256.txt, re-download
+  via packages/models.tsv pins + setup.sh --download-models).
+
 ## 2026.11-studio - Local Creative Studio (opt-in) on the existing stack
 
 - `libexec/llama-creative-studio` + `packages/creative-studio/web`: writing,

@@ -1,0 +1,17 @@
+{
+  "name": "localllma-pi-harness",
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.2",
+    "pi-lens": "4.5.1",
+    "pi-permission-modes": "2.7.2",
+    "pi-todo-agent": "0.3.0",
+    "pi-workspace-history": "0.5.2"
+  },
+  "overrides": {
+    "zod": "4.6.6"
+  }
+}

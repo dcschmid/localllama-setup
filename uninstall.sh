@@ -4,13 +4,14 @@ umask 077
 
 usage() {
     cat <<'HELP'
-Aufruf: ./uninstall.sh [--dry-run] [--remove-models]
+Aufruf: ./uninstall.sh [--dry-run] [--remove-models | --pi-only]
 
 Entfernt die paketierten llama.cpp-Komponenten aus dem Benutzerkonto.
 Konfiguration und CUDA-Bibliotheken werden unter ~/.local/state/localllma-setup gesichert.
 Modelle, Download-Caches, Browserdaten und Medienexporte bleiben standardmäßig erhalten.
 
 --dry-run        Geplante Schritte anzeigen.
+--pi-only        Nur den verwalteten Pi-Launcher entfernen und den vorherigen wiederherstellen.
 --remove-models  Zusätzlich die Modellpfade aus packages/models.tsv entfernen.
 --remove-candidates Nur die Coding-Kandidaten aus packages/models-coding-candidates.tsv
                    entfernen (Produktionsmodelle bleiben erhalten).
@@ -22,11 +23,13 @@ fail() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
 dry_run=false
 remove_models=false
 remove_candidates=false
+pi_only=false
 for option in "$@"; do
     case "$option" in
         --dry-run) dry_run=true ;;
         --remove-models) remove_models=true ;;
         --remove-candidates) remove_candidates=true ;;
+        --pi-only) pi_only=true ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fail "Unbekannte Option: $option" ;;
     esac
@@ -46,7 +49,7 @@ bin=$home/.local/bin
 libexec=$home/.local/libexec
 state=$home/.local/state/localllma-setup
 models=$home/models/gguf
-release=b12503
+release=b12628
 websearch='websearch-mcp-dfdbc9bda9119fbf67610f288eae43821180f621'
 
 dirs=("$opt" "${cfg%/*}" "$units_dir" "$applications" "$bin" "$libexec" "$state")
@@ -63,8 +66,37 @@ fi
 
 exists() { [[ -e $1 || -L $1 ]]; }
 
+restore_pi_launchers() {
+    local name path old target="$opt/pi-harness/bin/pi"
+    for name in pi pi-sandbox; do
+        path=$bin/$name
+        old=$state/pi-launchers/$name
+        if [[ -L $path && $(readlink -- "$path") == "$target" ]]; then
+            if $dry_run; then
+                printf 'Pi launcher managed by setup: %s\n' "$path"
+            elif exists "$old"; then
+                cp -a --remove-destination -- "$old" "$path"
+            else
+                rm -- "$path"
+            fi
+        fi
+    done
+    if [[ -L $opt/pi-harness ]]; then
+        if $dry_run; then printf 'Managed Pi release link: %s\n' "$opt/pi-harness"
+        else rm -- "$opt/pi-harness"; fi
+    fi
+}
+
+if $pi_only; then
+    $remove_models && fail 'choose either --pi-only or --remove-models'
+    restore_pi_launchers
+    exit 0
+fi
+restore_pi_launchers
+
+
 units=()
-save=("$cfg" "$applications/llama-cpp.desktop" "$applications/pi-coding-agent.desktop" "$bin/llama-webui" "$bin/pi-sandbox" "$libexec/pi-sandbox")
+save=("$cfg" "$applications/llama-cpp.desktop" "$applications/pi-coding-agent.desktop" "$bin/llama-webui" "$libexec/pi-sandbox")
 for name in llama-cpp.service llama-cpp-research.service llama-cpp-mcp.service; do
     if exists "$units_dir/$name"; then
         units+=("$name")
@@ -74,8 +106,6 @@ done
 for name in llama-github-mcp llama-research pi-sandbox; do
     save+=("$libexec/$name")
 done
-save+=("$home/.pi/agent/settings.json" "$home/.pi/agent/auth.json" "$home/.pi/agent/mcp.json"
-       "$home/.pi/agent/models-store.json" "$home/.pi/agent/prompts" "$home/.pi/agent/npm")
 for name in libcudart.so.12 libcublas.so.12 libcublasLt.so.12; do
     if [[ ! -L $opt/$release && -f $opt/$release/$name && ! -L $opt/$release/$name ]]; then
         save+=("$opt/$release/$name")

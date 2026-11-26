@@ -11,6 +11,7 @@ The [evaluation](../docs/MODEL_BENCHMARKS.md) documents the hardware, model choi
 | `human-writing-ab.json` | Nine paired writing tasks with identical prompts, text outputs, timing, and linter findings |
 | `media-mcp.json` | Three Atelier PNGs with seeds, runtimes, and transport, plus technical WAV analysis for six GAF tasks |
 | `final-cleanup.json` | Cyber-Tiel acceptance with the two local CLI clients plus the new research, tool, and writing checks |
+| `pi-harness-v2-2026-11-20.json` | V1 MetalVault traces and V2 package, sandbox and candidate checks |
 | `advanced-performance.json` | New baseline, A/B comparisons, cache counters, and process and GPU measurements |
 | `follow-up.json` | Full 256K cold/warm run, deep-research synthesis, four writing scenes, and separate fact checking |
 
@@ -67,3 +68,19 @@ The production router must have no loaded models during the comparison. Wait for
 ```
 
 `A` takes over the glibc environment of the production router. `B` additionally sets `glibc.malloc.hugetlb=1` and takes over the remaining tunables. To reproduce an earlier baseline configuration, set `LLAMA_PERF_PRESETS` to the saved `models.ini`. Use a separate ID per run. The JSONL files contain response quality, cache tokens, latency, and process data. `gpu.csv` contains the device values measured over the entire case. [Evaluation and rollback](../docs/PERFORMANCE_OPTIMIZATION.md)
+
+## Repeat the Pi benchmarks
+
+Use the managed project sandbox and an idle Coding Long 256K slot.
+
+```bash
+./setup.sh benchmark pi --repeat 3
+./setup.sh benchmark pi-context --target 32768 --repeat 3
+```
+
+The task runner copies the MetalVault source and tests into a temporary
+directory. Use `--source` for a separate snapshot and `--pi` for a reviewed
+alternate launcher. The context runner generates its transcript and accepts
+one local candidate through `--extension-root` and `--extension`.
+Both runners print measurements and verdicts without publishing sessions or
+tool output. [Conditions and results](../docs/BENCHMARKS.md)

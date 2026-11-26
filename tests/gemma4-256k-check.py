@@ -96,6 +96,33 @@ def build_corpus(target_tokens, probe_seed_words):
     return "\n".join(blocks), secrets
 
 
+def build_ladder(scale_tokens, probe_seed_words):
+    """Same in-spacing as build_corpus, probes scaled with the corpus size.
+
+    Used by --ladder to find the largest corpus size with full fact recall;
+    probe positions sit at 4%/40%/80%/scale-proportional depth so grading
+    measures the real fact-density limit, not a fixed-offset artifact.
+    """
+    positions = (4_000, 40_000, 80_000, int(scale_tokens * 0.92))
+    secrets = {f"KEY-{p//1000:03d}": probe_seed_words[f"KEY-{p//1000:03d}"] for p in positions}
+    marks = [(p, f"KEY-{p//1000:03d}", secrets[f"KEY-{p//1000:03d}"]) for p in positions]
+    approx_chars = int(scale_tokens * 5.44)
+    n_blocks = max(len(marks) + 1, approx_chars // (len(FILLER_SENTENCE) + 1))
+    slots = {int(p * n_blocks // TARGET_CTX): (k, s) for p, k, s in marks}
+    blocks = []
+    for i in range(n_blocks):
+        piece = [FILLER_SENTENCE]
+        if i in slots:
+            key, secret = slots[i]
+            piece.append(f"ARCHIVE {key}: the vault code is {secret}.")
+        blocks.append(" ".join(piece))
+    if len(slots) < len(marks):
+        for p, key, secret in marks:
+            if int(p * n_blocks // TARGET_CTX) not in slots:
+                blocks.append(f"ARCHIVE {key}: the vault code is {secret}.")
+    return "\n".join(blocks), secrets
+
+
 def quick_corpus():
     secrets = {}
     parts = []
@@ -116,6 +143,7 @@ def main():
     ap.add_argument("--tokens", type=int, default=245_000, help="approx target input tokens incl. overhead")
     ap.add_argument("--max-tokens", type=int, default=8_192)
     ap.add_argument("--quick", action="store_true", help="small-corpus smoke variant (NOT a 256K proof)")
+    ap.add_argument("--ladder", type=int, default=0, help="find the fact-density limit: test ladder scales, stop at first miss")
     args = ap.parse_args()
 
     result = {"model": args.model, "target_ctx": TARGET_CTX, "quick": args.quick, "checks": []}
@@ -132,6 +160,36 @@ def main():
         result["verdict"] = "BLOCKED"
         print(json.dumps(result, indent=1))
         raise SystemExit(1)
+
+    if args.ladder:
+        ladder_rows = []
+        for scale in (131_072, 163_840, 196_608, 229_376):
+            seed = {f"KEY-{p//1000:03d}": f"alpha{p}-delta{p*7%9973:04d}"
+                    for p in (4_000, 40_000, 80_000, int(scale * 0.92))}
+            corpus, secrets = build_ladder(scale, seed)
+            question = ("Given only the archive above, report each vault code exactly. "
+                        "Answer as lines 'KEY-XXX: <code>'. Codes: "
+                        + ", ".join(sorted(secrets)) + ". Nothing else.")
+            msg = [{"role": "system", "content": "You are a precise archivist."},
+                   {"role": "user", "content": corpus + "\n\n" + question}]
+            r = chat(args.base, args.model, msg, 768)
+            ok = all(re.search(re.escape(v), r["text"]) for v in secrets.values())
+            row = {"scale": scale, "prompt_tokens": r.get("prompt_tokens"),
+                   "all_facts": ok, "seconds": r["seconds"],
+                   "misses": [k for k, v in secrets.items() if v not in r["text"]]}
+            ladder_rows.append(row)
+            print(json.dumps(row), flush=True)
+            if not ok:
+                break
+        best = max((r["scale"] for r in ladder_rows if r["all_facts"]), default=0)
+        result["ladder"] = {"rows": ladder_rows, "max_all_facts_scale": best}
+        result["verdict"] = "LADDER_DONE"
+        text = json.dumps(result, indent=1)
+        if args.out:
+            with open(args.out, "w") as fh:
+                fh.write(text + "\n")
+        print(text)
+        raise SystemExit(0)
 
     seed = {f"KEY-{p//1000:03d}": f"alpha{p}-delta{p*7%9973:04d}" for p in PROBE_POSITIONS}
     if args.quick:

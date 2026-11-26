@@ -1,115 +1,103 @@
-# Pi Coding Agent
+# Ultimate Pi Harness V2
 
-Pi is the only local coding agent in this stack. Claude Code and Codex stay
-native cloud tools; `claude-local` and `codex-local` no longer exist.
-Research and story writing remain in the llama.cpp WebUI.
+Pi runs Cyber-Tiel-Coder on the local llama.cpp router through the
+`coding-cyber-tiel-35b` profile. The managed launcher starts the official Pi
+1.5.2 CLI in a Bubblewrap sandbox scoped to the current project. Pi sees a
+262,144-token context and an 8,192-token output limit. The router uses a single
+CUDA slot, Q4_0 K/V, 512 MiB of prompt cache and the existing context
+checkpoints. MTP is off. [Performance settings](PERFORMANCE.md)
 
-## Installation
-
-- Pi 1.5.2 (stable), official installer or `npm install -g
-  @earendil-works/pi-coding-agent@1.5.2` through the setup script.
-- Managed prefix: `~/.local/opt/pi`, launcher `~/.local/bin/pi`.
-- Configuration: `~/.pi/agent/` (`settings.json`, `auth.json`, `mcp.json`),
-  independent from any other agent profile.
-- Requires Node.js >= 22.19 (setup installs Node 24.22.1 if absent).
-
-## Model and router
-
-- Built-in llama.cpp provider, wired in `auth.json`
-  (`llama.cpp` -> `http://127.0.0.1:8080`). No cloud fallback.
-- Default model `coding-long-256k` = Cyber-Tiel-Coder-35B A3B APEX-I MiniPlus
-  V2.1, 262,144 context, 8,192 output, CUDA, mmap, flash attention, Q4_0 K/V,
-  2048/1024 batch, one slot, MTP off, prompt cache 512 MiB, 32 context
-  checkpoints.
-- Pi reads context and output limits from `/props`; compaction and tool calls
-  reuse the same model, no secondary model.
-
-## Compaction
-
-```json
-"compaction": { "enabled": true, "reserveTokens": 39322, "keepRecentTokens": 20000 }
-```
-
-About 85 % of 262,144. Manual: `/compact`. Compared 65/75/85 % and 16k/20k/32k
-keepRecent on this hardware: prefill dominates for 35B-A3B on 8 GiB VRAM,
-smaller thresholds only shift the switch point without time savings. 39322/20000
-stays the production value; deeper cuts pay off only with more VRAM.
-
-## Skills
-
-`~/dev/github/skillset/skills` is registered directly as a Pi skill path (27
-skills, no copies, no skill database). Discovery validates every `SKILL.md`;
-names and descriptions are collision-free; the central collection remains the
-single source of truth. The model loads a skill's `SKILL.md` on demand;
-`/skill:name` forces it.
-
-## MCP (native, mcp.json)
-
-| Server | Endpoint | Tools |
-|---|---|---|
-| `websearch` | `http://127.0.0.1:8642/mcp` | `search_web`, `read_url`, `deep_research`, `deep_research_status` |
-| `context7` | `http://127.0.0.1:8643/servers/context7/mcp` | `resolve-library-id`, `query-docs` |
-| `github` | `http://127.0.0.1:8643/servers/github/mcp` | read-only: `get_file_contents`, `get_latest_release`, `list_releases`, `search_repositories` |
-
-`codemode` exposure by default (deferred, search path instead of schema flood);
-`/mcp` shows status. Playwright/Blender/media MCPs are not part of this profile.
-
-## Usage
+## Install and start
 
 ```bash
+./setup.sh install --pi-only --dry-run
+./setup.sh install --pi-only
+./setup.sh doctor --pi-only
 cd ~/dev/github/my-project
-pi                    # starts on coding-long-256k, footer shows 262k (auto)
-pi --continue         # last session of this folder
-pi -r                 # pick a saved session
-/model  /llama        # model and router status
-/mcp                  # MCP status
-/compact              # manual compaction
-Escape / Ctrl+C       # interrupt running work
-pi-sandbox            # sandbox mode (see Security)
+pi
 ```
 
-The `llama.cpp` KDE launcher keeps the WebUI (research/writing) independent of Pi.
+The complete stack still uses `./setup.sh`. The Pi-only option leaves the
+inference and WebUI services running and does not fetch models. It installs
+the exact package graph in [the npm lockfile](../packages/pi/package-lock.json)
+with lifecycle scripts disabled. The normal Pi and Pi Sandbox launchers use
+the same release under `~/.local/opt/llama.cpp/pi-harness`. An existing
+regular-file `pi` executable takes precedence until moved by its owner.
+Use `pi-sandbox` in that configuration.
 
-## Security
+An absolute project path under the user home, `/tmp` or `/var/tmp` defines
+the working area. Run Pi from inside that project. A fresh interactive
+session starts in Build Mode when the permission configuration says
+`defaultMode: build`. Use `--perm build` for an intentionally automated
+job. Headless Permission Modes falls back to a restrictive mode when
+there is no explicit or persisted mode.
 
-`pi-sandbox` (bwrap): writable = project directory + Pi agent state, skills
-read-only, SSH/AWS hidden behind tmpfs, no sudo, no auto pushes; loopback to
-router and MCP stays. pi-permission-modes renders Build as the standard
-start mode: file, bash, tool, and skill work inside the project runs
-without prompts; out-of-project paths, credentials, unknown network hosts,
-and pushes/destructive git still prompt. Plan and Default stay selectable;
-YOLO is never the default. Without the sandbox the regular Pi rights apply
-inside the project. The router never downloads models (`--offline`) and
-WebUI rights are unchanged.
+Pi's normal project-trust decisions apply inside the sandbox. Pi Lens
+starts language servers for trusted projects. Review project-local Pi
+settings and extensions before approving them. For a one-time automated
+run in an already-reviewed project, use `pi --approve --perm build -p`.
+The sandbox still limits every child process to the selected project.
 
-## Performance (inherited measurements)
+```bash
+pi --continue
+pi --resume
+pi --perm build -p 'Diagnose the failing unit test and verify a targeted fix.'
+pi --with-mcp
+```
 
-Production profile `coding-long-256k` with values validated in
-PERFORMANCE_OPTIMIZATION.md: 2048/1024 batch, 1024 MiB CUDA reserve, auto-fit,
-12/12 threads (24 threads: -57 % decode), THP off, energy profile unchanged,
-prompt cache 512 MiB, checkpoints 32/8192.
-Agent measurements: ledger bugfix 39.6 s total (2/2 independent tests green,
-context marker preserved); multi-domain fixture TS/Lua/GDScript/Security 163 s
-(8/8 pytest green); long-context retrieval 3/3 markers over 60k words;
-session resume persists. Decode: 35-41 t/s near working context (target met),
-6.9 t/s cold at full 256K; the 20-30 t/s goal holds for short working
-contexts, long contexts stay slower because prefill dominates.
-Cache hits: 261,684/261,688 tokens on warm repeat.
+Pi stores new sessions and checkpoints under
+`~/.local/state/localllma-setup/pi-projects/`, keyed by the canonical
+project path. Resume and workspace history operate within that project.
+Legacy Pi sessions stay in `~/.pi/agent/sessions` and are outside the
+managed sandbox. Launcher rollback restores access through the legacy
+client if it was present before installation.
 
-## Rollback
+## Tools and workflow
 
-Delete `~/.pi/agent/`, rerun `pi update` or the installer. Wrapper recovery
-(claude-local/codex-local + llama-local-agent + configs) from
-`~/.local/share/llama-cpp-backup/20261119-184809/`.
+Start with targeted Pi search, `rg` or `fd`. Use Pi Lens symbols and
+diagnostics when they narrow the code to inspect. The launcher keeps Lens
+logs in its per-project sandbox state. Use project-local language servers
+or preinstalled host tools that the launcher exposes read-only. Native read,
+edit and write remain the edit engine. Add native Codemode explicitly with
+`--tools +codemode`. The isolated test exercised a script that wrote and
+read a Build project file. The sandbox kept a sibling file outside its
+scope, and Plan Mode denied the script. Nested MCP calls remain untested.
 
-## Known limits
+The launcher reads shared skills from `~/dev/github/skillset/skills`
+and mounts them read-only. Load a relevant skill on demand with
+`/skill:name`. The `/finish`, `/review`, `/fix-ci` and `/finish-docs`
+templates point to those skills. The managed workflow prompt asks for
+targeted search, small edits, focused validation, a change of tactics
+after repeated failures, and a final diff review.
+[Workflow prompt](../config/pi-workflow.md)
 
-- `/llama` downloads use the router download path; the router runtime stays
-  `--offline`, loading existing aliases works, HF downloads remain reserved for
-  the WebUI/maintenance path.
-- The router loads one model at a time; coding and research alternate as before.
-- Compaction summaries are model text; keep critical project decisions in
-  files (AGENTS.md, notes) as well.
-- The pinned extension set and its decision matrix live in
-  `docs/PI_EXTENSIONS.md`; templates in `docs/PI_COMMANDS.md`; budgets and
-  the measured schema cost in `docs/CONTEXT_ENGINEERING.md`.
+The native footer displays Pi's model and context accounting. Build Mode
+status comes from Permission Modes. Use the benchmark tools to capture
+cache reuse and server-side rates. [Benchmark collection](BENCHMARKS.md)
+
+## MCP
+
+Enable the existing read-only lookup services for a specific session
+with `pi --with-mcp`. The launcher forwards fixed endpoints and tool
+names. Pi can call web search, Context7 and four read-oriented GitHub
+tools through the existing gateways. URL reading and Deep Research are
+available in the WebUI. Use `/mcp` in Pi or `pi --with-mcp mcp list` in
+the terminal to inspect status. MCP lookups send query terms or repository
+identifiers to the designated service.
+[Sandbox and data boundaries](SECURITY.md)
+
+## Update and rollback
+
+```bash
+./setup.sh backup --pi-only
+./setup.sh update --pi-only
+./setup.sh repair --pi-only
+./setup.sh test --pi-only
+./setup.sh restore --pi-only /path/to/backup.tar.gz
+```
+
+Updates follow the checked-in pins. Setup creates a backup before
+switching an existing Pi release and keeps the previous release on disk.
+Use `./setup.sh uninstall --pi-only` to remove the managed launcher and
+restore the original launchers. Project sessions and configuration files
+remain on disk. [Extension decisions](PI_EXTENSIONS.md)

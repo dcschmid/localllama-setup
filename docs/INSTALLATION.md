@@ -14,13 +14,13 @@ after any interruption (each phase re-validates before touching anything):
    websearch-mcp (all lockfile-pinned)
 6. router/WebUI/MCP configs rendered from templates; managed-file drift aborts
 7. systemd user units, KDE launcher, llama-webui
-8. Pi 1.5.2 install (`npm install -g @earendil-works/pi-coding-agent@1.5.2`
-   into `~/.local/opt/pi`), settings/auth/MCP rendered into `~/.pi/agent`
+8. Install Pi 1.5.2 and the default extensions from the npm lockfile with
+   lifecycle scripts disabled. Link the sandbox launcher to the installed release.
 9. skills path registered natively (no copies)
-10. docs refresh with drift backup; daemon-reload; services restart
+10. Refresh managed docs with a backup, reload user units and start the services.
 11. summary distinguishes ok/skipped/failed/optional
 
 Privileged changes are only the documented dnf line; setup itself is user
-scope, no reboots, no sudo. A failed optional MCP stops that section, not the
-coding path. Re-run any number of times: second run writes nothing
-(`./setup.sh --dry-run` shows exactly this).
+scope. Run `./setup.sh --dry-run` to validate the local prerequisites and
+see the planned work. Use `./setup.sh install --pi-only` to install Pi without
+restarting the router or touching the models. [Pi guide](PI_CODING_AGENT.md)

@@ -6,11 +6,16 @@ jobs:
   static:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: shell syntax
         run: |
-          for f in setup.sh uninstall.sh libexec/* benchmarks/*.sh; do bash -n "$f"; done
+          for f in setup.sh uninstall.sh libexec/* benchmarks/*.sh; do
+            [[ -f "$f" ]] || continue
+            case "$(head -n 1 "$f")" in
+              '#!'*bash*|'#!'*'/sh'*) bash -n "$f";;
+            esac
+          done
       - name: shellcheck
         run: shellcheck -S warning setup.sh uninstall.sh libexec/pi-sandbox libexec/llama-webui
       - name: json configs
@@ -19,7 +24,7 @@ jobs:
           python3 - <<'PY'
           import json,pathlib
           json.loads(pathlib.Path('config/ui.json').read_text())
-          json.loads(pathlib.Path('config/pi.json.in').read_text().replace('@HOME@','/h','/h'))
+          json.loads(pathlib.Path('config/pi.json.in').read_text().replace('@HOME@','/h'))
           PY
       - name: model manifest
         run: |
@@ -29,7 +34,9 @@ jobs:
       - name: doc links
         run: python3 .github/links.py
       - name: bash unit tests (platform independent)
-        run: bash tests/unit.sh
+        run: |
+          bash tests/unit.sh
+          python3 tests/pi-router.py
   integration-fedora:
     runs-on: ubuntu-latest
     if: false   # needs Fedora user session + services; run locally: ./setup.sh doctor

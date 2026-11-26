@@ -225,6 +225,26 @@ def records(profile, chapter, scene=""):
             if re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", scene.casefold())]
 
 
+def scene_digest(passage, limit=300):
+    """Reduce a prose passage to a short visual line; dialogue and later sentences stay out."""
+    text = " ".join((passage or "").split())
+    text = re.sub('[\u201e\u201c\u00ab"][^\u201c\u201d\u201e\u00bb"]*[\u201c\u201d\u00bb]', " ", text)
+    # Sentences that were mostly dialogue shrink to stray punctuation; drop those fragments.
+    text = re.sub(r"(?:^|(?<=\s))[,.:;\u2013\u2014]*(?=\s|$)", " ", text)
+    text = " ".join(text.split())
+    if not text:
+        return ""
+    digest = ""
+    for sentence in re.findall(r"[^.!?…]+[.!?…]+|[^.!?…]+$", text):
+        candidate = (digest + " " + sentence.strip()).strip()
+        if digest and len(candidate) > limit:
+            break
+        digest = candidate
+        if len(digest) >= limit * 0.6:
+            break
+    return digest[:limit]
+
+
 def palette(scene, fallback):
     return next((colors for pattern, colors in PALETTES if re.search(pattern, scene, re.I)),
                 fallback or "Scene-local colors with distinct values and a controlled focal accent")
@@ -248,7 +268,8 @@ def prepare(profile, catalog, subject, passage, chapter, *, cover=False, seed=No
     format_info = next(fmt for fmt in model["formats"] if fmt["id"] == profile["ratio"])
     quality = "standard" if format_info["size"] == formats[profile["ratio"]] else "preview"
     recipe = profile["recipe"]
-    kind = scene_kind(subject + " " + passage)
+    scene = scene_digest(passage)
+    kind = scene_kind(subject + " " + (scene or passage))
     if recipe == TEMPLATES[profile["template"]][2]:
         options = {
             "anima-aesthetic": {"portrait": "anima-portrait", "landscape": "anima-landscape", "fantasy": "anima-fantasy"},
@@ -267,18 +288,22 @@ def prepare(profile, catalog, subject, passage, chapter, *, cover=False, seed=No
     colors = palette(passage + " " + subject, profile["palette"])
     framing = ("Compose as a title image with calm negative space for later typesetting. " if cover else
                "Frame the main action with a clear foreground, middle distance and background. ")
-    earlier = " ".join(entry["fact"] for entry in observations)
+    # Chapter prose and narrative quotations stay out of the image prompt; only the short
+    # visual digest below reaches the model. Earlier facts keep the character state current.
+    earlier = "; ".join(entry["fact"] for entry in observations)
     details = " ".join(filter(None, [
         profile["style"], f"Palette: {colors}.", profile["lighting"], framing,
         f"Compose natively for {profile['ratio']}. Keep important subjects inside the frame.",
         profile["composition"], profile["consistency_rules"] if profile["consistency"] else "",
         "Use one continuous background running cleanly to all four edges of the canvas.",
-        facts[:800], profile["extra"], f"Earlier observed details, if still current: {earlier[:380]}." if earlier else "",
+        facts[:800], profile["extra"], f"Character state so far: {earlier[:380]}." if earlier else "",
     ]))
     request = ({"recipe": recipe, "model": model["id"], "subject": subject[:1800],
-                "scene": passage[:1400], "details": details[:1950], "aspect_ratio": profile["ratio"], "quality": quality}
+                "scene": scene or "in a quiet setting", "details": details[:1950],
+                "aspect_ratio": profile["ratio"], "quality": quality}
                if recipe else {"model": model["id"], "size": formats[profile["ratio"]],
-                   "prompt": "\n".join((subject[:1600], passage[:850], details[:1950])), "preset": "none"})
+                   "prompt": "\n".join(filter(None, (subject[:1600], scene, details[:1950]))),
+                   "preset": "none"})
     if seed is not None:
         request["seed"] = seed
     primary = next((row for row in refs if row.get("use_image") and row.get("attachment")), None)

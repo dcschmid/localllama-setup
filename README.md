@@ -2,7 +2,7 @@
 
 Reproducible one-click installation of the local AI stack on a Framework
 Laptop 16 (Fedora KDE). One command installs, validates, and repairs the
-router, three models, the WebUI, the Pi coding agent, MCP services, skills,
+router, two models, the WebUI, the Pi coding agent, MCP services, skills,
 and the tested performance settings. The repository is the source of truth;
 repeated runs are idempotent and resumable.
 
@@ -72,19 +72,24 @@ Manifest with repo, revision, byte size, SHA-256, context, and profiles:
 `packages/models.tsv`. Revisions are pinned; updates are manual and go through
 the same checksum gate. GGUFs never live in git.
 
-## Pi as the coding agent
+## Ultimate Pi Harness V2
 
-`cd ~/dev/github/my-project && pi` starts Cyber-Tiel through the router,
-262,144 context / 8,192 output, compaction `39322/20000` (≈85 %), shared
-skills, MCP via codemode, sessions in `~/.pi/agent/sessions`. No cloud
-fallback, no other harnesses. Pinned extension set, prompt templates
-(`/finish`, `/review`, `/fix-ci`, `/finish-docs`) and context budgets:
-[docs/PI_EXTENSIONS.md](docs/PI_EXTENSIONS.md),
-[docs/PI_COMMANDS.md](docs/PI_COMMANDS.md),
-[docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md),
-[docs/PI_CODING_AGENT.md](docs/PI_CODING_AGENT.md).
+Start `pi` from a project directory to use Cyber-Tiel through the local
+router with 262,144 context tokens, 8,192 output tokens and native
+compaction. The managed launcher confines tools to the project and
+project-specific session storage. Shared skills are read-only. Use
+`pi --with-mcp` when a session needs the configured lookup services.
 
+```bash
+./setup.sh install --pi-only
+./setup.sh doctor --pi-only
+```
+
+[Pi setup and usage](docs/PI_CODING_AGENT.md) ·
+[Extension decisions](docs/PI_EXTENSIONS.md) ·
 [Coding candidates](docs/CODING_CANDIDATES.md) ·
+[Benchmark results](docs/BENCHMARKS.md)
+
 ## WebUI, MCP, skills
 
 WebUI is the server-native Llama Chat on :8080 with four MCP entries (websearch,

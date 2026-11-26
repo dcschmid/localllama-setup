@@ -1,20 +1,304 @@
 {
-  "comment": "Productive Pi extension manifest for localllma-setup. Pinned versions, reviewed 2026-11-19. No automatic updates; update = PR + re-run doctor/benchmarks.",
-  "pi": { "minVersion": "1.5.2", "install": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent", "node": "pinned v22 (packages needing node>=24 stay excluded: pi-sessions)" },
+  "comment": "Pinned Pi runtime and audited extension candidates. Only active packages are included in the npm lockfile.",
+  "pi": {
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "1.5.2",
+    "source": "npm:@earendil-works/pi-coding-agent",
+    "node": ">=22.19.0",
+    "update": "Review pins and regenerate packages/pi/package-lock.json before setup.sh update --pi-only.",
+    "rollback": "Previous release remains on disk. See docs/PI_EXTENSIONS.md."
+  },
   "packages": [
-    { "name": "pi-lens", "version": "4.5.1", "source": "npm:pi-lens", "repo": "https://github.com/amantza/pi-lens", "license": "MIT", "deps": 6, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[]; LSP servers via npm globals", "activation": "automatic", "rollback": "pi remove npm:pi-lens", "tests": "b2-ts refactored correct; +~11s wall vs baseline on small task; required for code intelligence", "status": "active" },
-    { "name": "pi-permission-modes", "version": "2.7.2", "source": "npm:pi-permission-modes", "repo": "https://github.com/earendil-works/pi-permission-modes", "license": "MIT", "deps": 3, "postinstall": "echo only", "node": ">=22.12.0", "pi": ">=1.5", "config": "settings.json packages[]; pi-permission.json per project", "activation": "read-only by default", "rollback": "pi remove npm:pi-permission-modes", "tests": "installed; read-only smoke passed", "status": "active" },
-    { "name": "pi-workspace-history", "version": "0.5.2", "source": "npm:pi-workspace-history", "repo": "https://github.com/anotalk/pi-workspace-history", "license": "MIT", "deps": 1, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[]", "activation": "automatic checkpoints + /undo", "rollback": "pi remove npm:pi-workspace-history", "tests": "installed with 5-pkg smoke; git repos remain source of truth, history is additive layer", "status": "active" },
-    { "name": "pi-todo-agent", "version": "0.3.0", "source": "npm:pi-todo-agent", "repo": "https://github.com/pigmt/pi-todo-agent", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=22", "pi": ">=1.5", "config": "settings.json packages[]", "activation": "automatic", "rollback": "pi remove npm:pi-todo-agent", "tests": "installed with smoke; planning stays in skills for small tasks", "status": "active" },
-    { "name": "pi-condense", "version": "2.18.1", "source": "npm:pi-condense", "repo": "https://github.com/jjuraszek/pi-condense", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=22.19.0", "pi": ">=1.5", "config": "settings.json packages[] + condense settings; native compaction stays enabled", "activation": "manual/long-session", "rollback": "pi remove npm:pi-condense", "tests": "3-turn long-read A/B: full=50s correct; condense off=see benchmarks; disabled by default for short tasks", "status": "experimental-off" },
-    { "name": "pi-sessions", "version": "0.23.4", "source": "npm:pi-sessions", "repo": "https://github.com/adamkiss/oo-claude-code", "license": "MIT", "deps": 0, "postinstall": "none", "node": ">=24 (host has 22)", "pi": ">=1.5", "config": "-", "activation": "-", "rollback": "-", "tests": "NOT installed: node engine incompatible with pinned v22; revisit on node24", "status": "excluded" }
+    {
+      "name": "pi-lens",
+      "version": "4.5.1",
+      "source": "npm:pi-lens",
+      "repo": "https://github.com/amantza/pi-lens",
+      "license": "MIT",
+      "deps": 6,
+      "postinstall": "none",
+      "node": ">=22.19.0",
+      "pi": ">=1.5",
+      "config": "settings.json packages[]; LSP servers via npm globals",
+      "activation": "automatic",
+      "rollback": "pi remove npm:pi-lens",
+      "tests": "Default and reduced Lens profiles passed MetalVault. Isolated probes verified that logs stay outside the workspace, the installed TypeScript language server reports diagnostics, and Lens finds symbols.",
+      "status": "active",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [
+        "language-specific LSP or linter (optional)"
+      ],
+      "conflicts": [],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "pi-permission-modes",
+      "version": "2.7.2",
+      "source": "npm:pi-permission-modes",
+      "repo": "https://github.com/earendil-works/pi-permission-modes",
+      "license": "MIT",
+      "deps": 3,
+      "postinstall": "echo only",
+      "node": ">=22.12.0",
+      "pi": ">=1.5",
+      "config": "settings.json packages[]; pi-permission.json per project",
+      "activation": "Build for new interactive sessions. Headless defaults to Plan unless explicitly selected.",
+      "rollback": "pi remove npm:pi-permission-modes",
+      "tests": "V1 headless implicit Plan and explicit Build exercised. Productive defaults are read from the existing permission configuration.",
+      "status": "active",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [],
+      "conflicts": [],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "pi-workspace-history",
+      "version": "0.5.2",
+      "source": "npm:pi-workspace-history",
+      "repo": "https://github.com/anotalk/pi-workspace-history",
+      "license": "MIT",
+      "deps": 1,
+      "postinstall": "none",
+      "node": ">=22.19.0",
+      "pi": ">=1.5",
+      "config": "settings.json packages[]",
+      "activation": "automatic checkpoints + /undo",
+      "rollback": "pi remove npm:pi-workspace-history",
+      "tests": "An isolated mocked-provider tool turn changed a tracked file. /undo restored its exact original bytes and a clean Git worktree.",
+      "status": "active",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [],
+      "conflicts": [],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "pi-todo-agent",
+      "version": "0.3.0",
+      "source": "npm:pi-todo-agent",
+      "repo": "https://github.com/pigmt/pi-todo-agent",
+      "license": "MIT",
+      "deps": 0,
+      "postinstall": "none",
+      "node": ">=22",
+      "pi": ">=1.5",
+      "config": "settings.json packages[]",
+      "activation": "automatic",
+      "rollback": "pi remove npm:pi-todo-agent",
+      "tests": "An isolated mocked-provider test created a pending task, saved the session and recovered the task in a new process.",
+      "status": "active",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [],
+      "conflicts": [],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "pi-condense",
+      "version": "2.18.1",
+      "source": "npm:pi-condense",
+      "repo": "https://github.com/jjuraszek/pi-condense",
+      "license": "MIT",
+      "deps": 0,
+      "postinstall": "none",
+      "node": ">=22.19.0",
+      "pi": ">=1.5",
+      "config": "settings.json packages[] + condense settings; native compaction stays enabled",
+      "activation": "manual/long-session",
+      "rollback": "pi remove npm:pi-condense",
+      "tests": "Historical short fixture only. V2 context comparison pending.",
+      "status": "experimental-off",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [],
+      "conflicts": [
+        "better-compaction",
+        "@sting8k/pi-vcc",
+        "sol-pi online context"
+      ],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "pi-sessions",
+      "version": "0.23.4",
+      "source": "npm:pi-sessions",
+      "repo": "https://github.com/thurstonsand/pi-sessions",
+      "license": "MIT",
+      "deps": 0,
+      "postinstall": "none",
+      "node": ">=24",
+      "pi": ">=1.5",
+      "config": "-",
+      "activation": "-",
+      "rollback": "-",
+      "tests": "Incompatible with V1 Node 22. Native resume and fork cover the tested workflows on V2 Node 24. Pi Sessions was not exercised on V2.",
+      "status": "excluded",
+      "update": "Update pins and lockfile in the same reviewed commit.",
+      "runtimeDependencies": [],
+      "conflicts": [],
+      "security": "Project-scoped OS sandbox. npm lifecycle scripts disabled."
+    },
+    {
+      "name": "sol-pi",
+      "version": "0.1.0",
+      "source": "npm:sol-pi",
+      "repo": "https://github.com/NVlabs/SoL-Pi",
+      "license": "MIT",
+      "node": ">=22.19.0",
+      "pi": "0.84.2 or 0.85.1 (published 0.1.0 peer range)",
+      "runtimeDependencies": [],
+      "config": "Feature switches; requires a separately approved local model route for the reducer.",
+      "activation": "disabled",
+      "status": "excluded",
+      "conflicts": [
+        "hashline editing",
+        "compaction alternatives",
+        "RTK output filtering"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Stable peer range excludes Pi 1.5.2. In direct isolated probes, Action Fusion declined the Permission Modes backend. ObservationPack projection and recall passed with a mocked provider; failed tool output stayed intact.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "better-compaction",
+      "version": "1.3.1",
+      "source": "https://github.com/NotSoSeriouss/BetterCompaction/tree/38801c4865eacbe877ed9f5cae075e5889d4423f",
+      "repo": "https://github.com/NotSoSeriouss/BetterCompaction",
+      "license": "MIT",
+      "node": "No upstream range declared. Loaded on Node 22.23.2 and 24.22.1.",
+      "pi": "No narrow peer range declared. Isolated tests used 1.5.2.",
+      "runtimeDependencies": [],
+      "config": "Uses the active model and projected conversation.",
+      "activation": "disabled",
+      "status": "experimental-off",
+      "conflicts": [
+        "compaction alternatives"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Recovered four markers and passed independent 32K coding acceptance in 181.60 s. Separate priming gave zero cache reads. An identical repeat reused 14771 summary tokens; native also processed four fresh tokens in the repeat. Fresh continuation prefill was still required.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "@sting8k/pi-vcc",
+      "version": "0.11.2",
+      "source": "npm:@sting8k/pi-vcc",
+      "repo": "https://github.com/sting8k/pi-vcc",
+      "license": "MIT",
+      "node": "No upstream range declared. Tests used Node 22.23.2 and 24.22.1.",
+      "pi": ">=0.74.0 <2.0.0",
+      "runtimeDependencies": [],
+      "config": "Algorithmic compaction and local transcript recall.",
+      "activation": "disabled",
+      "status": "excluded",
+      "conflicts": [
+        "compaction alternatives"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Compacted without an inference request. Recovered three of four markers on the primed 32K and cold 64K tasks. Failed independent two-file coding acceptance at 32K. Isolated archive recall passed after compaction, restart and fork.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "pi-hashline-edit-pro",
+      "version": "7.2.0",
+      "source": "npm:pi-hashline-edit-pro",
+      "repo": "https://github.com/YuGiMob/pi-hashline-edit-pro",
+      "license": "MIT",
+      "node": ">=22.19.0",
+      "pi": ">=0.99.0",
+      "runtimeDependencies": ["Node SQLite"],
+      "config": "Overrides read and adds multiple mutation tools.",
+      "activation": "disabled",
+      "status": "experimental-off",
+      "conflicts": [
+        "SoL-Pi Action Fusion",
+        "other edit replacements"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Direct anchored edits preserved CRLF, Unicode and indentation; stale and invalid anchors left files intact. The isolated tool test edited a project in Build, denied the edit in Plan and preserved the read-only skill fixture. Read output gained anchors. Live coding quality and alternate undo remain unverified.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "pi-rtk-optimizer",
+      "version": "0.9.0",
+      "source": "npm:pi-rtk-optimizer",
+      "repo": "https://github.com/MasuRii/pi-rtk-optimizer",
+      "license": "MIT",
+      "node": ">=20",
+      "pi": "0.74, 0.75, 0.78, 0.79 or 0.80",
+      "runtimeDependencies": [
+        "rtk-ai/rtk 1.2.1 (reviewed, uninstalled)"
+      ],
+      "config": "Rewrites bash commands and filters tool results.",
+      "activation": "disabled",
+      "status": "excluded",
+      "conflicts": [
+        "SoL-Pi ObservationPack",
+        "other result reducers"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Upstream peer ranges exclude 1.5.2.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "@ff-labs/pi-fff",
+      "version": "0.11.0",
+      "source": "npm:@ff-labs/pi-fff",
+      "repo": "https://github.com/dmtrKovalenko/fff",
+      "license": "MIT",
+      "node": "No upstream range declared. Isolated tests used Node 22.23.2.",
+      "pi": "No narrow peer range declared. Isolated tests used 1.5.2.",
+      "runtimeDependencies": [
+        "@ff-labs/fff-node",
+        "@ff-labs/fff-bun"
+      ],
+      "config": "Requires project-only indexing with symlink and home scans disabled.",
+      "activation": "disabled",
+      "status": "experimental-off",
+      "conflicts": [
+        "other repository indexers"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Isolated search, Git-ignores and watcher events passed on a 300-file fixture. Follow-up warm lookup was 4 ms vs 11 ms for a ripgrep subprocess.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    },
+    {
+      "name": "@juanbenjumea/pi-dynamic-footer",
+      "version": "0.1.11",
+      "source": "npm:@juanbenjumea/pi-dynamic-footer",
+      "repo": "https://github.com/huaxel/pi-dynamic-footer",
+      "license": "MIT",
+      "node": ">=20",
+      "pi": ">=0.80.0",
+      "runtimeDependencies": [
+        "@juanbenjumea/pi-provider-usage-fetcher"
+      ],
+      "config": "Installs a provider quota client and derives throughput from Pi events.",
+      "activation": "disabled",
+      "status": "experimental-off",
+      "conflicts": [
+        "other footer owners"
+      ],
+      "security": "Evaluate only in a fresh project sandbox with local inference.",
+      "tests": "Registered the footer command in an isolated RPC session. Live custom footer and server decode data were not tested.",
+      "update": "Review a pinned artifact and repeat the isolated tests.",
+      "rollback": "Remove the candidate from the isolated test profile."
+    }
   ],
   "native": {
-    "codemode": "provided via pi-lens bundle; allowed for read-heavy multi-call work, disabled for parallel LLM fanout",
+    "codemode": "Built in to Pi 1.5.2. Default direct tool set. Use only under the project sandbox.",
     "compaction": "enabled native: reserve 39322, keepRecent 20000 on 262144 coding-cyber-tiel-35b",
     "promptTemplates": "~/.pi/agent/prompts/{finish,review,fix-ci,finish-docs}.md -> reference skills, never duplicate them",
     "skills": "~/dev/github/skillset/skills (read-only, central source of truth)",
-    "mcp": [ "websearch 127.0.0.1:8642/mcp", "gateway 127.0.0.1:8643 (context7, github read-only, skills)" ]
+    "mcp": [
+      "Explicit --with-mcp: websearch, Context7 and read-only GitHub through the existing loopback services."
+    ]
   },
-  "sandbox": { "tool": "pi-sandbox (bwrap)", "deny": ["ssh", "gnupg", "browser profiles", "cloud agent auth", "other projects"], "ro": ["skillset", "project selection by explicit mount"] }
+  "sandbox": {
+    "tool": "bubblewrap project launcher plus model-only HTTP relay",
+    "scope": "one explicit project; shared skills and runtime are read-only; agent state scoped to the project",
+    "network": "private namespace with a filtered coding-model relay; the existing MCP relay is opt-in"
+  }
 }

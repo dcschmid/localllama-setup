@@ -64,6 +64,7 @@ ARTICLE = re.compile(r"\b(?:artikel|devlog|article|blog post)\b", re.I)
 GAME = re.compile(r"\b(?:spielidee\w*|spiele?konzept|game idea|game design|godot|defold)\b", re.I)
 STORY = re.compile(r"\b(?:geschichte|[a-zäöüß]*roman|novel|story|kapitel|chapter)\b", re.I)
 EDITORIAL = re.compile(r"\b(?:prüf\w*|audit\w*|check|review|vergleich\w*|compare|überarbeit\w*|verbesser\w*|rewrite|revise)\b", re.I)
+PLAN_REVISION = re.compile(r"\b(?:umplan\w*|korr?egier\w*|korrigier\w*)\b", re.I)
 REWRITE = re.compile(r"\b(?:überarbeit\w*|verbesser\w*|sta?raff\w*|rewrite|revise)\b", re.I)
 AUDIT = re.compile(r"\b(?:prüf\w*|audit\w*|check|review)\b", re.I)
 
@@ -133,7 +134,7 @@ WEAK_START = re.compile(r"^\s*(?:bitte\s+)?(?:start(?:e)?\s+(?:writing|mit dem s
 APPROVAL_CLAUSE = re.compile(
     r"\b(?:planung|plan|gliederung|outline|exposé|kapitelplan|kapitelübersicht)\b[^.!?\n]{0,40}\b(?:freigegeben|freigeben|genehmigt|akzeptiert|bestätigt|approved|accepted)\b"
     r"|\bich\s+(?:gebe|habe)\b[^.!?\n]{0,50}\b(?:frei|freigegeben)\b|\bi\s+(?:approve|accept)\b|\b(?:approved|freigegeben)\b"
-    r"|\bgib\b[^.!?\n]{0,30}\bfrei\b|\bpasst\s+so\b|\beinverstanden\b|\bsieht\s+gut\s+aus\b|\blooks\s+good\b", re.I)
+    r"|\bso\s+ist\s+das\s+gut\b|\bja[, ]+das\s+passt\b|\bgib\b[^.!?\n]{0,30}\bfrei\b|\bpasst\s+so\b|\beinverstanden\b|\bsieht\s+gut\s+aus\b|\blooks\s+good\b", re.I)
 NEGATION = re.compile(r"\b(?:nicht|kein\w*|nie|never|not|no|unapproved)\b|n't\b", re.I)
 HOLD = re.compile(r"\b(?:aber|jedoch|allerdings|but|however|vorher|zuerst|bevor|before|first|falls|wenn|if|sobald|erst)\b", re.I)
 TOGETHER = re.compile(r"\b(?:gemeinsam schreiben|write together|kapitel für kapitel|chapter by chapter)\b", re.I)
@@ -148,18 +149,38 @@ def production_command(text, plan_state):
     if plan_state not in ("proposal", "approved", "unknown"):
         return None
     phrase = " ".join(unicodedata.normalize("NFKC", text).split())
-    if not phrase or "?" in phrase or HOLD.search(phrase) or QUESTION.match(phrase):
+    if not phrase or "?" in phrase or HOLD.search(phrase) or QUESTION.match(phrase) or REWRITE.match(phrase) or re.search(r"\bumplan\w*", phrase, re.I):
         return None
     clauses = [part.strip() for part in re.split(r"[.!?;:,\n]+", phrase) if part.strip()]
     approval = any(APPROVAL_CLAUSE.search(part) and not NEGATION.search(part) for part in clauses)
     strong = any((WHOLE_START.match(part) or NAMED_START.match(part) or FULL_START.search(part)) and not NEGATION.search(part)
                  for part in clauses)
-    weak = any(WEAK_START.match(part) and not NEGATION.search(part) for part in clauses)
+    weak = any(WEAK_START.match(re.sub(r"^.*?\b(?:dann|then)\s+", "", part, flags=re.I)) and not NEGATION.search(part) for part in clauses)
     if TOGETHER.search(phrase) and (approval or plan_state == "approved") and not NEGATION.search(phrase):
         strong = True
     if strong or (weak and (approval or plan_state == "approved")):
         return "together" if TOGETHER.search(phrase) else "automatic"
     return "approve" if approval else None
+
+
+def story_request(text):
+    """A whole-story commission uses the persistent producer, including ordinary briefs."""
+    if QUESTION.match(text) or NO_DRAFT.search(text) or REWRITE.search(text) or PLAN_REVISION.search(text):
+        return None
+    if not re.search(r"\b(?:geschichte|roman|story(?![ -]bi(?:ble|bel))|novel)\b", text, re.I) or not re.search(
+            r"\b(?:erstell\w*|schreib\w*|verfass\w*|create|write|produce|generate)\b", text, re.I):
+        return None
+    image = IMAGE.search(text)
+    narrative = re.search(r"\b(?:geschichte|roman|story|novel)\b", text, re.I)
+    if image and image.end() < narrative.start():
+        return None
+    if PLAN_TARGET.search(text) and not outline_count(text):
+        return None
+    if re.search(r"\b(?:zeig\w*|show)\b[^.!?]{0,70}\b(?:planung|plan|outline)\b|"
+                 r"\b(?:zuerst|erst|first)\b[^.!?]{0,60}\b(?:planung|plan|outline|freigabe|approval)\b|"
+                 r"\b(?:warte|wait)\b[^.!?]{0,50}\b(?:freigabe|approval)\b", text, re.I):
+        return "approval_first"
+    return "auto_production"
 
 
 def production_brief(text):
@@ -174,6 +195,9 @@ def number(value):
 
 
 def title(text, fallback):
+    named = re.search(r"\b(?:mit dem titel|with the title|titled|called)\s+[„\"]?([^\n.!?„\"“]{1,180})", text, re.I)
+    if named:
+        return named[1].strip(" *'„“«»\".,:")
     match = TITLE.search(text)
     heading = re.search(r"(?m)^#\s+([^\n]{1,180})$", text) if not match and production_brief(text) else None
     name = next((part for part in match.groups() if part), "") if match else heading[1] if heading else ""
@@ -228,7 +252,7 @@ def ensure_context(conn, session, kind, lang, name=None, *, fresh=False):
 
 
 def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_context=False):
-    if production_brief(text):
+    if story_request(text) or production_brief(text):
         return "outline"
     text = NO_DRAFT.sub("", text)
     chapter = CHAPTER.search(text)
@@ -252,6 +276,8 @@ def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_c
         return "outline"
     if not question and not target and AUDIT.search(text) and re.search(r"\b(?:gesamte geschichte|ganzen roman|whole story|entire novel)\b", text, re.I):
         return "planning-audit" if has_plan and not has_prose else "review-story"
+    if not question and has_plan and PLAN_REVISION.search(text) and not AUDIT.search(text) and not prose:
+        return "planning-revise"
     if not question and (target or chapter and CHANGE.search(text) or has_plan and PLAN_CONTENT.search(text)):
         if REWRITE.search(text) or chapter and CHANGE.search(text):
             return "planning-revise"
@@ -293,15 +319,19 @@ def length_range(text):
 
 
 def story_language(text, fallback):
-    if re.search(r"\b(?:auf englisch|in english|englischer text|sprache:\*?\*?\s*englisch|\ben-us\b)\b", text, re.I):
+    if re.search(r"\b(?:auf englisch|in english|englischsprachig\w*|english[ -]language|english story|englischer text|sprache:\*?\*?\s*englisch|\ben-us\b)\b", text, re.I):
         return "en"
-    if re.search(r"\b(?:auf deutsch|in german|deutscher text|sprache:\*?\*?\s*deutsch|\bde-de\b)\b", text, re.I):
+    if re.search(r"\b(?:auf deutsch|in german|deutschsprachig\w*|german[ -]language|german story|deutscher text|sprache:\*?\*?\s*deutsch|\bde-de\b)\b", text, re.I):
+        return "de"
+    if re.match(r"\s*(?:please\s+)?(?:create|write|generate|produce)\b", text, re.I):
+        return "en"
+    if re.match(r"\s*(?:bitte\s+)?(?:erstelle|schreibe|verfasse)\b", text, re.I):
         return "de"
     return fallback
 
 
 def outline_count(text):
-    match = re.search(r"\b(" + NUMBER + r")\s+(?:kapitel(?:n)?|chapters)\b", text, re.I)
+    match = re.search(r"\b(" + NUMBER + r")\s+(?:kapitel(?:n)?|chapters?)\b", text, re.I)
     return number(match[1]) if match else 8 if OUTLINE.search(text) else 0
 
 

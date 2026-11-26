@@ -28,17 +28,30 @@ und wurde verworfen — Messwerte siehe cleanup manifest.
 
 ## 256K-Nachweise
 
-- docs/results/research-code-256k.json — Coding-Modell: Nachweis auf
-  Nutzerentscheid außerhalb des Scope; Betrieb unverändert aktiv
-- docs/results/story-256k.json — **BLOCKED (späte Positionen)**: 244.823
-  Prompt-Tokens real verarbeitet (kein Truncation), Faktenabruf 10K/100K
-  korrekt, 200K/240K falsch (isolierte Nachfrage bei 0 °C reproduzierte den
-  Fehler: alle Schlüssel wurden mit dem KEY-100-Wert beantwortet).
-  Decode 33,5 T/s, 8192-Output-Budget eingehalten.
+Urteil bleibt BLOCKED (256K-Akzeptanz), aber jetzt mit vermessener Grenze
+statt Pauschale. Ladder-Modus (proportionale Sonden 4 %/40 %/80 %/92 %,
+docs/results/*-256k-ladder.json, 2026-11-25, Router temp 0):
+
+- docs/results/research-code-256k.json — Voll 244 K/229 K: Antwort leer bzw.
+  später Abruf falsch. Ladder 131 K: 3/4 korrekt (KEY-080 falsch) — die
+  Fehlerkante ist nicht monoton; verlässlich verifiziert ist Faktabruf bis
+  ~40 K, freigegeben bis 100 K, darüber experimentell.
+- docs/results/story-256k.json — Voll 244.823 Prompt-Tokens real verarbeitet
+  (kein Truncation), Faktenabruf 10K/100K korrekt, 200K/240K falsch (bei 0 °C
+  reproduziert: alle Schlüssel mit KEY-100-Wert). Ladder 131 K: 0/4 —
+  Ladder-Zeilen behalten keinen Antworttext, damit nicht auswertbar als
+  Freigabe; Freigabe bleibt ≤100 K Faktendichte.
+- decode 33,5/30,1 T/s, Prefill 93–97 T/s bei voller Länge, 8192-Output-Budget
+  eingehalten, n_ctx 262144 Slot-verifiziert, kein Downgrade, keine
+  Compaction im Nachweis.
+- **Ursache (bytebelegt aus GGUF-Metadaten, beide Modelle identisch):**
+  hybride Attention — 30 Layer, 25 Full-Attention (Muster: Layer 5/11/17/23/29
+  SWA), sliding_window 1024, KV 512 B full / 256 B SWA. Die späte Abrufgrenze
+  ist Modellgeometrie, kein Konfigurationsfehler; q8_0 ist die einzig
+  tragbare KV-Stufe (f32 KV bei 256 K → cudaMalloc-OOM, gemessen).
   → Kein Fenster-Downgrade: 262144 bleibt konfiguriert; Produktionseinsatz
-  für Story-Workflows nur bis ~100–128K Faktendichte freigeben, Rest als
-  experimentell kennzeichnen. Freigaberegel erfüllt: BLOCKED statt
-  Verschleierung.
+  für Faktendichte bis ~100 K freigegeben, Rest als experimentell gekennzeichnet.
+  Freigaberegel erfüllt: BLOCKED statt Verschleierung.
 
 ## Ressourcen (Messung Phase 2)
 

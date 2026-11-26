@@ -43,12 +43,12 @@ try {
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Planung freigeben' }).click();
   await dialog.getByRole('button', { name: 'Geschichte vollständig erstellen' }).click();
-  await expect(page.getByText('Geschichte fertig', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Produktion abgeschlossen', { exact: true })).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Illustrationen prüfen' }).click();
   await dialog.getByText('Titelbild', { exact: true }).click();
   await expect(dialog.getByRole('img', { name: 'Mara and Nera at the open drawer' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Bildserie freigeben' }).click();
-  await expect(page.getByText('Geschichte fertig', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Produktion abgeschlossen', { exact: true })).toBeVisible({ timeout: 20_000 });
   const chapter = page.locator('[data-production-chapter="1"]');
   await expect(chapter.getByText('When Mara opened the drawer', { exact: false })).toBeVisible();
   await expect(chapter.getByText(/Fixture claim/)).toBeHidden();
@@ -81,6 +81,20 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 `, file], { encoding: 'utf-8' });
   assert.equal(archive.status, 0, archive.stderr);
   await dialog.getByRole('button', { name: 'Dialog schließen' }).click();
+  // One natural commission finishes through the same card without approval or chapter clicks.
+  const automaticChat = await (await page.request.post(base + '/api/sessions', { data: { title: 'Automatic story' } })).json();
+  await page.goto(base + '/#chat/' + automaticChat.id);
+  await page.locator('#prompt').fill('Create an English-language story titled The Quiet Key. One chapter of 38–60 words. Mara and Nera find a lost key.');
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  await expect(page.getByText('Produktion abgeschlossen', { exact: true })).toBeVisible({ timeout: 40_000 });
+  await expect(page.locator('[data-kind=production-job]')).toHaveCount(1);
+  const automaticSession = await (await page.request.get(base + `/api/sessions/${automaticChat.id}`)).json();
+  const automaticReport = await (await page.request.get(base + `/api/production/${automaticSession.project_id}/report`)).json();
+  assert.equal(automaticReport.length, 1);
+  assert.equal(automaticReport[0].payload.kind, 'story');
+  assert.equal(automaticReport[0].payload.plan.language, 'en');
+  assert.equal(automaticReport[0].payload.plan.title, 'The Quiet Key');
+
   const newChat = await page.request.post(base + '/api/sessions', { data: { title: 'Neuer Produktionsauftrag' } });
   const { id: briefChat } = await newChat.json();
   await page.goto(base + '/#chat/' + briefChat);
@@ -95,7 +109,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   assert.equal(briefReport[0].payload.maximum, 1200);
   // A free-wording release must release exactly the stored plan and start one real production.
   const api = async path => (await page.request.get(base + path)).json();
-  const planInChat = async (title, text = 'Ich möchte eine vollständige Geschichte erstellen.\n# Das Glas\nEin Kapitel, 38–60 Wörter. Zeige mir zuerst die Planung.') => {
+  const planInChat = async (title, text = 'Ich möchte eine vollständige Geschichte auf Englisch erstellen.\n# Das Glas\nEin Kapitel, 38–60 Wörter. Zeige mir zuerst die Planung.') => {
     const chat = await (await page.request.post(base + '/api/sessions', { data: { title } })).json();
     await page.goto(base + '/#chat/' + chat.id);
     await page.reload();
@@ -131,7 +145,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   await expect(page.locator('[data-kind=production-job]').nth(1)).toBeVisible({ timeout: 30_000 });
   assert.ok(['PRODUCTION_RUNNING', 'PRODUCTION_COMPLETED', 'PRODUCTION_PAUSED'].includes((await api(`/api/production/${clicked.project}`)).stage));
   // A failed planning step names its step and shows structured technical details, without model output.
-  const failed = await planInChat('Planung mit Fehler', 'Ich möchte eine vollständige Geschichte erstellen.\n# Der Fehler\nEin Kapitel, 38–60 Wörter. [[model-format]]');
+  const failed = await planInChat('Planung mit Fehler', 'Ich möchte eine vollständige Geschichte auf Englisch erstellen.\n# Der Fehler\nEin Kapitel, 38–60 Wörter. [[model-format]]');
   await expect(page.getByText('Story-Planung: Die Modellantwort hatte kein gültiges strukturiertes Format', { exact: false })).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('Der Schritt konnte nicht abgeschlossen werden.')).toHaveCount(0);
   await page.getByText('Technische Details', { exact: true }).click();

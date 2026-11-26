@@ -13,18 +13,32 @@
     "keepRecentTokens": 20000
   },
   "skills": "@SKILLS@",
-  "packages": [
-    { "name": "pi-lens", "version": "4.5.1", "status": "active" },
-    { "name": "pi-permission-modes", "version": "2.7.2", "status": "active" },
-    { "name": "pi-workspace-history", "version": "0.5.2", "status": "active" },
-    { "name": "pi-todo-agent", "version": "0.3.0", "status": "active" },
-    { "name": "pi-condense", "version": "2.18.1", "status": "experimental" },
-    { "name": "pi-sessions", "version": "0.23.4", "status": "excluded", "reason": "node>=24, host pins node 22" }
+  "promptTemplates": [
+    "finish",
+    "review",
+    "fix-ci",
+    "finish-docs"
   ],
-  "promptTemplates": ["finish", "review", "fix-ci", "finish-docs"],
   "mcpServers": {
-    "websearch": "http://127.0.0.1:8642/mcp",
-    "context7": "http://127.0.0.1:8643/servers/context7/mcp",
-    "github": "http://127.0.0.1:8643/servers/github/mcp"
+    "websearch": {
+      "url": "http://127.0.0.1:8642/mcp",
+      "exposure": "hidden",
+      "toolExposure": { "search_web": "codemode" }
+    },
+    "context7": {
+      "url": "http://127.0.0.1:8643/servers/context7/mcp",
+      "exposure": "hidden",
+      "toolExposure": { "resolve-library-id": "codemode", "query-docs": "codemode" }
+    },
+    "github": {
+      "url": "http://127.0.0.1:8643/servers/github/mcp",
+      "exposure": "hidden",
+      "toolExposure": {
+        "get_latest_release": "codemode",
+        "list_releases": "codemode",
+        "get_file_contents": "codemode",
+        "search_repositories": "codemode"
+      }
+    }
   }
 }

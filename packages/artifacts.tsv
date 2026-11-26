@@ -1,5 +1,5 @@
-llama-b12503-bin-ubuntu-cuda-12.8-x64.tar.gz	019a670d67a887c66d17e1b5321e19b576c36ebcbd125d099eaa98da04dda25a	https://github.com/ggml-org/llama.cpp/releases/download/b12503/llama-b12503-bin-ubuntu-cuda-12.8-x64.tar.gz
-cudart-llama-b12503-bin-ubuntu-cuda-12.8-x64.tar.gz	f7741ed78c6034ab67740eec6fe8498ec04e4a83ff92af4021255bc437681837	https://github.com/ggml-org/llama.cpp/releases/download/b12503/cudart-llama-b12503-bin-ubuntu-cuda-12.8-x64.tar.gz
+llama-b12628-bin-ubuntu-cuda-12.8-x64.tar.gz	3f49b2b7a86b545ec2014a6e504f25de5d363494d28c4b07f1a0cba9b4a278f5	https://github.com/ggml-org/llama.cpp/releases/download/b12628/llama-b12628-bin-ubuntu-cuda-12.8-x64.tar.gz
+cudart-llama-b12628-bin-ubuntu-cuda-12.8-x64.tar.gz	abbeda7b95155a65c585ae1f5c4c35e84daffff3d6c44d740adb647d9bed4297	https://github.com/ggml-org/llama.cpp/releases/download/b12628/cudart-llama-b12628-bin-ubuntu-cuda-12.8-x64.tar.gz
 github-mcp-server_Linux_x86_64.tar.gz	157c5664b273e5070126d414f88cbab765630acde588f75dafdf9998c2235c51	https://github.com/github/github-mcp-server/releases/download/v2.2.0/github-mcp-server_Linux_x86_64.tar.gz
 websearch-mcp.tar.gz	62625161f62f34285a8344e4ccb4947f6e9fdb55835a826262946bfdc20e7aae	https://codeload.github.com/Danmoreng/websearch-mcp/tar.gz/dfdbc9bda9119fbf67610f288eae43821180f621
 node-v24.22.1-linux-x64.tar.xz	6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6	https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz

@@ -113,7 +113,12 @@ def patch_text(text, edits, motifs, tools, *, local=False, targets=(), base_hash
         else:
             duplicate = None
         if facts(before) != facts(after) and not duplicate:
-            supported = (not article and any(t.get("status") == "confirmed" and t.get("category") == "continuity"
+            # A confirmed spacing join inside a protected span, such as "raus kommen" within a quotation,
+            # changes no quantity, name or fact; only the whitespace separates the two spellings.
+            quiet = (QUANTITY.findall(before) == QUANTITY.findall(after)
+                     and NAMES.findall(before) == NAMES.findall(after)
+                     and re.sub(r"\s+", "", before) == re.sub(r"\s+", "", after))
+            supported = quiet or (not article and any(t.get("status") == "confirmed" and t.get("category") == "continuity"
                          and (quote := t.get("related_quote", "")) and quote in canon
                          and after.strip() and after.strip() in quote for t in related)
                          and NAMES.findall(before) == NAMES.findall(after)

@@ -1,0 +1,4123 @@
+{
+  "recorded": "2026-11-20",
+  "source_commit": "7ff41a4",
+  "environment": {
+    "pi": "1.5.2",
+    "node_shell": "22.23.2",
+    "node_installer_available": "24.22.1",
+    "llama_cpp": "b12503 4577932fa",
+    "profile": "coding-long-256k",
+    "os": "Fedora 44",
+    "cpus": 24,
+    "host_visible_ram_gib": 46,
+    "gpu": "RTX 5070 Laptop",
+    "gpu_vram_mib": 8151,
+    "power_profile": "low-power",
+    "slot_count": 1
+  },
+  "v1": {
+    "prompt_test_command": "python3 -m pytest -q",
+    "isolation": "temporary profile and project, no MCP, private network namespace, same official router",
+    "cache_condition": "shared slot, unknown initial state, use first Pi cacheRead",
+    "runs": [
+      {
+        "run": "v1-first",
+        "disposition": "aborted after observing headless Plan deny a write",
+        "wall_s": 141.44,
+        "model_responses": 8,
+        "tool_calls": 8,
+        "failed_tools": 2,
+        "permission_denials": 2,
+        "tools": {
+          "bash": 4,
+          "read": 2,
+          "edit": 1,
+          "write": 1
+        },
+        "pi_tokens": {
+          "input": 16488,
+          "output": 1790,
+          "cacheRead": 108384
+        },
+        "first_pi_usage": {
+          "input": 14229,
+          "output": 63,
+          "cacheRead": 0,
+          "totalTokens": 14292
+        },
+        "peak_pi_context": 18271,
+        "server_timings_count": 8,
+        "server_timings": [
+          {
+            "prompt_eval": {
+              "ms": 15886.99,
+              "tokens": 14229,
+              "tokens_per_s": 895.64
+            },
+            "eval": {
+              "ms": 2081.39,
+              "tokens": 63,
+              "tokens_per_s": 30.27
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 435.24,
+              "tokens": 23,
+              "tokens_per_s": 52.84
+            },
+            "eval": {
+              "ms": 1216.61,
+              "tokens": 39,
+              "tokens_per_s": 32.06
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1128.39,
+              "tokens": 565,
+              "tokens_per_s": 500.71
+            },
+            "eval": {
+              "ms": 2249.97,
+              "tokens": 65,
+              "tokens_per_s": 28.89
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 550.73,
+              "tokens": 54,
+              "tokens_per_s": 98.05
+            },
+            "eval": {
+              "ms": 1496.65,
+              "tokens": 44,
+              "tokens_per_s": 29.4
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1222.1,
+              "tokens": 715,
+              "tokens_per_s": 585.06
+            },
+            "eval": {
+              "ms": 5088.52,
+              "tokens": 149,
+              "tokens_per_s": 29.28
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1011.86,
+              "tokens": 300,
+              "tokens_per_s": 296.48
+            },
+            "eval": {
+              "ms": 2429.18,
+              "tokens": 74,
+              "tokens_per_s": 30.46
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1170.34,
+              "tokens": 579,
+              "tokens_per_s": 494.73
+            },
+            "eval": {
+              "ms": 18674.72,
+              "tokens": 535,
+              "tokens_per_s": 28.65
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 429.78,
+              "tokens": 23,
+              "tokens_per_s": 53.52
+            },
+            "eval": {
+              "ms": 28183.47,
+              "tokens": 821,
+              "tokens_per_s": 29.13
+            }
+          }
+        ],
+        "gpu_peak_temp_c_vram_mib_util_pct": [
+          55.0,
+          7326.0,
+          93.0
+        ],
+        "manual_interventions": 1,
+        "independent_quality": null
+      },
+      {
+        "run": "v1-build-a",
+        "disposition": "router restart during task, independent regression failed",
+        "wall_s": 315.49,
+        "model_responses": 3,
+        "tool_calls": 4,
+        "failed_tools": 0,
+        "failed_model_messages": 4,
+        "tools": {
+          "bash": 1,
+          "read": 3
+        },
+        "pi_tokens": {
+          "input": 16012,
+          "output": 195,
+          "cacheRead": 29290
+        },
+        "first_pi_usage": {
+          "input": 14500,
+          "output": 65,
+          "cacheRead": 0,
+          "totalTokens": 14565
+        },
+        "peak_pi_context": 16128,
+        "server_timings_count": 3,
+        "server_timings": [
+          {
+            "prompt_eval": {
+              "ms": 18647.99,
+              "tokens": 14500,
+              "tokens_per_s": 777.56
+            },
+            "eval": {
+              "ms": 25877.25,
+              "tokens": 65,
+              "tokens_per_s": 2.51
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1208.93,
+              "tokens": 166,
+              "tokens_per_s": 137.31
+            },
+            "eval": {
+              "ms": 30207.38,
+              "tokens": 74,
+              "tokens_per_s": 2.45
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 3402.2,
+              "tokens": 1346,
+              "tokens_per_s": 395.63
+            },
+            "eval": {
+              "ms": 25909.01,
+              "tokens": 56,
+              "tokens_per_s": 2.16
+            }
+          }
+        ],
+        "gpu_peak_temp_c_vram_mib_util_pct": [
+          51.75,
+          7043.0,
+          92.0
+        ],
+        "manual_interventions": 0,
+        "independent_quality": null
+      },
+      {
+        "run": "v1-build-b",
+        "disposition": "completed with explicit Build Mode",
+        "wall_s": 263.36,
+        "model_responses": 20,
+        "tool_calls": 19,
+        "failed_tools": 2,
+        "permission_denials": 2,
+        "tools": {
+          "read": 5,
+          "bash": 12,
+          "request_network_access": 1,
+          "edit": 1
+        },
+        "pi_tokens": {
+          "input": 24871,
+          "output": 3354,
+          "cacheRead": 431743
+        },
+        "first_pi_usage": {
+          "input": 14502,
+          "output": 46,
+          "cacheRead": 0,
+          "totalTokens": 14548
+        },
+        "peak_pi_context": 28011,
+        "server_timings_count": 20,
+        "server_timings": [
+          {
+            "prompt_eval": {
+              "ms": 20011.33,
+              "tokens": 14502,
+              "tokens_per_s": 724.69
+            },
+            "eval": {
+              "ms": 18282.0,
+              "tokens": 46,
+              "tokens_per_s": 2.52
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1077.16,
+              "tokens": 565,
+              "tokens_per_s": 524.53
+            },
+            "eval": {
+              "ms": 2460.98,
+              "tokens": 70,
+              "tokens_per_s": 28.44
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 885.23,
+              "tokens": 233,
+              "tokens_per_s": 263.21
+            },
+            "eval": {
+              "ms": 1523.84,
+              "tokens": 45,
+              "tokens_per_s": 29.53
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1222.19,
+              "tokens": 715,
+              "tokens_per_s": 585.02
+            },
+            "eval": {
+              "ms": 3775.33,
+              "tokens": 113,
+              "tokens_per_s": 29.93
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 7197.99,
+              "tokens": 5795,
+              "tokens_per_s": 805.09
+            },
+            "eval": {
+              "ms": 12282.68,
+              "tokens": 321,
+              "tokens_per_s": 26.13
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1702.6,
+              "tokens": 568,
+              "tokens_per_s": 333.61
+            },
+            "eval": {
+              "ms": 2306.43,
+              "tokens": 60,
+              "tokens_per_s": 26.01
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 414.9,
+              "tokens": 25,
+              "tokens_per_s": 60.26
+            },
+            "eval": {
+              "ms": 3480.17,
+              "tokens": 94,
+              "tokens_per_s": 27.01
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1040.46,
+              "tokens": 127,
+              "tokens_per_s": 122.06
+            },
+            "eval": {
+              "ms": 3121.8,
+              "tokens": 76,
+              "tokens_per_s": 24.34
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1124.15,
+              "tokens": 211,
+              "tokens_per_s": 187.7
+            },
+            "eval": {
+              "ms": 5971.34,
+              "tokens": 148,
+              "tokens_per_s": 24.79
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 442.27,
+              "tokens": 24,
+              "tokens_per_s": 54.27
+            },
+            "eval": {
+              "ms": 2392.4,
+              "tokens": 60,
+              "tokens_per_s": 25.08
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1205.69,
+              "tokens": 267,
+              "tokens_per_s": 221.45
+            },
+            "eval": {
+              "ms": 5319.95,
+              "tokens": 127,
+              "tokens_per_s": 23.87
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1159.26,
+              "tokens": 267,
+              "tokens_per_s": 230.32
+            },
+            "eval": {
+              "ms": 7619.53,
+              "tokens": 196,
+              "tokens_per_s": 25.72
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 703.43,
+              "tokens": 49,
+              "tokens_per_s": 69.66
+            },
+            "eval": {
+              "ms": 2843.14,
+              "tokens": 74,
+              "tokens_per_s": 26.03
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 703.62,
+              "tokens": 50,
+              "tokens_per_s": 71.06
+            },
+            "eval": {
+              "ms": 8302.91,
+              "tokens": 217,
+              "tokens_per_s": 26.14
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 932.64,
+              "tokens": 155,
+              "tokens_per_s": 166.19
+            },
+            "eval": {
+              "ms": 20258.95,
+              "tokens": 517,
+              "tokens_per_s": 25.52
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1362.97,
+              "tokens": 124,
+              "tokens_per_s": 90.98
+            },
+            "eval": {
+              "ms": 4478.88,
+              "tokens": 111,
+              "tokens_per_s": 24.78
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1350.43,
+              "tokens": 502,
+              "tokens_per_s": 371.73
+            },
+            "eval": {
+              "ms": 7563.63,
+              "tokens": 186,
+              "tokens_per_s": 24.59
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1249.36,
+              "tokens": 313,
+              "tokens_per_s": 250.53
+            },
+            "eval": {
+              "ms": 4878.53,
+              "tokens": 118,
+              "tokens_per_s": 24.19
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 1189.32,
+              "tokens": 340,
+              "tokens_per_s": 285.88
+            },
+            "eval": {
+              "ms": 12634.1,
+              "tokens": 314,
+              "tokens_per_s": 24.85
+            }
+          },
+          {
+            "prompt_eval": {
+              "ms": 702.38,
+              "tokens": 39,
+              "tokens_per_s": 55.53
+            },
+            "eval": {
+              "ms": 18338.24,
+              "tokens": 461,
+              "tokens_per_s": 25.14
+            }
+          }
+        ],
+        "gpu_peak_temp_c_vram_mib_util_pct": [
+          52.19,
+          7710.0,
+          92.0
+        ],
+        "manual_interventions": 0,
+        "independent_quality": {
+          "existing_suite_exit": 0,
+          "existing_tests_counted": {
+            "passed": 70,
+            "failed": 0
+          },
+          "regression_pass": true,
+          "changed_files": [
+            "metavault/duplicates.py"
+          ],
+          "accepted": true
+        }
+      }
+    ]
+  },
+  "v2": {
+    "setup": "isolated home: install, idempotent install/repair, doctor, backup, restore, uninstall rollback",
+    "sandbox_probe": "11/11 runtime assertions",
+    "relay_regressions": "5/5",
+    "interactive": "model, Build and sandbox status displayed",
+    "session_test": {
+      "restored_messages": 51,
+      "forked_messages": 51,
+      "distinct_session_id": true
+    },
+    "mcp_initialize_http": {
+      "websearch": 200,
+      "context7": 200,
+      "github": 200,
+      "deep_research_call": 403
+    },
+    "tested_node": [
+      "22.23.2",
+      "24.22.1"
+    ],
+    "repair_missing_package_fixture": "restored the pinned Todo Agent package",
+    "security_static": {
+      "semgrep_version": "1.183.0",
+      "findings": 0
+    },
+    "npm_audit": {
+      "before_override": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 3,
+        "critical": 0,
+        "total": 3
+      },
+      "after_override": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    "live_runs": {
+      "metalvault_lens_lean": [
+        {
+          "fixture": "metalvault-duplicate-drop-id",
+          "source_sha256": "0c59bd39cc7a4232fecbef9000d3fbf3461359ea54544fd617695c9b02a8d67f",
+          "profile": "coding-long-256k",
+          "variant": "lens-lean",
+          "repeat": 1,
+          "cache_condition": "shared slot; classify using first request counters",
+          "initial_slot_cached_tokens": 0,
+          "power_profile": "low-power",
+          "wall_s": 420.191,
+          "pi_exit": 124,
+          "manual_interventions": 0,
+          "router_pid_stable": true,
+          "server_observed_calls": 4,
+          "server_timings": [
+            {
+              "prompt_eval": {
+                "ms": 1792.26,
+                "tokens": 163,
+                "tokens_per_s": 90.95
+              },
+              "eval": {
+                "ms": 11758.37,
+                "tokens": 119,
+                "tokens_per_s": 10.12
+              }
+            },
+            {
+              "prompt_eval": {
+                "ms": 18840.33,
+                "tokens": 14962,
+                "tokens_per_s": 794.15
+              },
+              "eval": {
+                "ms": 4371.39,
+                "tokens": 132,
+                "tokens_per_s": 30.2
+              }
+            },
+            {
+              "prompt_eval": {
+                "ms": 212615.33,
+                "tokens": 153200,
+                "tokens_per_s": 720.55
+              },
+              "eval": {
+                "ms": 23297.59,
+                "tokens": 175,
+                "tokens_per_s": 7.51
+              }
+            },
+            {
+              "prompt_eval": {
+                "ms": 985.98,
+                "tokens": 376,
+                "tokens_per_s": 381.35
+              },
+              "eval": {
+                "ms": 3531.48,
+                "tokens": 95,
+                "tokens_per_s": 26.9
+              }
+            }
+          ],
+          "launcher_time_user_sys_max_rss_kib": [
+            "0.18 0.05 20708"
+          ],
+          "gpu_samples": 0,
+          "gpu_peak_temp_c_vram_mib_util_pct": null,
+          "counts": {
+            "assistant_messages": 2,
+            "model_responses": 2,
+            "tool_calls": 3
+          },
+          "tool_counts": {
+            "bash": 1,
+            "read": 2
+          },
+          "pi_tokens": {
+            "input": 15338,
+            "output": 227,
+            "cacheRead": 15093,
+            "cacheWrite": 0,
+            "max_total": 15564,
+            "first_input": 14962,
+            "first_cache_read": 0
+          },
+          "turn_start_to_first_client_delta_s": [
+            28.308,
+            236.756
+          ],
+          "automatic_compaction_wall_s": [],
+          "permission_questions": null,
+          "quality": {
+            "existing_suite_exit": 1,
+            "existing_tests_counted": {},
+            "regression_pass": false,
+            "changed_python_files": [],
+            "accepted": false
+          }
+        }
+      ],
+      "vcc_nominal_32k": [
+        {
+          "profile": "coding-long-256k",
+          "target_fixture_tokens": 32768,
+          "variant": "index.ts",
+          "repeat": 1,
+          "compaction_exit": 0,
+          "compaction_wall_s_including_startup": 5.297,
+          "compaction_completed": true,
+          "tokens_before_reported_by_pi": 29742,
+          "markers_in_summary": 4,
+          "expected_markers": 4,
+          "resumed_exit": 0,
+          "resumed_wall_s": 72.551,
+          "markers_after_restart": 4,
+          "resumed_usage": [
+            {
+              "input": 42646,
+              "output": 30,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 42676
+            }
+          ],
+          "resumed_tool_calls": 0
+        }
+      ],
+      "native_nominal_32k": [
+        {
+          "profile": "coding-long-256k",
+          "target_fixture_tokens": 32768,
+          "variant": "native",
+          "repeat": 1,
+          "thinking": "off",
+          "compaction_exit": 0,
+          "compaction_wall_s_including_startup": 3.751,
+          "compaction_completed": false,
+          "tokens_before_reported_by_pi": null,
+          "markers_in_summary": null,
+          "expected_markers": 4,
+          "comparison_eligible": false,
+          "exclusion": "First runner closed RPC stdin before the asynchronous response."
+        }
+      ],
+      "better_nominal_32k": null
+    },
+    "exclusive_window_followup": {
+      "context": {
+        "native-16": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 16384,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 3.444,
+            "compaction_server_timings": [],
+            "compaction_extension_hook": null,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": false,
+            "compaction_rpc_error": "Nothing to compact (session too small)",
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": null,
+            "markers_in_summary": null,
+            "expected_markers": 4,
+            "router_pid_stable": true
+          }
+        ],
+        "vcc-16": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 16384,
+            "calibrated_transcript_tokens": null,
+            "variant": "index.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 3.94,
+            "compaction_server_timings": [],
+            "compaction_extension_hook": null,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": false,
+            "compaction_rpc_error": "Nothing to compact (session too small)",
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": null,
+            "markers_in_summary": null,
+            "expected_markers": 4,
+            "router_pid_stable": true
+          }
+        ],
+        "native-32": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 38.989,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 49.472,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33790,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33820
+              }
+            ],
+            "resumed_tool_calls": 0
+          }
+        ],
+        "vcc-32": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "index.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 4.068,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 60.804,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 41714,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 41744
+              }
+            ],
+            "resumed_tool_calls": 0
+          }
+        ],
+        "better-32": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 40.231,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 20101.05,
+                  "tokens": 14775,
+                  "tokens_per_s": 735.04
+                },
+                "eval": {
+                  "ms": 16397.53,
+                  "tokens": 469,
+                  "tokens_per_s": 28.6
+                }
+              }
+            ],
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 0,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 48.092,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33774,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33804
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 43047.72,
+                  "tokens": 33774,
+                  "tokens_per_s": 784.57
+                },
+                "eval": {
+                  "ms": 1298.95,
+                  "tokens": 30,
+                  "tokens_per_s": 23.1
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-32-warm": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "prime": {
+              "exit": 0,
+              "wall_s": 66.191,
+              "assistant_responded": true,
+              "markers": 0,
+              "usage": [
+                {
+                  "input": 47331,
+                  "output": 2,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 0,
+                  "totalTokens": 47333
+                }
+              ],
+              "tool_calls": 0,
+              "server_timings": [
+                {
+                  "prompt_eval": {
+                    "ms": 62358.9,
+                    "tokens": 47331,
+                    "tokens_per_s": 759.01
+                  },
+                  "eval": {
+                    "ms": 67.65,
+                    "tokens": 2,
+                    "tokens_per_s": 29.56
+                  }
+                }
+              ]
+            },
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 52.335,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 21337.86,
+                  "tokens": 17175,
+                  "tokens_per_s": 804.91
+                },
+                "eval": {
+                  "ms": 27365.74,
+                  "tokens": 562,
+                  "tokens_per_s": 20.54
+                }
+              }
+            ],
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 47333,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 44.495,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 31150,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 31180
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 39468.02,
+                  "tokens": 31150,
+                  "tokens_per_s": 789.25
+                },
+                "eval": {
+                  "ms": 1225.31,
+                  "tokens": 30,
+                  "tokens_per_s": 24.48
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "vcc-32-warm": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "index.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": {
+              "exit": 0,
+              "wall_s": 68.104,
+              "assistant_responded": true,
+              "markers": 0,
+              "usage": [
+                {
+                  "input": 47336,
+                  "output": 2,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 0,
+                  "totalTokens": 47338
+                }
+              ],
+              "tool_calls": 0,
+              "server_timings": [
+                {
+                  "prompt_eval": {
+                    "ms": 63528.66,
+                    "tokens": 47336,
+                    "tokens_per_s": 745.11
+                  },
+                  "eval": {
+                    "ms": 60.95,
+                    "tokens": 2,
+                    "tokens_per_s": 32.81
+                  }
+                }
+              ]
+            },
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 3.903,
+            "compaction_server_timings": [],
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 47338,
+            "markers_in_summary": 3,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 44.183,
+            "markers_after_restart": 3,
+            "resumed_usage": [
+              {
+                "input": 26795,
+                "output": 152,
+                "cacheRead": 2071,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 29018
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 33678.67,
+                  "tokens": 26795,
+                  "tokens_per_s": 795.61
+                },
+                "eval": {
+                  "ms": 6492.22,
+                  "tokens": 152,
+                  "tokens_per_s": 23.41
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "better-32-warm": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": {
+              "exit": 0,
+              "wall_s": 66.427,
+              "assistant_responded": true,
+              "markers": 0,
+              "usage": [
+                {
+                  "input": 47330,
+                  "output": 2,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 0,
+                  "totalTokens": 47332
+                }
+              ],
+              "tool_calls": 0,
+              "server_timings": [
+                {
+                  "prompt_eval": {
+                    "ms": 62132.22,
+                    "tokens": 47330,
+                    "tokens_per_s": 761.76
+                  },
+                  "eval": {
+                    "ms": 53.04,
+                    "tokens": 2,
+                    "tokens_per_s": 37.71
+                  }
+                }
+              ]
+            },
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 41.552,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 23159.39,
+                  "tokens": 17526,
+                  "tokens_per_s": 756.76
+                },
+                "eval": {
+                  "ms": 14773.5,
+                  "tokens": 424,
+                  "tokens_per_s": 28.7
+                }
+              }
+            ],
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 0,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 47332,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 46.372,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 31011,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 31041
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 41230.37,
+                  "tokens": 31011,
+                  "tokens_per_s": 752.14
+                },
+                "eval": {
+                  "ms": 1286.51,
+                  "tokens": 30,
+                  "tokens_per_s": 23.32
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-32-repeat": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 32.367,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 15270.78,
+                  "tokens": 14442,
+                  "tokens_per_s": 945.73
+                },
+                "eval": {
+                  "ms": 13926.48,
+                  "tokens": 487,
+                  "tokens_per_s": 34.97
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 42.948,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33797,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33827
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 38473.27,
+                  "tokens": 33797,
+                  "tokens_per_s": 878.45
+                },
+                "eval": {
+                  "ms": 1208.54,
+                  "tokens": 30,
+                  "tokens_per_s": 24.82
+                }
+              }
+            ],
+            "router_pid_stable": true
+          },
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 2,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 18.204,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 126.47,
+                  "tokens": 4,
+                  "tokens_per_s": 31.63
+                },
+                "eval": {
+                  "ms": 14884.84,
+                  "tokens": 518,
+                  "tokens_per_s": 34.8
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 43.395,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33832,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33862
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 38760.16,
+                  "tokens": 33832,
+                  "tokens_per_s": 872.86
+                },
+                "eval": {
+                  "ms": 1162.12,
+                  "tokens": 30,
+                  "tokens_per_s": 25.81
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "better-32-repeat": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 31.486,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 17376.03,
+                  "tokens": 14775,
+                  "tokens_per_s": 850.31
+                },
+                "eval": {
+                  "ms": 10669.32,
+                  "tokens": 362,
+                  "tokens_per_s": 33.93
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 0,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 43.966,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33677,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33707
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 39217.25,
+                  "tokens": 33677,
+                  "tokens_per_s": 858.73
+                },
+                "eval": {
+                  "ms": 1219.45,
+                  "tokens": 30,
+                  "tokens_per_s": 24.6
+                }
+              }
+            ],
+            "router_pid_stable": true
+          },
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "better-compaction.ts",
+            "repeat": 2,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 15.489,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 132.81,
+                  "tokens": 4,
+                  "tokens_per_s": 30.12
+                },
+                "eval": {
+                  "ms": 12024.93,
+                  "tokens": 409,
+                  "tokens_per_s": 34.01
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 14771,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 43.563,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33721,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33751
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 38999.75,
+                  "tokens": 33721,
+                  "tokens_per_s": 864.65
+                },
+                "eval": {
+                  "ms": 1219.71,
+                  "tokens": 30,
+                  "tokens_per_s": 24.6
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-32-coding": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": true,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 48.425,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 18006.7,
+                  "tokens": 14578,
+                  "tokens_per_s": 809.59
+                },
+                "eval": {
+                  "ms": 26627.62,
+                  "tokens": 745,
+                  "tokens_per_s": 27.98
+                }
+              }
+            ],
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29895,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "coding_quality": {
+              "changed_files": [
+                "src/checkpoint.py",
+                "src/replay.py"
+              ],
+              "tests_exit": 0,
+              "accepted": true
+            },
+            "resumed_exit": 0,
+            "resumed_wall_s": 129.633,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 40191,
+                "output": 103,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40294
+              },
+              {
+                "input": 358,
+                "output": 140,
+                "cacheRead": 40293,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40791
+              },
+              {
+                "input": 1939,
+                "output": 255,
+                "cacheRead": 40790,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42984
+              },
+              {
+                "input": 89,
+                "output": 111,
+                "cacheRead": 42983,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43183
+              },
+              {
+                "input": 89,
+                "output": 46,
+                "cacheRead": 43182,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43317
+              },
+              {
+                "input": 35,
+                "output": 256,
+                "cacheRead": 43316,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43607
+              },
+              {
+                "input": 77,
+                "output": 294,
+                "cacheRead": 43606,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43977
+              }
+            ],
+            "resumed_tool_calls": 6,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 55774.53,
+                  "tokens": 40191,
+                  "tokens_per_s": 720.6
+                },
+                "eval": {
+                  "ms": 4823.96,
+                  "tokens": 103,
+                  "tokens_per_s": 21.35
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1281.5,
+                  "tokens": 358,
+                  "tokens_per_s": 279.36
+                },
+                "eval": {
+                  "ms": 6883.23,
+                  "tokens": 140,
+                  "tokens_per_s": 20.34
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 3125.34,
+                  "tokens": 1939,
+                  "tokens_per_s": 620.41
+                },
+                "eval": {
+                  "ms": 12856.62,
+                  "tokens": 255,
+                  "tokens_per_s": 19.83
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 920.28,
+                  "tokens": 89,
+                  "tokens_per_s": 96.71
+                },
+                "eval": {
+                  "ms": 5496.19,
+                  "tokens": 111,
+                  "tokens_per_s": 20.2
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 929.43,
+                  "tokens": 89,
+                  "tokens_per_s": 95.76
+                },
+                "eval": {
+                  "ms": 2277.91,
+                  "tokens": 46,
+                  "tokens_per_s": 20.19
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 583.26,
+                  "tokens": 35,
+                  "tokens_per_s": 60.01
+                },
+                "eval": {
+                  "ms": 12793.33,
+                  "tokens": 256,
+                  "tokens_per_s": 20.01
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 952.43,
+                  "tokens": 77,
+                  "tokens_per_s": 80.85
+                },
+                "eval": {
+                  "ms": 14651.07,
+                  "tokens": 294,
+                  "tokens_per_s": 20.07
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "better-32-coding": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": true,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 56.55,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 21759.67,
+                  "tokens": 14912,
+                  "tokens_per_s": 685.3
+                },
+                "eval": {
+                  "ms": 31431.91,
+                  "tokens": 717,
+                  "tokens_per_s": 22.81
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 0,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29895,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "coding_quality": {
+              "changed_files": [
+                "src/checkpoint.py",
+                "src/replay.py"
+              ],
+              "tests_exit": 0,
+              "tests_run": 3,
+              "failed_tests": [],
+              "accepted": true
+            },
+            "resumed_exit": 0,
+            "resumed_wall_s": 168.484,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 40159,
+                "output": 105,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40264
+              },
+              {
+                "input": 106,
+                "output": 95,
+                "cacheRead": 40263,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40464
+              },
+              {
+                "input": 1374,
+                "output": 176,
+                "cacheRead": 40463,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42013
+              },
+              {
+                "input": 105,
+                "output": 75,
+                "cacheRead": 42012,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42192
+              },
+              {
+                "input": 105,
+                "output": 40,
+                "cacheRead": 42191,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42336
+              },
+              {
+                "input": 246,
+                "output": 62,
+                "cacheRead": 42335,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42643
+              },
+              {
+                "input": 128,
+                "output": 122,
+                "cacheRead": 42642,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42892
+              },
+              {
+                "input": 61,
+                "output": 40,
+                "cacheRead": 42891,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42992
+              },
+              {
+                "input": 35,
+                "output": 225,
+                "cacheRead": 42991,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43251
+              },
+              {
+                "input": 75,
+                "output": 270,
+                "cacheRead": 43250,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 43595
+              }
+            ],
+            "resumed_tool_calls": 9,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 21304.57,
+                  "tokens": 15450,
+                  "tokens_per_s": 725.2
+                },
+                "eval": {
+                  "ms": 9466.72,
+                  "tokens": 233,
+                  "tokens_per_s": 24.61
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 57525.37,
+                  "tokens": 40159,
+                  "tokens_per_s": 698.11
+                },
+                "eval": {
+                  "ms": 6777.98,
+                  "tokens": 105,
+                  "tokens_per_s": 15.49
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 995.32,
+                  "tokens": 106,
+                  "tokens_per_s": 106.5
+                },
+                "eval": {
+                  "ms": 5652.03,
+                  "tokens": 95,
+                  "tokens_per_s": 16.81
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2597.48,
+                  "tokens": 1374,
+                  "tokens_per_s": 528.97
+                },
+                "eval": {
+                  "ms": 10119.01,
+                  "tokens": 176,
+                  "tokens_per_s": 17.39
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1079.41,
+                  "tokens": 105,
+                  "tokens_per_s": 97.28
+                },
+                "eval": {
+                  "ms": 5227.45,
+                  "tokens": 75,
+                  "tokens_per_s": 14.35
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1102.46,
+                  "tokens": 105,
+                  "tokens_per_s": 95.24
+                },
+                "eval": {
+                  "ms": 2607.31,
+                  "tokens": 40,
+                  "tokens_per_s": 15.34
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1249.84,
+                  "tokens": 246,
+                  "tokens_per_s": 196.83
+                },
+                "eval": {
+                  "ms": 3828.12,
+                  "tokens": 62,
+                  "tokens_per_s": 16.2
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1044.51,
+                  "tokens": 128,
+                  "tokens_per_s": 122.55
+                },
+                "eval": {
+                  "ms": 7269.26,
+                  "tokens": 122,
+                  "tokens_per_s": 16.78
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 854.72,
+                  "tokens": 61,
+                  "tokens_per_s": 71.37
+                },
+                "eval": {
+                  "ms": 2389.39,
+                  "tokens": 40,
+                  "tokens_per_s": 16.74
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 574.97,
+                  "tokens": 35,
+                  "tokens_per_s": 60.87
+                },
+                "eval": {
+                  "ms": 11698.92,
+                  "tokens": 225,
+                  "tokens_per_s": 19.23
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 712.86,
+                  "tokens": 75,
+                  "tokens_per_s": 105.21
+                },
+                "eval": {
+                  "ms": 11249.39,
+                  "tokens": 270,
+                  "tokens_per_s": 24.0
+                }
+              }
+            ],
+            "router_pid_stable": true,
+            "resumed_server_counts_match_client": false,
+            "performance_exclusion": "The first diagnostic attempt to list MCP servers made an extra model request in the same window. Compare the clean replay instead."
+          }
+        ],
+        "better-32-coding-clean": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": true,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 40.193,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 20291.34,
+                  "tokens": 14912,
+                  "tokens_per_s": 734.89
+                },
+                "eval": {
+                  "ms": 16294.83,
+                  "tokens": 476,
+                  "tokens_per_s": 29.21
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": 0,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29895,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "coding_quality": {
+              "changed_files": [
+                "src/checkpoint.py",
+                "src/replay.py"
+              ],
+              "tests_exit": 0,
+              "tests_run": 3,
+              "failed_tests": [],
+              "accepted": true
+            },
+            "resumed_exit": 0,
+            "resumed_wall_s": 141.402,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 39923,
+                "output": 75,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 39998
+              },
+              {
+                "input": 95,
+                "output": 85,
+                "cacheRead": 39997,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40177
+              },
+              {
+                "input": 108,
+                "output": 91,
+                "cacheRead": 40176,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 40375
+              },
+              {
+                "input": 1498,
+                "output": 194,
+                "cacheRead": 40374,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42066
+              },
+              {
+                "input": 105,
+                "output": 75,
+                "cacheRead": 42065,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42245
+              },
+              {
+                "input": 105,
+                "output": 36,
+                "cacheRead": 42244,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42385
+              },
+              {
+                "input": 35,
+                "output": 237,
+                "cacheRead": 42384,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42656
+              },
+              {
+                "input": 75,
+                "output": 182,
+                "cacheRead": 42655,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 42912
+              }
+            ],
+            "resumed_tool_calls": 7,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 63922.22,
+                  "tokens": 39923,
+                  "tokens_per_s": 624.56
+                },
+                "eval": {
+                  "ms": 5203.13,
+                  "tokens": 75,
+                  "tokens_per_s": 14.41
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1109.68,
+                  "tokens": 95,
+                  "tokens_per_s": 85.61
+                },
+                "eval": {
+                  "ms": 5064.69,
+                  "tokens": 85,
+                  "tokens_per_s": 16.78
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1168.65,
+                  "tokens": 108,
+                  "tokens_per_s": 92.41
+                },
+                "eval": {
+                  "ms": 6011.99,
+                  "tokens": 91,
+                  "tokens_per_s": 15.14
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 3413.16,
+                  "tokens": 1498,
+                  "tokens_per_s": 438.89
+                },
+                "eval": {
+                  "ms": 13835.73,
+                  "tokens": 194,
+                  "tokens_per_s": 14.02
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1226.95,
+                  "tokens": 105,
+                  "tokens_per_s": 85.58
+                },
+                "eval": {
+                  "ms": 4686.59,
+                  "tokens": 75,
+                  "tokens_per_s": 16.0
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1192.29,
+                  "tokens": 105,
+                  "tokens_per_s": 88.07
+                },
+                "eval": {
+                  "ms": 1927.89,
+                  "tokens": 36,
+                  "tokens_per_s": 18.67
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 598.41,
+                  "tokens": 35,
+                  "tokens_per_s": 58.49
+                },
+                "eval": {
+                  "ms": 14354.58,
+                  "tokens": 237,
+                  "tokens_per_s": 16.51
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1042.19,
+                  "tokens": 75,
+                  "tokens_per_s": 71.96
+                },
+                "eval": {
+                  "ms": 10356.29,
+                  "tokens": 182,
+                  "tokens_per_s": 17.57
+                }
+              }
+            ],
+            "router_pid_stable": true,
+            "resumed_server_counts_match_client": true
+          }
+        ],
+        "vcc-32-coding": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "index.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": true,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 4.075,
+            "compaction_server_timings": [],
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29895,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "coding_quality": {
+              "changed_files": [
+                "src/checkpoint.py",
+                "src/replay.py"
+              ],
+              "tests_exit": 1,
+              "accepted": false
+            },
+            "resumed_exit": 0,
+            "resumed_wall_s": 124.213,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 48730,
+                "output": 72,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 48802
+              },
+              {
+                "input": 74,
+                "output": 107,
+                "cacheRead": 48801,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 48982
+              },
+              {
+                "input": 3266,
+                "output": 37,
+                "cacheRead": 48981,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 52284
+              },
+              {
+                "input": 99,
+                "output": 214,
+                "cacheRead": 52283,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 52596
+              },
+              {
+                "input": 84,
+                "output": 52,
+                "cacheRead": 52595,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 52731
+              },
+              {
+                "input": 246,
+                "output": 121,
+                "cacheRead": 52730,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 53097
+              },
+              {
+                "input": 105,
+                "output": 52,
+                "cacheRead": 53096,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 53253
+              },
+              {
+                "input": 35,
+                "output": 200,
+                "cacheRead": 53252,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 53487
+              }
+            ],
+            "resumed_tool_calls": 9,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 63703.88,
+                  "tokens": 48730,
+                  "tokens_per_s": 764.95
+                },
+                "eval": {
+                  "ms": 3696.11,
+                  "tokens": 72,
+                  "tokens_per_s": 19.48
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 738.06,
+                  "tokens": 74,
+                  "tokens_per_s": 100.26
+                },
+                "eval": {
+                  "ms": 5346.45,
+                  "tokens": 107,
+                  "tokens_per_s": 20.01
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 5081.72,
+                  "tokens": 3266,
+                  "tokens_per_s": 642.7
+                },
+                "eval": {
+                  "ms": 1962.15,
+                  "tokens": 37,
+                  "tokens_per_s": 18.86
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 858.29,
+                  "tokens": 99,
+                  "tokens_per_s": 115.35
+                },
+                "eval": {
+                  "ms": 10884.03,
+                  "tokens": 214,
+                  "tokens_per_s": 19.66
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 834.38,
+                  "tokens": 84,
+                  "tokens_per_s": 100.67
+                },
+                "eval": {
+                  "ms": 2678.88,
+                  "tokens": 52,
+                  "tokens_per_s": 19.41
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1133.56,
+                  "tokens": 246,
+                  "tokens_per_s": 217.02
+                },
+                "eval": {
+                  "ms": 6434.71,
+                  "tokens": 121,
+                  "tokens_per_s": 18.8
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 904.87,
+                  "tokens": 105,
+                  "tokens_per_s": 116.04
+                },
+                "eval": {
+                  "ms": 2603.14,
+                  "tokens": 52,
+                  "tokens_per_s": 19.98
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 532.41,
+                  "tokens": 35,
+                  "tokens_per_s": 65.74
+                },
+                "eval": {
+                  "ms": 10004.57,
+                  "tokens": 200,
+                  "tokens_per_s": 19.99
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-32-medium": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "medium",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 63.397,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 20418.03,
+                  "tokens": 14441,
+                  "tokens_per_s": 707.27
+                },
+                "eval": {
+                  "ms": 39760.14,
+                  "tokens": 930,
+                  "tokens_per_s": 23.39
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 64.098,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33818,
+                "output": 129,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33947
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 53422.44,
+                  "tokens": 33818,
+                  "tokens_per_s": 633.03
+                },
+                "eval": {
+                  "ms": 7310.94,
+                  "tokens": 129,
+                  "tokens_per_s": 17.64
+                }
+              }
+            ],
+            "resumed_server_counts_match_client": true,
+            "router_pid_stable": true
+          }
+        ],
+        "better-32-medium": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 32768,
+            "calibrated_transcript_tokens": null,
+            "variant": "better-compaction.ts",
+            "repeat": 1,
+            "thinking": "medium",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 40.0,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 18972.04,
+                  "tokens": 14774,
+                  "tokens_per_s": 778.72
+                },
+                "eval": {
+                  "ms": 17638.38,
+                  "tokens": 600,
+                  "tokens_per_s": 34.02
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "compaction_usage": {
+              "input": 14774,
+              "output": 600,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 15374
+            },
+            "better_compaction_cache_read_tokens": 0,
+            "better_compaction_thinking_ms": 1619,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 29742,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 49.615,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 33861,
+                "output": 120,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33981
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 41535.7,
+                  "tokens": 33861,
+                  "tokens_per_s": 815.23
+                },
+                "eval": {
+                  "ms": 4726.79,
+                  "tokens": 120,
+                  "tokens_per_s": 25.39
+                }
+              }
+            ],
+            "resumed_server_counts_match_client": true,
+            "router_pid_stable": true
+          }
+        ],
+        "native-64": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 65536,
+            "calibrated_transcript_tokens": null,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 111.193,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 76183.19,
+                  "tokens": 59992,
+                  "tokens_per_s": 787.47
+                },
+                "eval": {
+                  "ms": 31462.45,
+                  "tokens": 564,
+                  "tokens_per_s": 17.93
+                }
+              }
+            ],
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 59678,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 49.881,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 34371,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 34401
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 44994.65,
+                  "tokens": 34371,
+                  "tokens_per_s": 763.89
+                },
+                "eval": {
+                  "ms": 1341.22,
+                  "tokens": 30,
+                  "tokens_per_s": 22.37
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "vcc-64": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 65536,
+            "calibrated_transcript_tokens": null,
+            "variant": "index.ts",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 4.111,
+            "compaction_server_timings": [],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": true,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 59678,
+            "markers_in_summary": 3,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 62.805,
+            "markers_after_restart": 3,
+            "resumed_usage": [
+              {
+                "input": 44419,
+                "output": 26,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 44445
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 57494.02,
+                  "tokens": 44419,
+                  "tokens_per_s": 772.58
+                },
+                "eval": {
+                  "ms": 1237.7,
+                  "tokens": 26,
+                  "tokens_per_s": 21.01
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-128": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 131072,
+            "calibrated_transcript_tokens": 130333,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 152.869,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 110939.26,
+                  "tokens": 96507,
+                  "tokens_per_s": 869.91
+                },
+                "eval": {
+                  "ms": 38522.63,
+                  "tokens": 540,
+                  "tokens_per_s": 14.02
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 83276,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 43.783,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 36167,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 36197
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 38963.44,
+                  "tokens": 36167,
+                  "tokens_per_s": 928.23
+                },
+                "eval": {
+                  "ms": 1289.01,
+                  "tokens": 30,
+                  "tokens_per_s": 23.27
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-192": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 196608,
+            "calibrated_transcript_tokens": 196308,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": null,
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": 263.176,
+            "compaction_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 207262.08,
+                  "tokens": 162092,
+                  "tokens_per_s": 782.06
+                },
+                "eval": {
+                  "ms": 52426.81,
+                  "tokens": 527,
+                  "tokens_per_s": 10.05
+                }
+              }
+            ],
+            "automatic_compaction_during_prime": false,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": true,
+            "tokens_before_reported_by_pi": 123641,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 53.969,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 36155,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 36185
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 48642.98,
+                  "tokens": 36155,
+                  "tokens_per_s": 743.27
+                },
+                "eval": {
+                  "ms": 1959.52,
+                  "tokens": 30,
+                  "tokens_per_s": 15.31
+                }
+              }
+            ],
+            "router_pid_stable": true
+          }
+        ],
+        "native-near-256": [
+          {
+            "profile": "coding-long-256k",
+            "target_fixture_tokens": 245760,
+            "calibrated_transcript_tokens": 245028,
+            "variant": "native",
+            "repeat": 1,
+            "thinking": "off",
+            "coding": false,
+            "prime": {
+              "exit": 0,
+              "wall_s": 804.536,
+              "assistant_responded": true,
+              "markers": 0,
+              "usage": [
+                {
+                  "input": 246942,
+                  "output": 15,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 0,
+                  "totalTokens": 246957
+                }
+              ],
+              "tool_calls": 0,
+              "server_timings": [
+                {
+                  "prompt_eval": {
+                    "ms": 388805.84,
+                    "tokens": 246942,
+                    "tokens_per_s": 635.13
+                  },
+                  "eval": {
+                    "ms": 1973.98,
+                    "tokens": 15,
+                    "tokens_per_s": 7.6
+                  }
+                },
+                {
+                  "prompt_eval": {
+                    "ms": 295803.2,
+                    "tokens": 214548,
+                    "tokens_per_s": 725.31
+                  },
+                  "eval": {
+                    "ms": 113613.65,
+                    "tokens": 674,
+                    "tokens_per_s": 5.93
+                  }
+                }
+              ],
+              "automatic_compactions_s": null
+            },
+            "compaction_exit": 0,
+            "compaction_wall_s_including_startup": null,
+            "compaction_server_timings": null,
+            "automatic_compaction_during_prime": true,
+            "compaction_extension_hook": false,
+            "better_compaction_cache_read_tokens": null,
+            "compaction_completed": true,
+            "compaction_rpc_error": null,
+            "compaction_rpc_response_received": false,
+            "tokens_before_reported_by_pi": 246957,
+            "markers_in_summary": 4,
+            "expected_markers": 4,
+            "resumed_exit": 0,
+            "resumed_wall_s": 39.8,
+            "markers_after_restart": 4,
+            "resumed_usage": [
+              {
+                "input": 32283,
+                "output": 30,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 32313
+              }
+            ],
+            "resumed_tool_calls": 0,
+            "resumed_server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 35069.93,
+                  "tokens": 32283,
+                  "tokens_per_s": 920.53
+                },
+                "eval": {
+                  "ms": 1230.63,
+                  "tokens": 30,
+                  "tokens_per_s": 24.38
+                }
+              }
+            ],
+            "router_pid_stable": true,
+            "compaction_wall_source": "server journal; Pi started and ended compaction under different JSON event names than this run's collector expected"
+          }
+        ]
+      },
+      "coding": {
+        "metalvault-v2": [
+          {
+            "fixture": "metalvault-duplicate-drop-id",
+            "source_sha256": "2b9e84b0fb55c13f13dc9078d7ef743477822924ac2357b62f3a6d328198321b",
+            "profile": "coding-long-256k",
+            "variant": "default",
+            "repeat": 1,
+            "cache_condition": "shared slot; classify using first request counters",
+            "initial_slot_cached_tokens": 0,
+            "power_profile": "low-power",
+            "wall_s": 210.139,
+            "pi_exit": 0,
+            "manual_interventions": 0,
+            "router_pid_stable": true,
+            "server_observed_calls": 8,
+            "server_counts_match_client": true,
+            "backend_cgroup_memory_bytes_start_end": [
+              4626448384,
+              5223682048
+            ],
+            "backend_cgroup_cpu_s": 2090.678,
+            "server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 18936.6,
+                  "tokens": 14966,
+                  "tokens_per_s": 790.32
+                },
+                "eval": {
+                  "ms": 2044.51,
+                  "tokens": 56,
+                  "tokens_per_s": 27.39
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2264.48,
+                  "tokens": 1154,
+                  "tokens_per_s": 509.61
+                },
+                "eval": {
+                  "ms": 2735.93,
+                  "tokens": 72,
+                  "tokens_per_s": 26.32
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2735.93,
+                  "tokens": 1681,
+                  "tokens_per_s": 614.42
+                },
+                "eval": {
+                  "ms": 1738.92,
+                  "tokens": 47,
+                  "tokens_per_s": 27.03
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1397.03,
+                  "tokens": 715,
+                  "tokens_per_s": 511.8
+                },
+                "eval": {
+                  "ms": 3656.26,
+                  "tokens": 95,
+                  "tokens_per_s": 25.98
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1135.04,
+                  "tokens": 161,
+                  "tokens_per_s": 141.85
+                },
+                "eval": {
+                  "ms": 2956.54,
+                  "tokens": 80,
+                  "tokens_per_s": 27.06
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1402.58,
+                  "tokens": 636,
+                  "tokens_per_s": 453.45
+                },
+                "eval": {
+                  "ms": 143554.06,
+                  "tokens": 3760,
+                  "tokens_per_s": 26.19
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1744.05,
+                  "tokens": 280,
+                  "tokens_per_s": 160.55
+                },
+                "eval": {
+                  "ms": 2652.14,
+                  "tokens": 74,
+                  "tokens_per_s": 27.9
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1125.3,
+                  "tokens": 228,
+                  "tokens_per_s": 202.61
+                },
+                "eval": {
+                  "ms": 13090.38,
+                  "tokens": 331,
+                  "tokens_per_s": 25.29
+                }
+              }
+            ],
+            "launcher_time_user_sys_max_rss_kib": [
+              "0.65 0.15 21544"
+            ],
+            "gpu_samples": 105,
+            "gpu_peak_temp_c_vram_mib_util_pct": [
+              56.84,
+              6841.0,
+              86.0
+            ],
+            "counts": {
+              "assistant_messages": 8,
+              "model_responses": 8,
+              "tool_calls": 7
+            },
+            "tool_counts": {
+              "bash": 5,
+              "read": 1,
+              "edit": 1
+            },
+            "pi_tokens": {
+              "input": 19821,
+              "output": 4515,
+              "cacheRead": 133967,
+              "cacheWrite": 0,
+              "max_total": 24065,
+              "first_input": 14966,
+              "first_cache_read": 0
+            },
+            "turn_start_to_first_client_delta_s": [
+              19.065,
+              2.341,
+              2.826,
+              1.473,
+              1.228,
+              1.492,
+              1.841,
+              1.23
+            ],
+            "automatic_compaction_wall_s": [],
+            "permission_questions": null,
+            "quality": {
+              "existing_suite_exit": 0,
+              "existing_tests_counted": {
+                "passed": 70,
+                "failed": 0
+              },
+              "regression_pass": true,
+              "changed_files": [
+                ".pi-lens-probe-home/bus-events.log",
+                ".pi-lens-probe-home/cascade.log",
+                ".pi-lens-probe-home/extension.log",
+                ".pi-lens-probe-home/latency.log",
+                ".pi-lens-probe-home/read-guard.log",
+                ".pi-lens-probe-home/review-graph.log",
+                ".pi-lens-probe-home/sessionstart.log",
+                ".pi-lens-probe-home/tree-sitter.log",
+                "metavault/duplicates.py"
+              ],
+              "accepted": false
+            }
+          }
+        ],
+        "metalvault-v1-seeded": [
+          {
+            "fixture": "metalvault-duplicate-drop-id",
+            "source_sha256": "2b9e84b0fb55c13f13dc9078d7ef743477822924ac2357b62f3a6d328198321b",
+            "profile": "coding-long-256k",
+            "variant": "default",
+            "requested_seed": 42,
+            "sampling_fixture_preserved": true,
+            "repeat": 1,
+            "cache_condition": "shared slot; classify using first request counters",
+            "initial_slot_cached_tokens": 0,
+            "power_profile": "low-power",
+            "wall_s": 135.07,
+            "pi_exit": 0,
+            "manual_interventions": 0,
+            "router_pid_stable": true,
+            "server_observed_calls": 7,
+            "server_counts_match_client": true,
+            "backend_cgroup_memory_bytes_start_end": [
+              4367507456,
+              4885778432
+            ],
+            "backend_cgroup_cpu_s": 1041.613,
+            "server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 17423.92,
+                  "tokens": 14508,
+                  "tokens_per_s": 832.65
+                },
+                "eval": {
+                  "ms": 2283.47,
+                  "tokens": 66,
+                  "tokens_per_s": 28.9
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 757.3,
+                  "tokens": 166,
+                  "tokens_per_s": 219.2
+                },
+                "eval": {
+                  "ms": 2758.59,
+                  "tokens": 73,
+                  "tokens_per_s": 26.46
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2038.99,
+                  "tokens": 1269,
+                  "tokens_per_s": 622.37
+                },
+                "eval": {
+                  "ms": 3394.15,
+                  "tokens": 98,
+                  "tokens_per_s": 28.87
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 7797.34,
+                  "tokens": 6352,
+                  "tokens_per_s": 814.64
+                },
+                "eval": {
+                  "ms": 12190.97,
+                  "tokens": 327,
+                  "tokens_per_s": 26.82
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2220.59,
+                  "tokens": 1467,
+                  "tokens_per_s": 660.64
+                },
+                "eval": {
+                  "ms": 53692.75,
+                  "tokens": 1444,
+                  "tokens_per_s": 26.89
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1123.7,
+                  "tokens": 124,
+                  "tokens_per_s": 110.35
+                },
+                "eval": {
+                  "ms": 2127.77,
+                  "tokens": 54,
+                  "tokens_per_s": 25.38
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 996.45,
+                  "tokens": 186,
+                  "tokens_per_s": 186.66
+                },
+                "eval": {
+                  "ms": 7549.76,
+                  "tokens": 202,
+                  "tokens_per_s": 26.76
+                }
+              }
+            ],
+            "launcher_time_user_sys_max_rss_kib": [
+              "0.00 0.01 3484"
+            ],
+            "gpu_samples": 68,
+            "gpu_peak_temp_c_vram_mib_util_pct": [
+              58.75,
+              6841.0,
+              96.0
+            ],
+            "counts": {
+              "assistant_messages": 7,
+              "model_responses": 7,
+              "tool_calls": 9
+            },
+            "tool_counts": {
+              "bash": 2,
+              "read": 6,
+              "edit": 1
+            },
+            "pi_tokens": {
+              "input": 24072,
+              "output": 2264,
+              "cacheRead": 119985,
+              "cacheWrite": 0,
+              "max_total": 26192,
+              "first_input": 14508,
+              "first_cache_read": 0
+            },
+            "turn_start_to_first_client_delta_s": [
+              17.651,
+              0.841,
+              2.109,
+              7.89,
+              2.314,
+              1.223,
+              1.096
+            ],
+            "automatic_compaction_wall_s": [],
+            "permission_questions": null,
+            "quality": {
+              "existing_suite_exit": 0,
+              "existing_tests_counted": {
+                "passed": 70,
+                "failed": 0
+              },
+              "regression_pass": true,
+              "changed_files": [
+                "metavault/duplicates.py"
+              ],
+              "accepted": true
+            }
+          }
+        ],
+        "metalvault-v2-seeded": [
+          {
+            "fixture": "metalvault-duplicate-drop-id",
+            "source_sha256": "2b9e84b0fb55c13f13dc9078d7ef743477822924ac2357b62f3a6d328198321b",
+            "profile": "coding-long-256k",
+            "variant": "default",
+            "requested_seed": 42,
+            "sampling_fixture_preserved": true,
+            "repeat": 1,
+            "cache_condition": "shared slot; classify using first request counters",
+            "initial_slot_cached_tokens": 0,
+            "power_profile": "low-power",
+            "wall_s": 74.09,
+            "pi_exit": 0,
+            "manual_interventions": 0,
+            "router_pid_stable": true,
+            "server_observed_calls": 9,
+            "server_counts_match_client": true,
+            "backend_cgroup_memory_bytes_start_end": [
+              4887511040,
+              5050421248
+            ],
+            "backend_cgroup_cpu_s": 531.766,
+            "server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 16684.54,
+                  "tokens": 14965,
+                  "tokens_per_s": 896.94
+                },
+                "eval": {
+                  "ms": 1976.34,
+                  "tokens": 58,
+                  "tokens_per_s": 29.35
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 488.76,
+                  "tokens": 28,
+                  "tokens_per_s": 57.29
+                },
+                "eval": {
+                  "ms": 1888.74,
+                  "tokens": 46,
+                  "tokens_per_s": 24.35
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1331.61,
+                  "tokens": 565,
+                  "tokens_per_s": 424.3
+                },
+                "eval": {
+                  "ms": 1715.77,
+                  "tokens": 44,
+                  "tokens_per_s": 25.64
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 650.34,
+                  "tokens": 66,
+                  "tokens_per_s": 101.49
+                },
+                "eval": {
+                  "ms": 1926.26,
+                  "tokens": 52,
+                  "tokens_per_s": 27.0
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1153.98,
+                  "tokens": 715,
+                  "tokens_per_s": 619.59
+                },
+                "eval": {
+                  "ms": 2956.44,
+                  "tokens": 86,
+                  "tokens_per_s": 29.09
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 820.3,
+                  "tokens": 134,
+                  "tokens_per_s": 163.35
+                },
+                "eval": {
+                  "ms": 4350.22,
+                  "tokens": 71,
+                  "tokens_per_s": 16.32
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1072.42,
+                  "tokens": 454,
+                  "tokens_per_s": 423.34
+                },
+                "eval": {
+                  "ms": 18741.2,
+                  "tokens": 548,
+                  "tokens_per_s": 29.24
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1530.59,
+                  "tokens": 283,
+                  "tokens_per_s": 184.9
+                },
+                "eval": {
+                  "ms": 2056.13,
+                  "tokens": 59,
+                  "tokens_per_s": 28.69
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 985.24,
+                  "tokens": 215,
+                  "tokens_per_s": 218.22
+                },
+                "eval": {
+                  "ms": 6533.18,
+                  "tokens": 182,
+                  "tokens_per_s": 27.86
+                }
+              }
+            ],
+            "launcher_time_user_sys_max_rss_kib": [
+              "0.22 0.07 22068"
+            ],
+            "gpu_samples": 37,
+            "gpu_peak_temp_c_vram_mib_util_pct": [
+              56.19,
+              6841.0,
+              94.0
+            ],
+            "counts": {
+              "assistant_messages": 9,
+              "model_responses": 9,
+              "tool_calls": 8
+            },
+            "tool_counts": {
+              "bash": 4,
+              "read": 3,
+              "edit": 1
+            },
+            "pi_tokens": {
+              "input": 17425,
+              "output": 1146,
+              "cacheRead": 130823,
+              "cacheWrite": 0,
+              "max_total": 18311,
+              "first_input": 14965,
+              "first_cache_read": 0
+            },
+            "turn_start_to_first_client_delta_s": [
+              16.821,
+              0.56,
+              1.437,
+              0.746,
+              1.231,
+              0.894,
+              1.143,
+              1.617,
+              1.063
+            ],
+            "automatic_compaction_wall_s": [],
+            "permission_questions": null,
+            "quality": {
+              "existing_suite_exit": 0,
+              "existing_tests_counted": {
+                "passed": 70,
+                "failed": 0
+              },
+              "regression_pass": true,
+              "changed_files": [
+                "metavault/duplicates.py"
+              ],
+              "accepted": true
+            }
+          }
+        ],
+        "metalvault-lean-seeded": [
+          {
+            "fixture": "metalvault-duplicate-drop-id",
+            "source_sha256": "2b9e84b0fb55c13f13dc9078d7ef743477822924ac2357b62f3a6d328198321b",
+            "profile": "coding-long-256k",
+            "variant": "lens-lean",
+            "requested_seed": 42,
+            "thinking": "default",
+            "sampling_fixture_preserved": true,
+            "repeat": 1,
+            "cache_condition": "shared slot; classify using first request counters",
+            "initial_slot_cached_tokens": 0,
+            "power_profile": "low-power",
+            "wall_s": 72.091,
+            "pi_exit": 0,
+            "manual_interventions": 0,
+            "router_pid_stable": true,
+            "server_observed_calls": 9,
+            "server_counts_match_client": true,
+            "backend_cgroup_memory_bytes_start_end": [
+              5052485632,
+              5051342848
+            ],
+            "backend_cgroup_cpu_s": 488.09,
+            "server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 17279.34,
+                  "tokens": 14964,
+                  "tokens_per_s": 866.01
+                },
+                "eval": {
+                  "ms": 2410.43,
+                  "tokens": 66,
+                  "tokens_per_s": 27.38
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 897.0,
+                  "tokens": 166,
+                  "tokens_per_s": 185.06
+                },
+                "eval": {
+                  "ms": 2663.89,
+                  "tokens": 74,
+                  "tokens_per_s": 27.78
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1050.69,
+                  "tokens": 175,
+                  "tokens_per_s": 166.56
+                },
+                "eval": {
+                  "ms": 2886.15,
+                  "tokens": 84,
+                  "tokens_per_s": 29.1
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1280.08,
+                  "tokens": 579,
+                  "tokens_per_s": 452.32
+                },
+                "eval": {
+                  "ms": 1501.12,
+                  "tokens": 46,
+                  "tokens_per_s": 30.64
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1291.41,
+                  "tokens": 715,
+                  "tokens_per_s": 553.66
+                },
+                "eval": {
+                  "ms": 7053.13,
+                  "tokens": 206,
+                  "tokens_per_s": 29.21
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 616.59,
+                  "tokens": 41,
+                  "tokens_per_s": 66.49
+                },
+                "eval": {
+                  "ms": 2751.05,
+                  "tokens": 81,
+                  "tokens_per_s": 29.44
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1199.51,
+                  "tokens": 340,
+                  "tokens_per_s": 283.45
+                },
+                "eval": {
+                  "ms": 10928.71,
+                  "tokens": 312,
+                  "tokens_per_s": 28.55
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 858.45,
+                  "tokens": 94,
+                  "tokens_per_s": 109.5
+                },
+                "eval": {
+                  "ms": 1850.69,
+                  "tokens": 50,
+                  "tokens_per_s": 27.02
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1032.63,
+                  "tokens": 148,
+                  "tokens_per_s": 143.32
+                },
+                "eval": {
+                  "ms": 6017.11,
+                  "tokens": 167,
+                  "tokens_per_s": 27.75
+                }
+              }
+            ],
+            "launcher_time_user_sys_max_rss_kib": [
+              "0.02 0.03 3892"
+            ],
+            "gpu_samples": 36,
+            "gpu_peak_temp_c_vram_mib_util_pct": [
+              55.25,
+              6841.0,
+              92.0
+            ],
+            "counts": {
+              "assistant_messages": 9,
+              "model_responses": 9,
+              "tool_calls": 9,
+              "failed_tools": 2
+            },
+            "tool_counts": {
+              "bash": 5,
+              "read": 3,
+              "edit": 1
+            },
+            "pi_tokens": {
+              "input": 17222,
+              "output": 1086,
+              "cacheRead": 131522,
+              "cacheWrite": 0,
+              "max_total": 18223,
+              "first_input": 14964,
+              "first_cache_read": 0
+            },
+            "turn_start_to_first_client_delta_s": [
+              17.45,
+              0.982,
+              1.121,
+              1.359,
+              1.369,
+              0.693,
+              1.283,
+              0.94,
+              1.117
+            ],
+            "automatic_compaction_wall_s": [],
+            "permission_questions": null,
+            "quality": {
+              "existing_suite_exit": 0,
+              "existing_tests_counted": {
+                "passed": 70,
+                "failed": 0
+              },
+              "regression_pass": true,
+              "changed_files": [
+                "metavault/duplicates.py"
+              ],
+              "accepted": true
+            }
+          }
+        ],
+        "metalvault-v2-off-seeded": [
+          {
+            "fixture": "metalvault-duplicate-drop-id",
+            "source_sha256": "2b9e84b0fb55c13f13dc9078d7ef743477822924ac2357b62f3a6d328198321b",
+            "profile": "coding-long-256k",
+            "variant": "default",
+            "requested_seed": 42,
+            "thinking": "off",
+            "sampling_fixture_preserved": true,
+            "repeat": 1,
+            "cache_condition": "shared slot; classify using first request counters",
+            "initial_slot_cached_tokens": 0,
+            "power_profile": "low-power",
+            "wall_s": 69.081,
+            "pi_exit": 0,
+            "manual_interventions": 0,
+            "router_pid_stable": true,
+            "server_observed_calls": 10,
+            "server_counts_match_client": true,
+            "backend_cgroup_memory_bytes_start_end": [
+              4550664192,
+              5431975936
+            ],
+            "backend_cgroup_cpu_s": 432.111,
+            "server_timings": [
+              {
+                "prompt_eval": {
+                  "ms": 18956.51,
+                  "tokens": 14907,
+                  "tokens_per_s": 786.38
+                },
+                "eval": {
+                  "ms": 2381.18,
+                  "tokens": 66,
+                  "tokens_per_s": 27.72
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 526.62,
+                  "tokens": 32,
+                  "tokens_per_s": 60.76
+                },
+                "eval": {
+                  "ms": 1381.15,
+                  "tokens": 41,
+                  "tokens_per_s": 29.69
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1321.92,
+                  "tokens": 567,
+                  "tokens_per_s": 428.92
+                },
+                "eval": {
+                  "ms": 2508.75,
+                  "tokens": 70,
+                  "tokens_per_s": 27.9
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 694.92,
+                  "tokens": 70,
+                  "tokens_per_s": 100.73
+                },
+                "eval": {
+                  "ms": 2089.91,
+                  "tokens": 58,
+                  "tokens_per_s": 27.75
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1060.37,
+                  "tokens": 131,
+                  "tokens_per_s": 123.54
+                },
+                "eval": {
+                  "ms": 1369.09,
+                  "tokens": 39,
+                  "tokens_per_s": 28.49
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1353.49,
+                  "tokens": 717,
+                  "tokens_per_s": 529.74
+                },
+                "eval": {
+                  "ms": 2210.17,
+                  "tokens": 64,
+                  "tokens_per_s": 28.96
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 854.88,
+                  "tokens": 91,
+                  "tokens_per_s": 106.45
+                },
+                "eval": {
+                  "ms": 2420.59,
+                  "tokens": 67,
+                  "tokens_per_s": 27.68
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1112.68,
+                  "tokens": 248,
+                  "tokens_per_s": 222.89
+                },
+                "eval": {
+                  "ms": 10481.17,
+                  "tokens": 295,
+                  "tokens_per_s": 28.15
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 2030.01,
+                  "tokens": 300,
+                  "tokens_per_s": 147.78
+                },
+                "eval": {
+                  "ms": 1893.64,
+                  "tokens": 51,
+                  "tokens_per_s": 26.93
+                }
+              },
+              {
+                "prompt_eval": {
+                  "ms": 1195.73,
+                  "tokens": 209,
+                  "tokens_per_s": 174.79
+                },
+                "eval": {
+                  "ms": 5749.41,
+                  "tokens": 157,
+                  "tokens_per_s": 27.31
+                }
+              }
+            ],
+            "launcher_time_user_sys_max_rss_kib": [
+              "0.02 0.03 3700"
+            ],
+            "gpu_samples": 35,
+            "gpu_peak_temp_c_vram_mib_util_pct": [
+              58.88,
+              6841.0,
+              88.0
+            ],
+            "counts": {
+              "assistant_messages": 10,
+              "model_responses": 10,
+              "tool_calls": 9
+            },
+            "tool_counts": {
+              "bash": 5,
+              "read": 3,
+              "edit": 1
+            },
+            "pi_tokens": {
+              "input": 17272,
+              "output": 908,
+              "cacheRead": 146161,
+              "cacheWrite": 0,
+              "max_total": 17924,
+              "first_input": 14907,
+              "first_cache_read": 0
+            },
+            "turn_start_to_first_client_delta_s": [
+              19.37,
+              0.832,
+              1.682,
+              1.047,
+              1.368,
+              1.706,
+              1.169,
+              1.201,
+              2.404,
+              1.296
+            ],
+            "automatic_compaction_wall_s": [],
+            "permission_questions": null,
+            "quality": {
+              "existing_suite_exit": 0,
+              "existing_tests_counted": {
+                "passed": 70,
+                "failed": 0
+              },
+              "regression_pass": true,
+              "changed_files": [
+                "metavault/duplicates.py"
+              ],
+              "accepted": true
+            }
+          }
+        ]
+      },
+      "candidates": {
+        "sol-mechanisms": [
+          {
+            "mechanism": "actionFusion",
+            "model": "coding-long-256k",
+            "provider": "llama.cpp",
+            "action_fusion_backend": "unsupported",
+            "relevant_tools": [
+              {
+                "name": "bash",
+                "source": "npm:pi-permission-modes@2.7.2",
+                "active": true
+              },
+              {
+                "name": "edit",
+                "source": "cli",
+                "active": true
+              },
+              {
+                "name": "write",
+                "source": "cli",
+                "active": true
+              }
+            ]
+          },
+          {
+            "mechanism": "observationPack",
+            "model": "coding-long-256k",
+            "provider": "llama.cpp",
+            "action_fusion_backend": null,
+            "relevant_tools": [
+              {
+                "name": "bash",
+                "source": "npm:pi-permission-modes@2.7.2",
+                "active": true
+              },
+              {
+                "name": "edit",
+                "source": "builtin",
+                "active": true
+              },
+              {
+                "name": "write",
+                "source": "builtin",
+                "active": true
+              }
+            ]
+          },
+          {
+            "mechanism": "evidencePreservingReducer",
+            "model": "coding-long-256k",
+            "provider": "llama.cpp",
+            "action_fusion_backend": null,
+            "relevant_tools": [
+              {
+                "name": "bash",
+                "source": "npm:pi-permission-modes@2.7.2",
+                "active": true
+              },
+              {
+                "name": "edit",
+                "source": "builtin",
+                "active": true
+              },
+              {
+                "name": "write",
+                "source": "builtin",
+                "active": true
+              }
+            ]
+          },
+          {
+            "mechanism": "onlineContextCompact",
+            "model": "coding-long-256k",
+            "provider": "llama.cpp",
+            "action_fusion_backend": null,
+            "relevant_tools": [
+              {
+                "name": "bash",
+                "source": "npm:pi-permission-modes@2.7.2",
+                "active": true
+              },
+              {
+                "name": "edit",
+                "source": "builtin",
+                "active": true
+              },
+              {
+                "name": "write",
+                "source": "builtin",
+                "active": true
+              }
+            ]
+          }
+        ],
+        "sol-observationpack": [
+          {
+            "fixture": "mock provider; real isolated Pi, ObservationPack and recall",
+            "exit": 0,
+            "mock_requests": 1,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 18069,
+            "placeholder_present": false,
+            "original_survived_on_disk": true,
+            "marker_recalled": false
+          }
+        ],
+        "sol-observationpack-direct": [
+          {
+            "fixture": "mock provider; real isolated Pi, ObservationPack and recall",
+            "exit": 0,
+            "mock_requests": 2,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 1401,
+            "placeholder_present": true,
+            "original_survived_on_disk": true,
+            "marker_recalled": true,
+            "tool_in_schema": true
+          }
+        ],
+        "sol-observationpack-error": [
+          {
+            "fixture": "mock provider; real isolated Pi, ObservationPack and failed tool result",
+            "exit": 0,
+            "mock_requests": 1,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 18069,
+            "placeholder_present": false,
+            "original_survived_on_disk": true,
+            "marker_recalled": false,
+            "tool_in_schema": true
+          }
+        ],
+        "vcc-recall": [
+          {
+            "fixture": "mock provider; isolated VCC compaction, process restart and tool recall",
+            "compaction_completed": false,
+            "exit": 0,
+            "mock_requests": 2,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 18069,
+            "original_survived_on_disk": true,
+            "marker_recalled": true
+          }
+        ],
+        "vcc-recall-after-compaction": [
+          {
+            "fixture": "mock provider; isolated VCC compaction, process restart and tool recall",
+            "compaction_completed": true,
+            "compaction_error": null,
+            "exit": 0,
+            "mock_requests": 2,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 0,
+            "original_survived_on_disk": true,
+            "marker_recalled": true
+          }
+        ],
+        "vcc-recall-after-fork": [
+          {
+            "fixture": "mock provider; isolated VCC compaction, fork and tool recall",
+            "compaction_completed": true,
+            "compaction_error": null,
+            "exit": 0,
+            "mock_requests": 2,
+            "tool_stdout_original_bytes": 18069,
+            "tool_stdout_projected_bytes": 0,
+            "original_survived_on_disk": true,
+            "marker_recalled": true
+          }
+        ],
+        "sampling-probe": [
+          {
+            "seed_received": 42,
+            "model_received": "coding-long-256k",
+            "exit": 0
+          }
+        ],
+        "workflow-continuity": [
+          {
+            "provider": "mocked HTTP, real Pi tools and extension UI",
+            "changed_fixture": true,
+            "workspace_undo_restored_bytes": true,
+            "undo_confirmation_supplied": true,
+            "git_clean_after_undo": true,
+            "todo_restored_after_restart": true
+          }
+        ],
+        "codemode-boundary": [
+          {
+            "provider": "mocked HTTP, real nested Pi tools",
+            "build": {
+              "exit": 0,
+              "declared": true,
+              "script": {
+                "written": true,
+                "inside": true,
+                "sibling": false
+              },
+              "file_exists": true,
+              "permission_denied": false
+            },
+            "plan": {
+              "exit": 0,
+              "declared": true,
+              "script": null,
+              "file_exists": false,
+              "permission_denied": true
+            }
+          }
+        ],
+        "hashline-permission": [
+          {
+            "provider": "mocked HTTP, real Hashline and Pi permission hooks",
+            "build": {
+              "exit": 0,
+              "replace_declared": true,
+              "native_edit_declared": false,
+              "made_project_change": true,
+              "skill_readable": true,
+              "skill_line_anchored": true,
+              "attempted_skill_write": true,
+              "skill_unchanged": true,
+              "project_tool_denied": false
+            },
+            "plan": {
+              "exit": 0,
+              "replace_declared": true,
+              "native_edit_declared": false,
+              "made_project_change": false,
+              "skill_readable": false,
+              "skill_line_anchored": false,
+              "attempted_skill_write": false,
+              "skill_unchanged": true,
+              "project_tool_denied": true
+            }
+          }
+        ]
+      },
+      "native_profile": "coding-long-256k",
+      "sampling_probe_mode": "local mocked HTTP, no live inference",
+      "smoke": {
+        "live_inference_pass": true,
+        "sandbox_pass": true,
+        "lens_logs_outside_project": true
+      },
+      "lens_language_server": {
+        "provider": "mocked HTTP, real Pi Lens and TypeScript language server",
+        "language_server_version": "6.1.0",
+        "typescript_version": "5.9.3",
+        "exit": 0,
+        "symbol_found": true,
+        "ts2322_reported": true
+      },
+      "doctor": {
+        "extension_pins_pass": true,
+        "sandbox_dependencies_present": true,
+        "router_preset_pass": true,
+        "conflict_detection": {
+          "exit": 0,
+          "context": true,
+          "edit": true
+        }
+      },
+      "reviewed_relay_mcp": {
+        "http": {
+          "websearch": 200,
+          "context7": 200,
+          "github": 200
+        },
+        "deep_research_status": 403,
+        "read_url_status": 403
+      },
+      "reviewed_release_lifecycle": {
+        "same_release_on_reinstall": true,
+        "doctor_pass": true,
+        "backed_up_and_restored_launcher": true,
+        "repair_restored_launcher": true,
+        "status_reports_pinned_version": true
+      },
+      "dates": [
+        "2026-11-20",
+        "2026-11-21"
+      ],
+      "reviewed_mcp_catalog": {
+        "connected_servers": [
+          "websearch",
+          "context7",
+          "github"
+        ],
+        "web_url_reading_exposed_to_model": false,
+        "model_requests": 0
+      },
+      "mocked_auto_compaction_event_probe": {
+        "automatic_event_pair_captured": true,
+        "requests": 2,
+        "exit": 0
+      }
+    }
+  },
+  "candidate_startup": [
+    {
+      "candidate": "better",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": true,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "vcc",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": true,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "sol",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": null,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "hash",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": true,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "fff",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": true,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "footer",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": true,
+      "errors_in_startup": false,
+      "extra_commands": []
+    },
+    {
+      "candidate": "condense",
+      "exit": 0,
+      "rpc_response": true,
+      "registered_command": null,
+      "errors_in_startup": false,
+      "extra_commands": [
+        "pruner"
+      ]
+    }
+  ],
+  "candidate_tools": {
+    "native_mock": {
+      "fixture": "generated transcript, mock streaming backend; no LLM",
+      "rpc_success": true,
+      "compaction_entry": true,
+      "fixture_token_target": 32768,
+      "wall_s_including_startup": 4.268,
+      "model_http_requests": 1,
+      "tokens_before_reported_by_pi": 29742,
+      "markers_in_summary": 4,
+      "expected_markers": 4,
+      "exit": 0,
+      "rpc_failure": null
+    },
+    "hashline": {
+      "anchor_observed": true,
+      "unicode_indent_crlf": true,
+      "stale_unchanged": true,
+      "invalid_unchanged": true,
+      "multiline_replace": true,
+      "insertion": true,
+      "deletion": true,
+      "multi_file_isolation": true,
+      "large_file_tail_edit": true
+    },
+    "fff": {
+      "startup_to_finder_ms": 2411,
+      "fuzzy_found": true,
+      "fuzzy_ms": 4,
+      "grep_found": true,
+      "grep_ms": 4,
+      "gitignore_respected": true,
+      "symlink_respected": true,
+      "rg_found": true,
+      "rg_ms": 11,
+      "new_found": true,
+      "changed_found": true,
+      "deleted_absent": true
+    },
+    "vcc_offline": {
+      "fixture": "generated transcript, offline local extraction",
+      "rpc_success": true,
+      "compaction_entry": true,
+      "fixture_token_target": 32768,
+      "wall_s_including_startup": 4.902,
+      "model_http_requests": 0,
+      "tokens_before_reported_by_pi": 29742,
+      "markers_in_summary": 4,
+      "expected_markers": 4,
+      "exit": 0,
+      "rpc_failure": null
+    }
+  }
+}

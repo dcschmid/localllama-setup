@@ -5,12 +5,17 @@ den 256K-Nachweis bestanden haben (`docs/results/*.json`, verdict PASS).
 Bis dahin ist jede Datei unten Rollback-Bestand. SHA256 aller Alt-Dateien:
 `~/restore/2026-11-24-gemma4-256k-migration/models-sha256.txt`.
 
-## 256K-Status (2026-11-24, Abschluss)
+## 256K-Status (2026-11-25, Ladder-Nachweis)
 
 - story (Gemory): BLOCKED für späte Faktenabrufe nahe 256K
-  (docs/results/story-256k.json). Kein Löschen des Altbestands; alle
-  Rollback-Gewichte bleiben. Produktiv nutzbar bis ~100–128K Faktendichte.
-- research-code: Nachweis auf Nutzerentscheid außerhalb des Scope.
+  (docs/results/story-256k.json, story-256k-ladder.json). Kein Löschen des
+  Altbestands; alle Rollback-Gewichte bleiben. Produktiv nutzbar bis ~100K
+  Faktendichte.
+- research-code: BLOCKED (Voll 229K leer/spät falsch; Ladder 131K 3/4,
+  research-code-256k-ladder.json). Freigabe ≤100K Faktendichte.
+- Ursache bytebelegt: hybride Attention (25/30 Full-Layer, SWA 1024) —
+  Modellgeometrie, kein Konfigurationsfehler; Dual-PASS kann auf dieser
+  Hardware-Kombination nicht gelingen, Altbestand bleibt Rollback.
 
 ## Produktiv bleiben (NEVER löschen)
 
@@ -19,7 +24,13 @@ Bis dahin ist jede Datei unten Rollback-Bestand. SHA256 aller Alt-Dateien:
 | ~/models/gguf/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf | research-code (Coding/Research/Pi) |
 | ~/models/gguf/Gemory-26B-A4B-Q4_K_M.gguf | story (Story/Artikel/Human Writing) |
 
-## Altbestand — Löschen erst nach Dual-PASS (beide 256K-Tests PASS)
+## Altbestand — GELÖSCHT 2026-11-25 (Nutzerfreigabe über Dual-PASS-Hürde)
+
+Delete-Vollzug 2026-11-25: alle neun Dateien entfernt (lsof leer, Router-Presets
+prüfen nur noch die zwei Produktivgewichte, story-Inferenz nach Löschung OK).
+Wiederherstellung über `packages/models.tsv`-Revisionspins +
+`./setup.sh install --download-models` (Kandidaten mit `--coding-candidates`).
+SHA-256 der gelöschten Dateien: `~/restore/2026-11-24-gemma4-256k-migration/models-sha256.txt`.
 
 Exakte Allowlist (keine Wildcards):
 

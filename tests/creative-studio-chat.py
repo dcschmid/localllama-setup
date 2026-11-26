@@ -30,6 +30,7 @@ def plan(f, pid, name, prose):
 class ChatTests(unittest.TestCase):
     def test_intent_and_formatted_words(self):
         self.assertEqual(chats.outline_count("Erstelle eine Story-Bibel und plane acht Kapitel."), 8)
+        self.assertEqual(chats.outline_count("Write one chapter."), 1)
         self.assertEqual(chats.length_range("Schreibe Kapitel 1 mit 1.200 Wörtern."), {"minimum": 1080, "maximum": 1320})
         for text, action in (("Erstelle ein Titelbild.", "image"), ("Recherchiere die Quellen.", "research"),
                              ("Schreibe einen Artikel.", "article"), ("Prüfe Kapitel 1 nach meiner Story-Bibel.", "editorial")):
@@ -43,6 +44,7 @@ class ChatTests(unittest.TestCase):
             ("Verbessere Kapitel 4 unserer Planung und überprüfe die Folgen für Kapitel 7.", False, "planning-revise"),
             ("Mara soll in Kapitel 7 eine andere Entscheidung treffen.", True, "planning-revise"),
             ("Ist das Ende glaubwürdig?", False, "planning-discuss"),
+            ("das bitte umplanenn und korregieren und wir schreiben auf Deutsch bitte die ganze Geschichte", False, "planning-revise"),
             ("Lass uns die drei Schlüssel noch einmal durchgehen.", False, "planning-discuss"),
             ("Überarbeite unsere Story-Bibel.", False, "planning-revise"),
             ("Prüfe Kapitel 1 auf grammatische Fehler.", True, "editorial"),
@@ -90,7 +92,7 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(chats.requested_action(real, "auto", has_plan=True, has_prose=False, story_context=True), "planning-audit")
         starts = (real, "Die Planung ist freigegeben. Erstelle jetzt die Geschichte.", "Passt so, bitte vollständig schreiben.",
                   "Starte die Manuskriptproduktion.", "Schreibe jetzt alle drei Kapitel.", "Generate the full story now.",
-                  "I approve the outline. Start writing.", "Geschichte vollständig erstellen")
+                  "I approve the outline. Start writing.", "Geschichte vollständig erstellen", "Ja so ist das gut dann leg los")
         for text in starts:
             for state in ("proposal", "approved"):
                 with self.subTest(text=text[:50], state=state):
@@ -131,7 +133,8 @@ class ChatTests(unittest.TestCase):
             dispatch(f, sid, "Prüfe die Planung auf Widersprüche.", mode="auto")
             self.assertEqual([kind for kind, *_ in jobs(f)], ["planning"])
             self.assertEqual(f.req(f"/production/{pid}")["plan"] is not None, True)
-            first = dispatch(f, sid, real, mode="auto")
+            release = "Ja so ist das gut dann leg los"
+            first = dispatch(f, sid, release, mode="auto")
             self.assertTrue(first["handled"] and first["production_id"] and first["project_id"] == pid)
             info = f.req(f"/production/{pid}")
             self.assertTrue(info["approved"])
@@ -140,12 +143,12 @@ class ChatTests(unittest.TestCase):
             self.assertEqual(info["job"]["id"], first["production_id"])
             self.assertEqual([kind for kind, *_ in jobs(f)], ["planning", "story"])
             # Repeating the instruction neither duplicates the job nor starts another review.
-            again = dispatch(f, sid, real, mode="auto")
+            again = dispatch(f, sid, "Ja so ist das gut dann leg los", mode="auto")
             self.assertEqual(again["production_id"], first["production_id"])
             self.assertEqual([kind for kind, *_ in jobs(f)], ["planning", "story"])
             with closing(sqlite3.connect(f.db)) as conn:
                 said = [row[0] for row in conn.execute("SELECT content FROM messages WHERE session_id=? AND role='user' ORDER BY created,rowid", (sid,))]
-            self.assertIn(real, said)
+            self.assertIn(release, said)
 
     def test_chat_release_without_a_stored_plan_does_not_start_production(self):
         real = "Die Planung ist freigegeben. Erstelle jetzt die vollständige Geschichte mit allen Kapiteln und Illustrationen."
@@ -156,6 +159,32 @@ class ChatTests(unittest.TestCase):
             self.assertNotIn("production_id", answer)
             with closing(sqlite3.connect(f.db)) as conn:
                 self.assertEqual(conn.execute("SELECT count(*) FROM jobs WHERE service='production' AND json_extract(payload,'$.kind')='story'").fetchone()[0], 0)
+
+    def test_natural_story_commission_routes_to_persistent_automatic_planning(self):
+        texts = [
+            ("Erstelle eine deutschsprachige Riff-Racers-Geschichte mit dem Titel Donner über Thunderforge. "
+             "3 Kapitel mit jeweils 900–1.200 Wörtern. Im Mittelpunkt stehen Mika Blaze, Rhythm Kaur und ein Rennen auf Thunderforge.", "de", "auto_production"),
+            ("Create an English-language story titled Thunder over Thunderforge. 3 chapters of 900–1,200 words each.", "en", "auto_production"),
+            ("Erstelle eine deutsche Geschichte mit 3 Kapiteln. Zeige mir zuerst die Planung.", "de", "approval_first"),
+            ("Erstelle die ganze Geschichte", "de", "auto_production"),
+        ]
+        for text, language, production_mode in texts:
+            with self.subTest(text=text), Fixture() as f:
+                sid = f.req("/sessions", {"title": "Autonome Geschichte"})["id"]
+                request_id = uuid.uuid4().hex
+                first = dispatch(f, sid, text, mode="auto", request_id=request_id)
+                again = dispatch(f, sid, text, mode="auto", request_id=request_id)
+                self.assertEqual(first["id"], again["id"])
+                with closing(sqlite3.connect(f.db)) as conn:
+                    rows = conn.execute("SELECT payload FROM jobs WHERE service='production'").fetchall()
+                self.assertEqual(len(rows), 1)
+                payload = json.loads(rows[0][0])
+                self.assertEqual(payload["kind"], "plan")
+                self.assertEqual(payload["language"], language)
+                self.assertEqual(payload["production_mode"], production_mode)
+                self.assertEqual(payload["count"], 3 if "3" in text else 8)
+                if "900" in text:
+                    self.assertEqual((payload["minimum"], payload["maximum"]), (900, 1200))
 
     def test_chat_owned_content_follows_folder_and_trash(self):
         with Fixture() as f:

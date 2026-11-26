@@ -265,10 +265,13 @@ def profile_default(conn, current, *, project_id=None, session_id=None):
     saved = profile(conn, folder) if folder else None
     if not saved:
         return current
-    updated = dict(current)
-    if saved.get("template"):
-        updated["template"] = saved["template"]
-    for key in ("ratio", "palette"):
+    import creative_studio_visual as visual
+    key = saved.get("template")
+    if key not in visual.TEMPLATES:
+        description = " ".join((key or "", saved.get("style", "")))
+        key = visual.choice(description, riff=bool(visual.RIFF.search(description))) or current["template"]
+    updated = {**current, **visual.template(key)}
+    for key in ("ratio", "palette", "style"):
         if saved.get(key):
             updated[key] = saved[key]
     return updated
@@ -278,6 +281,7 @@ def seed_profile(conn, project_id, current):
     """Persist the folder standard onto a not-yet-authored story profile."""
     updated = profile_default(conn, current, project_id=project_id)
     if updated is not current and not current.get("version"):
+        updated["version"] = 1
         conn.execute("""UPDATE projects SET meta=json_set(meta,'$.visual_profile',json(?))
             WHERE id=? AND json_extract(meta,'$.visual_profile.version')=0""",
                      (json.dumps(updated, ensure_ascii=False), project_id))

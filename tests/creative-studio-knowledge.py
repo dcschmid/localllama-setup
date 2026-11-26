@@ -251,8 +251,29 @@ class KnowledgeTests(unittest.TestCase):
                                                                  "version": 0}, session_id=chat)
                 self.assertEqual(default["template"], "riff-racers-low-poly")
                 self.assertEqual(default["ratio"], "16:9")
+                self.assertEqual(default["model"], "moss")
+                self.assertEqual(default["style"], "Low-Poly Concept Art")
                 authored = {"template": "graphic-novel", "ratio": "1:1", "version": 4}
                 self.assertEqual(knowledge.profile_default(connection, authored, session_id=chat), authored)
+        finally:
+            sys.path.pop()
+
+    def test_legacy_named_visual_profile_keeps_its_style_and_matching_model(self):
+        folder = self.folder("Riff Racers")
+        self.knowledge(folder, action="add", category="visual-profile", title="Visual Profile", status="confirmed",
+            content=json.dumps({"template": "Riff Racers Default", "ratio": "", "style": "Low-Poly Concept Art, retro 3D game look",
+                                "palette": "Metall und Orange"}))
+        chat = self.req("/sessions", {"title": "Donner", "folder_id": folder})["id"]
+        sys.path.insert(0, str(BACKEND.parent))
+        import creative_studio_knowledge as knowledge
+        try:
+            with self.connection() as connection:
+                profile = knowledge.profile_default(connection, {"template": "anima-aesthetic", "version": 0}, session_id=chat)
+                self.assertEqual(profile["template"], "riff-racers-low-poly")
+                self.assertEqual(profile["model"], "moss")
+                self.assertEqual(profile["ratio"], "16:9")
+                self.assertEqual(profile["style"], "Low-Poly Concept Art, retro 3D game look")
+                self.assertEqual(profile["palette"], "Metall und Orange")
         finally:
             sys.path.pop()
 

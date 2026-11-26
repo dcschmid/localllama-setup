@@ -79,6 +79,24 @@ Die Nachricht „Die Planung ist freigegeben. Erstelle jetzt die vollständige G
 
 **Prüfung:** Die echte Nachricht erzeugt auf einer Kopie der Live-Datenbank einen Produktionsauftrag für Plan Version 2 (`PRODUCTION_RUNNING`). Dafür liefen Modell- und Bilddienst nicht. Neue Tests in `tests/creative-studio-chat.py` (Tabelle der Formulierungen, End-to-End gegen einen Serverprozess) und `tests/creative-studio-production.mjs` (Firefox: Chat-Freigabe und Ein-Klick-Button).
 
+## Nachtrag: Produktionsstopp ohne bestätigten Konflikt (25. November 2026, Chat „Schatten über Thunderforge“, Job `40cfe855…`)
+
+Der automatische Lauf lag bei Kapitel 1 von 3 mit `pause_reason=blocker`, obwohl die Prüfdetails keinen bestätigten Handlungskonflikt enthielten. Alle Kontinuitätshinweise (Jax' Position, Schattenläufer/Schrotthiff, zweiter Riss, Kontrollpanelen, im Chaos) standen als `unconfirmed` ohne Verifikation im gespeicherten Stand; sie haben nie blockiert. Der einzige bestätigte Befund war die Grammatikstelle „Wir müssen hier raus kommen“ (`severity=automatic`). Die Oberfläche meldete zugleich „3 Textfehler automatisch korrigiert“ – die gemeldeten Korrekturen gehörten zu Version 2, die angezeigten Findings zur Version 3.
+
+**Ursache, belegt gegen die Live-Datenbank (`documents.version=3`, Review-Hash = SHA-256 von Version 3):**
+
+- `patch_text` in `creative_studio_correction.py` vergleicht geschützte Fakten vor und nach einem Edit. Die vom Modell korrekt vorgeschlagene Zusammenrückung „raus kommen“ → „rauskommen“ lag innerhalb einer Anführung `„…“`, die `fiction_audit.PROTECTED` als Faktspan erfasst. Der Faktenvergleich schlug fehl, der Edit fiel mit `production_patch_invalid` durch, der zweite Durchlauf verwarf die leere Patchliste. Der Fehler war nicht die Korrektur, sondern ihre Validierung.
+- Danach standen die zwei erlaubten Durchläufe verbraucht (`passes=2`) am Endpunkt von `improve`. Der Gate hielt den verbliebenen bestätigten, aber nicht gelösten Grammatikbefund weiterhin für entscheidungsbedürftig, obwohl kein `blocking`-Befund existierte. Der Retry-Knopf bot bereits „Sprachkorrektur erneut versuchen“ an – dieselbe Lage stoppte ohne Nutzereingriff und verlangte trotzdem eine Entscheidung.
+- Ein getragener Befund, dessen Zitat im gespeicherten Text nicht mehr steht (hier die bereits geschriebene Zusammenrückung), blieb als Blocking-Fund sichtbar. Das ist derselbe Defekt wie bei `e4ac232`, nur am Ende des Ablaufs statt beim Retry.
+
+**Änderungen:**
+
+- `patch_text` lässt die bestimmte Leerzeichen-Kürzung eines bestätigten Befehls durch, wenn Menge, Namen und geschützte Fakten unverändert bleiben und nur Leerzeichen die beiden Schreibweisen trennen. Alle übrigen Sicherheitsregeln, besonders Zahlen, Namen und Tatsachen in Fakten-Editen, bleiben unverändert.
+- Der Endpunkt in `improve` synchronisiert vor der Entscheidung: Ein getragener Sprachbefund, dessen Zitat nicht mehr im Text steht, wandert mit `stale_defects` in `quality_history`, der Prüfschritt holt die Version neu. Nur ein im Text belegter, bestätigter Befund hält weiter an.
+- Die Weboberfläche unterscheidet: „Ein bestätigter Konflikt braucht eine Entscheidung“ erscheint nur, wenn weder Sprach-Wiederholung noch Neuprüfung ansteht. Bei Sprachfehlern steht „Ein bestätigter Sprachfehler lässt sich automatisch korrigieren. Die Produktion wird danach fortgesetzt.“
+
+**Prüfungen:** `tests/creative-studio-production.py` ergänzt je einen Fall für die Anführungs-Kürzung, unbestätigte Hinweise, getragenen behobenen Befund, verbrauchte Runden mit Repair und den echten Konflikt (43 Python-Fälle plus 8 Chat-Fälle grün). Der Live-Job wurde nach Backup (`~/.local/state/creative-studio/backups/creative-studio-20261125T184926.tar.gz`) mit neuem `revision_batches`-Eintrag neu eingereiht und nicht gelöscht.
+
 ## Nachtrag: „Story-Planung fehlgeschlagen“ ohne Ursache (25. November 2026, Chat „Schatten über Thunderforge“)
 
 Der Planungsjob `ded21870…` endete mit `story_input_invalid`, dem Schritt `planning` und dem Detail `{"exception": "OrganizerError"}`. Die Oberfläche zeigte nur den allgemeinen Satz „Der Schritt konnte nicht abgeschlossen werden“.
@@ -105,3 +123,43 @@ Der Planungsjob `ded21870…` endete mit `story_input_invalid`, dem Schritt `pla
 - Die Kapitelüberschriften dieser Planung heißen nur „Kapitel 1“ bis „Kapitel 3“. Das ist eine inhaltliche Schwäche des Modells und kein Fehler im Ablauf.
 
 Die neuen Python-Tests (`PlanningTests` in `tests/creative-studio-production.py`) decken deutsche und englische Planung, die Skill-Auflösung, die Feldfehler, die Ergänzung, die Wiederaufnahme eines gespeicherten Fehlerstands, ungültige und abgeschnittene Modellantworten, das Zeitlimit und einen fehlgeschlagenen Speichervorgang ab. Der Firefox-Test prüft die Fehleranzeige.
+
+## Donner über Thunderforge – Freigabe besprochener Änderungen
+
+Untersuchung am 26.11.2026 anhand der lokalen SQLite-Datenbank `~/.local/share/creative-studio/studio.sqlite3`, ausschließlich lesend. Der betroffene Chat hat die ID `c80a6eb2a3ff4ae1a8a266bb20e4efc7`, das aktive Story-Projekt die ID `5cedb2fa9cf64561b028f2a78416c4d7`.
+
+| Prüffrage | Gespeicherter Nachweis |
+| --- | --- |
+| Strukturierter Änderungsvorschlag vorhanden? | Job `3369576475f2417d898433a07c7e7be0` hat `kind=planning`, `action=discuss`, `language=de`. Sein Ergebnis enthält ausschließlich `step`, `answer` und `evidence`. Die korrigierte Kapitelstruktur steht in `answer`. |
+| Neue Planversion vorhanden? | Für dieses Projekt existiert ausschließlich Version 1, Titel `Thunderforges Echo`, Sprache `de`, drei Kapitel. |
+| Neue Version freigegeben? | Version 1 hat den Zustand `proposal`. Eine zweite Version und deren Freigabe fehlen. |
+| Freigabesatz klassifiziert? | Die Nachricht „Ja so ist das gut dann leg los“ erzeugte Job `caab272447d24fe0be729e5612c95085` mit `kind=planning`, `action=discuss`. |
+| Weshalb kein Produktionsjob? | Der Freigabeausdruck „so ist das gut“ fehlte in `APPROVAL_CLAUSE`. `WEAK_START` erkannte „leg los“ nur am Klauselanfang. Der Satz erreichte damit den Produktionszweig in `_resolve_chat_first` nicht. |
+| Weshalb „Story besprechen“? | Bei vorhandenem Plan fiel der Satz in `requested_action` auf `planning-discuss`. `enqueue_planning` speichert für diese Aktion den Chat-Platzhalter „Story besprechen“. |
+| Weshalb englischer Text? | Der Ergebnistext von `caab…` enthält nach deutscher Einleitung den englischen Satz „The roar of the crowd…“. Dieser Satz steht bereits wortgleich in `chapters[0].opening` von Version 1. Aufruf und Skillnachweis nennen `de`, Human Writing mit `style-de.md` und Story Writing mit Planungs- und Bibelreferenzen. Die wortgleiche Passage legt eine Übernahme aus englischem Planmaterial trotz deutscher Aufrufsprache nahe. Der damalige Besprechungspfad validierte nur die strukturierte Hülle und das Antwortfeld. Die interne Entscheidung des Modells lässt sich daraus nicht feststellen. |
+
+Der Änderungswunsch mit „umplanenn“ und „korregieren“ wurde ebenfalls als `discuss` gespeichert. Die bisherigen Muster erkannten diese Wörter nicht als Planrevision. Die damalige `planning`-Implementierung beendete jede Besprechung nach dem Speichern der Antwort. Sie konnte keine Planversion erzeugen.
+
+Die Korrektur verwendet die vorhandene Planversionstabelle. Neue Vorschläge behalten den Tabellenzustand `proposal`. Unter `impact.proposal` stehen Story-ID, ursprüngliche und vorgeschlagene Version sowie `pending_approval`. `impact.chapter_changes` und `impact.bible_changes` enthalten die Änderungen, `versions` und `findings` die Auswirkungen auf vorhandene Kapitel. Eine Freigabe aktualisiert den Vorschlagsstatus auf `approved`. Dieses additive Format erhält die bestehenden API-Aufrufer.
+
+Bei vorhandenem Plan liefert auch eine Besprechung strukturierte Feldänderungen. Die Anwendung validiert sie gegen das Planungsschema und prüft den geänderten Plan erneut auf belegbare Restkonflikte. Befunde zum ursprünglichen Plan bleiben als `source_findings` erhalten. Restkonflikte und Auswirkungen auf vorhandene Texte erfordern weiterhin die Bestätigung im Plan-Dialog. Eine zwischenzeitlich geänderte Planversion lässt den Auftrag mit `production_plan_changed` scheitern. Freigegebene Planinhalte werden durch eine Besprechung ausschließlich über eine neue Version ergänzt.
+
+Die Story-Sprache folgt einer ausdrücklichen Sprachangabe, anschließend der gespeicherten Planung beziehungsweise den Story-Einstellungen. Die Sprachprüfung der Besprechungsantwort verwendet die vorhandenen Human-Writing-Marker auf Absätzen ab 25 Wörtern. Sie ist heuristisch. Ein erkannter Sprachfehler beendet den Auftrag vor dem Speichern einer neuen Planversion. Die Manuskriptproduktion verwendet weiterhin ihre vorhandenen Sprachprüfungen.
+
+Die Regressionen verwenden isolierte Datenbanken und ersetzte Modellantworten. Sie prüfen den konkreten Freigabesatz über HTTP, wiederholte Startanfragen, unveränderte freigegebene Ausgangsversionen, persistierte Vorschlagsdaten, besprochene Änderungen ohne Auditbefund, ungültige Kapitelwerte und die Zurückweisung einer englischen Besprechungsantwort. Eine vollständige Produktion mit echten Modell- und Bilddiensten wurde für diesen Fix nicht ausgeführt. Der lokale Dienst und der untersuchte Bestandschat wurden durch diese Quellcodeänderung nicht aktualisiert.
+
+Verifiziert mit `python3 tests/creative-studio-chat.py` (8 Tests), `python3 tests/creative-studio-production.py` (46 Tests), `python3 tests/creative-studio-story.py` (2 Tests), Python-Kompilierung und `git diff --check`. `semgrep scan --config p/python --metrics off --quiet libexec/creative_studio_chat.py libexec/creative_studio_production.py` endete mit Exitcode 0 ohne Befunde. Die Chat-Fixture meldete außerdem ResourceWarnings zu offenen SQLite-Verbindungen.
+
+## Autonome Produktion und lokale Aktivierung am 26.11.2026
+
+Natürliche Story-Aufträge starten jetzt `auto_production`. Der vorhandene Planungsjob übernimmt Titel, Sprache, Kapitelzahl, Wortbereich und Ordnerwissen. Er prüft den Plan samt Weltkanon und verarbeitet höchstens zwei strukturierte Überarbeitungen. Bestätigte Ordnerfakten bleiben in ihrer Ablage geschützt. Die konsistente Planung wird versioniert und auf Grundlage des ursprünglichen Produktionsauftrags automatisch freigegeben. Der bestehende Job wechselt unter derselben ID in die Manuskriptproduktion. Das Anfragekennzeichen bleibt für Wiederholungen erhalten. Bei „Zeige mir zuerst die Planung“ wartet der Entwurf auf Zustimmung und startet danach automatisch.
+
+Die Planreparatur verwendet eingeschränkte Abschnitts-, Kapitel- und Feldwerte im JSON-Schema. Abgelehnte Antworten bleiben in der geschützten Diagnose. Das gespeicherte ältere Visual Profile „Riff Racers Default“ wird anhand seines Stils dem passenden technischen Profil zugeordnet. MOSS, Low-Poly-Stil, Palette und 16:9 werden gemeinsam übernommen.
+
+Die isolierte echte Abnahme unter `output/autonomous-thunderforge-final` wurde auf Nutzerwunsch abgebrochen. Job `6a455710043647a4a1deee8239687bc9`, Projekt `a2ef36781be64a85ba99705380d7e4f7` und Chat `08f2f5792c4c4c32812287748bdc1a57` dokumentieren eine Benutzeranweisung und einen Produktionsjob. Der Plan wurde nach zwei automatischen Überarbeitungen als Version 1 freigegeben. Der Abbruch erfolgte während der Textprüfung von Kapitel 1. Die vollständige Drei-Kapitel-Abnahme mit vier Bildern und Exporten ist damit nicht bestanden und bleibt unvollständig. Die vorhandenen Daten und `aborted-test.json` liegen lokal im Ausgabeverzeichnis. Der frühere, an der Planreparatur gescheiterte Versuch bleibt ebenfalls lokal erhalten.
+
+Erfolgreich geprüft wurden 9 Chat-, 49 Produktions-, 16 Ordnerwissen- und 2 Story-Tests sowie Python-Kompilierung, Frontend-Build und der Firefox-Produktionsablauf einschließlich natürlicher Einzelanweisung bis zum fertigen Fixture-Manuskript. Die Fixture ersetzt Modell- und Bildantworten. Sie belegt keinen vollständigen echten Drei-Kapitel-Lauf. Die Testumgebung meldete bestehende ResourceWarnings zu SQLite-Verbindungen beziehungsweise temporären Ressourcen.
+
+Semgrep meldete in den geänderten Python-Modulen keine Befunde. Im Hauptprogramm markierte die allgemeine Regel einen bestehenden `subprocess.run`-Aufruf des lokalen Linters. Die Argumentliste verwendet einen festen Skriptpfad und eine begrenzte Sprachauswahl, der Benutzertext geht über stdin, und der Aufruf verwendet keine Shell. Der gemeldete Command-Injection-Verdacht ist damit an dieser Stelle nicht bestätigt.
+
+Die geprüften Quellen und der Webbuild wurden über den vorhandenen Update-Einstieg lokal installiert. `creative-studio.service` wurde neu gestartet und `/api/health` lieferte `ok=true`. Eine Sicherung der zuvor installierten geänderten Module und des Webbuilds liegt lokal unter `output/autonomous-thunderforge-final/installed-backup-20261126T073246`. Die isolierten Testdienste auf 18700 und 18702 wurden beendet. Die weitere echte Abnahme übernimmt der Nutzer in der Oberfläche auf Port 8700.

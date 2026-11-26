@@ -185,6 +185,178 @@ def planning_model(*, empty_bible=False, outline=None, repair=None, seen=None):
     return model
 
 
+class AutonomousProductionTests(unittest.TestCase):
+    def test_automatic_plan_handoff_keeps_job_and_survives_worker_restart(self):
+        with Fixture() as f:
+            f.create()
+            seen = []
+            f.worker.call = planning_model(seen=seen)
+            identifier = f.change("propose", brief="Write a full three chapter story.", language="en", count=3,
+                minimum=38, maximum=60, production_mode="auto_production", title="Thunder over Thunderforge")["id"]
+            for _ in range(10):
+                f.worker.tick()
+                job = production.job_state(f.conn, f.pid)
+                if json.loads(job["payload"])["kind"] == "story":
+                    break
+            self.assertEqual(job["id"], identifier)
+            payload = json.loads(job["payload"])
+            self.assertEqual(payload["kind"], "story", job["result"])
+            self.assertEqual(payload["plan"]["title"], "Thunder over Thunderforge")
+            self.assertEqual(payload["mode"], "automatic")
+            self.assertFalse(payload["review_art"])
+            self.assertEqual(production.latest_plan(f.conn, f.pid)["state"], "approved")
+            # Reload the backend against the persisted checkpoint as after a server restart.
+            f.backend = runpy.run_path(str(ROOT / "libexec/llama-creative-studio"))["cmd_serve"].__globals__
+            f.worker = f.backend["production_worker"]
+            f.worker.call = fake_model
+            f.worker.image_verify = lambda image, size: f.backend["png_dimensions"](png(size), size)
+            f.worker.image_bytes = lambda image, size: png(size)
+            job = f.drive(checkpoints=250)
+            self.assertEqual(job["state"], "completed", job["result"])
+            result = json.loads(job["result"])
+            self.assertEqual(len(result["chapter_results"]), 3)
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='production'").fetchone()[0], 1)
+            self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 4)
+            self.assertTrue({"manuscript.md", "manuscript.mdx", "manuscript.zip", "manifest.json"} <= result["exports"]["files"].keys())
+
+    def test_folder_canon_is_used_in_planning_and_repair_budget_is_bounded(self):
+        with Fixture() as f:
+            f.create()
+            with f.conn:
+                f.conn.execute("INSERT INTO folders(id,name,updated) VALUES(?,?,1)", ("d" * 32, "Riff Racers"))
+                f.conn.execute("UPDATE sessions SET folder_id=? WHERE id=?", ("d" * 32, f.sid))
+                production.knowledge.mutate(f.conn, "d" * 32, {"action": "add", "category": "world", "title": "Strecke",
+                    "content": "Thunderforge führt über eine orbital schwebende Schmiede.", "status": "confirmed"})
+            underlying = planning_model()
+            seen = []
+            def model(lang, role, prompt, tokens, schema=None):
+                seen.append(prompt)
+                props = schema["properties"]
+                if "unresolved" in props:
+                    if "changes" not in props:
+                        return json.dumps({"unresolved": ["Bestätigte Weltfakten widersprechen dem Kapitel."]}), PLAN_PROOF, "stop"
+                    return json.dumps({"changes": [{"section": "chapter", "chapter": "1", "field": "beats", "value": "Handlung 1 korrigiert " + str(len(seen))}], "unresolved": []}), PLAN_PROOF, "stop"
+                if "Critique this completed" in prompt:
+                    return json.dumps({"findings": [{"chapter": "1", "quote": "Handlung 1", "issue": "Kanonkonflikt bleibt offen."}]}), PLAN_PROOF, "stop"
+                return underlying(lang, role, prompt, tokens, schema)
+            f.worker.call = model
+            identifier = f.change("propose", brief="Write the story on Thunderforge.", language="en", count=3,
+                                  production_mode="auto_production")["id"]
+            job = f.drive(checkpoints=20)
+            self.assertEqual(job["state"], "paused", job["result"])
+            self.assertEqual(json.loads(job["result"])["plan_passes"], 2)
+            self.assertEqual(sum("Verify each cited planning defect" in p for p in seen), 2)
+            self.assertTrue(all("orbital schwebende Schmiede" in p for p in seen))
+            self.assertEqual(len(production.managed_docs(f.conn, f.pid)), 0)
+
+    def test_plan_errors_are_repaired_and_explicit_approval_starts_production(self):
+        with Fixture() as f:
+            f.create()
+            underlying = planning_model()
+            reviewed = 0
+            def model(lang, role, prompt, tokens, schema=None):
+                nonlocal reviewed
+                props = schema["properties"]
+                if "unresolved" in props:
+                    return json.dumps({"changes": [{"section": "chapter", "chapter": "1", "field": "beats",
+                        "value": "Die Qualifikation beginnt, das Finale folgt erst im letzten Kapitel."}], "unresolved": []}), PLAN_PROOF, "stop"
+                if "Critique this completed" in prompt:
+                    reviewed += 1
+                    findings = [{"chapter": "1", "quote": "Handlung 1", "issue": "Das Finale beginnt zu früh."}] if reviewed == 1 else []
+                    return json.dumps({"findings": findings}), PLAN_PROOF, "stop"
+                return underlying(lang, role, prompt, tokens, schema)
+            f.worker.call = model
+            identifier = f.change("propose", brief="Erstelle eine Geschichte. Zeige mir zuerst die Planung.", count=3,
+                                  language="de", production_mode="approval_first")["id"]
+            job = f.drive()
+            self.assertEqual(job["state"], "completed", job["result"])
+            self.assertEqual(json.loads(job["result"])["plan_passes"], 1)
+            self.assertEqual(reviewed, 2)
+            info = production.plan_info(f.conn, f.pid)
+            self.assertFalse(info["approved"])
+            self.assertIn("Qualifikation", info["plan"]["chapters"][0]["beats"])
+            started = f.change("approve-plan", version=info["version"])
+            self.assertIn("id", started)
+            self.assertEqual(json.loads(production.job_state(f.conn, f.pid)["payload"])["kind"], "story")
+
+
+class PlanDiscussionRegressionTests(unittest.TestCase):
+    def test_discussed_revision_is_persisted_and_approved_for_production(self):
+        import creative_studio_chat as chats
+        with Fixture() as f:
+            f.create()
+            base = example_plan()
+            base["language"] = "de"
+            first = f.change("save-plan", plan=base)["version"]
+            f.change("approve-plan", version=first)
+            source = production.planning_source(f.conn, f.pid, f.sid)
+            request = "das bitte umplanenn und korregieren und wir schreiben auf Deutsch bitte die ganze Geschichte"
+            action = chats.requested_action(request, "story", has_plan=True, has_prose=False, story_context=True)
+            self.assertEqual(action, "planning-revise")
+            with f.conn:
+                queued, _ = production.enqueue_planning(f.conn, f.pid, f.sid, action.removeprefix("planning-"),
+                    request, "en", source, f.backend["store_message"], "c" * 32, "fingerprint")
+            f.worker.tick()
+            job = f.conn.execute("SELECT * FROM jobs WHERE id=?", (queued["id"],)).fetchone()
+            self.assertEqual(job["state"], "completed", job["result"])
+            info = production.plan_info(f.conn, f.pid)
+            self.assertEqual(info["version"], first + 1)
+            self.assertFalse(info["approved"])
+            self.assertEqual(info["plan"]["language"], "de")
+            self.assertEqual(info["impact"]["proposal"], {"story_id": f.pid, "original_version": first,
+                "proposed_version": first + 1, "status": "pending_approval"})
+            self.assertEqual(info["impact"]["changed_chapters"], [1])
+            self.assertTrue(info["impact"]["chapter_changes"])
+            self.assertEqual(json.loads(f.conn.execute("SELECT plan FROM story_production_plans WHERE version=1").fetchone()[0]), base)
+            self.assertEqual(chats.production_command("Ja so ist das gut dann leg los", "proposal"), "automatic")
+            f.change("approve-plan", version=info["version"])
+            job_id = f.change("start", version=info["version"], mode="automatic")["id"]
+            payload = json.loads(f.conn.execute("SELECT payload FROM jobs WHERE id=?", (job_id,)).fetchone()[0])
+            self.assertEqual(payload["plan"]["language"], "de")
+            self.assertEqual(production.plan_info(f.conn, f.pid)["stage"], "PRODUCTION_RUNNING")
+
+    def test_discussion_changes_need_no_audit_finding_and_invalid_values_fail(self):
+        with Fixture() as f:
+            f.create()
+            f.change("save-plan", plan=example_plan())
+            def model(lang, role, prompt, tokens, schema=None):
+                if "answer" not in schema["properties"]:
+                    return json.dumps({"findings": []}), {}, "stop"
+                return json.dumps({"answer": "Der Schlüssel wird später entdeckt.", "findings": [], "changes": [
+                    {"section": "bible", "chapter": "0", "field": "main_plot", "value": "Die Entdeckung folgt im Finale."}
+                ]}), {}, "stop"
+            f.worker.call = model
+            with f.conn:
+                production.enqueue_planning(f.conn, f.pid, f.sid, "discuss", "Was ändern wir am Finale?", "en",
+                    production.planning_source(f.conn, f.pid, f.sid), f.backend["store_message"], "c" * 32, "input")
+            f.worker.tick()
+            self.assertEqual(f.conn.execute("SELECT state FROM jobs WHERE id=?", ("c" * 32,)).fetchone()[0], "completed")
+            info = production.plan_info(f.conn, f.pid)
+            self.assertEqual(info["version"], 2)
+            self.assertIn("main_plot", info["impact"]["bible_changes"])
+            with self.assertRaises(production.organizer.OrganizerError):
+                production.changed_plan(info["plan"], [{"section": "chapter", "chapter": "1", "field": "beats", "value": "x" * 10000}])
+
+    def test_english_discussion_output_fails_before_saving_a_revision(self):
+        with Fixture() as f:
+            f.create()
+            base = example_plan()
+            base["language"] = "de"
+            f.change("save-plan", plan=base)
+            def model(lang, role, prompt, tokens, schema=None):
+                return json.dumps({"answer": "The roar of the crowd and the neon glare overwhelm Mika as she prepares for her first qualifying lap. She looks at the track and knows that she has to win the race.",
+                    "findings": [], "changes": [{"section": "chapter", "chapter": "1", "field": "beats", "value": "Mika fährt das Finale."}]}), {}, "stop"
+            f.worker.call = model
+            with f.conn:
+                production.enqueue_planning(f.conn, f.pid, f.sid, "discuss", "Wie ändern wir das Finale?", "en",
+                    production.planning_source(f.conn, f.pid, f.sid), f.backend["store_message"], "c" * 32, "input")
+            f.worker.tick()
+            row = f.conn.execute("SELECT * FROM jobs WHERE id=?", ("c" * 32,)).fetchone()
+            self.assertEqual(row["state"], "failed")
+            self.assertEqual(json.loads(row["result"])["error"], "story_language_mismatch")
+            self.assertEqual(production.plan_info(f.conn, f.pid)["version"], 1)
+
+
 class PlanningTests(unittest.TestCase):
     brief = "Eine Geschichte über zwei Rennfahrer und ein verlorenes Rennen."
 
@@ -670,6 +842,77 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(production.public_job(production.job_state(f.conn, f.pid))["image_state"], "waiting_gpu")
             self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 1)
 
+    def reviewed(self, f, findings, passes):
+        """Park a real reviewed checkpoint with injected findings and a chosen revision round count."""
+        f.create()
+        f.change("save-plan", plan=example_plan())
+        f.change("approve-plan", version=1)
+        identifier = f.change("start", version=1, mode="automatic", review_art=False)["id"]
+        for _ in range(12):
+            f.worker.tick()
+            job = production.job_state(f.conn, f.pid)
+            if production.public_job(job)["phase"] == "reviewed":
+                break
+        else:
+            self.fail("Chapter never reached the reviewed checkpoint")
+        body = production.managed_docs(f.conn, f.pid)[0]["body"]
+        result = json.loads(job["result"])
+        located = [{**finding, **(span := production.intact_span(body, finding["quote"]) or {})}
+                   for finding in findings]
+        result["current"]["review"].update(findings=located,
+                                           unverified_findings=sum(item["status"] == "unconfirmed" for item in located))
+        result["current"].update(passes=passes, automatic_version=result["current"]["version"])
+        with f.conn:
+            f.conn.execute("UPDATE jobs SET result=? WHERE id=?", (production.dump(result), identifier))
+        return identifier
+
+    def test_only_unconfirmed_notes_do_not_stop_the_production(self):
+        notes = [{"chapter": "1", "quote": BLOCK, "related_quote": "", "issue": "Position not confirmed.",
+                  "correction": "", "category": "continuity", "severity": "note", "status": "unconfirmed"},
+                 {"chapter": "1", "quote": "the last bell", "related_quote": "", "issue": "Unverified reading.",
+                  "correction": "", "category": "naturalness", "severity": "note", "status": "unconfirmed"}]
+        with Fixture() as f:
+            self.reviewed(f, notes, passes=2)
+            job = f.drive()
+            result = json.loads(job["result"])
+            self.assertNotEqual(result.get("pause_reason"), "blocker")
+            self.assertNotEqual(result.get("step"), "reviewed")
+
+    def test_a_repaired_carried_over_defect_never_stays_a_blocking_finding(self):
+        stale = {"chapter": "1", "quote": "raus kommen", "related_quote": "", "issue": "Repaired before the last save.",
+                 "correction": "", "category": "grammar", "severity": "automatic", "status": "confirmed"}
+        with Fixture() as f:
+            self.reviewed(f, [stale], passes=2)
+            f.worker.tick()
+            result = json.loads(production.job_state(f.conn, f.pid)["result"])
+            self.assertEqual(result["step"], "auditing")
+            self.assertNotIn("review", result["current"])
+            self.assertEqual(result["current"]["quality_history"][-1]["stale_defects"], ["raus kommen"])
+
+    def test_a_confirmed_simple_defect_after_two_rounds_offers_repair_not_a_decision(self):
+        defect = {"chapter": "1", "quote": "the last bell", "related_quote": "", "issue": "fixture verb",
+                  "correction": "", "category": "grammar", "severity": "automatic", "status": "confirmed"}
+        with Fixture() as f:
+            self.reviewed(f, [defect], passes=2)
+            job = f.drive()
+            self.assertEqual(job["state"], "paused")
+            report = production.public_job(job)
+            self.assertEqual(report["pause_reason"], "blocker")
+            self.assertTrue(report["language_retry_available"])
+            self.assertFalse(report.get("recheck_available"))
+
+    def test_confirmed_central_conflict_still_pauses_after_two_rounds(self):
+        with Fixture() as f:
+            self.reviewed(f, [{"chapter": "1", "quote": BLOCK, "related_quote": PROSE[:40],
+                               "issue": "Two bible facts disagree.", "correction": "Needs an author choice.",
+                               "category": "continuity", "severity": "blocking", "status": "confirmed"}], passes=2)
+            job = f.drive()
+            self.assertEqual(job["state"], "paused")
+            report = production.public_job(job)
+            self.assertEqual(report["pause_reason"], "blocker")
+            self.assertFalse(report.get("language_retry_available") or report.get("recheck_available"))
+            self.assertEqual(report["detail"][0]["quote"], BLOCK)
+
     def test_invalid_rewrite_output_has_two_attempts_and_keeps_reviewed_prose(self):
         with Fixture() as f:
             f.start()
@@ -681,7 +924,7 @@ class ProductionTests(unittest.TestCase):
             result = json.loads(job["result"])
             result["current"]["review"]["findings"] = [{
                 "status": "confirmed", "severity": "automatic", "category": "grammar",
-                "start": 0, "end": 24, "quote": PROSE[:24], "issue": "Fixture correction."
+                "start": 0, "end": len(BLOCK), "quote": BLOCK, "issue": "Fixture correction."
             }]
             with f.conn:
                 f.conn.execute("UPDATE jobs SET result=? WHERE id=?", (production.dump(result), job["id"]))
@@ -1194,6 +1437,19 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(f.conn.execute("SELECT count(*) FROM jobs WHERE service='image'").fetchone()[0], 3)
             f.change("approve-art", job_id=identifier)
             self.assertEqual(f.drive()["state"], "completed")
+
+    def test_confirmed_spacing_join_inside_a_quotation_still_patches(self):
+        with Fixture() as f:
+            skill = f.worker.fiction()[0]
+            text = ("Der Hafen lag ruhig da. \u201eWir m\u00fcssen hier raus kommen, wir sind gefangen!\u201c rief Juri. "
+                    "Die Crew schwieg.")
+            join = {"before": "\u201eWir m\u00fcssen hier raus kommen, wir sind gefangen!\u201c",
+                    "after": "\u201eWir m\u00fcssen hier rauskommen, wir sind gefangen!\u201c"}
+            self.assertEqual(production.patch_text(text, [join], [], skill), text.replace(join["before"], join["after"]))
+            spoken = {"before": "\u201eWir m\u00fcssen hier raus kommen, wir sind gefangen!\u201c",
+                      "after": "\u201eWir m\u00fcssen hier rauskommen, wir sind frei!\u201c"}
+            with self.assertRaisesRegex(production.PlanError, "production_patch_invalid"):
+                production.patch_text(text, [spoken], [], skill)
 
     def test_plan_version_and_fidelity(self):
         with Fixture() as f:

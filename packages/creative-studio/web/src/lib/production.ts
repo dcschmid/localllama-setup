@@ -69,7 +69,7 @@ const chapterFields = { title: 'Titel', perspective: 'Erzählperspektive', openi
   conflict: 'Hauptkonflikt', beats: 'Handlungsschritte', development: 'Charakterentwicklung', revelations: 'Neue Informationen',
   tension: 'Spannungsentwicklung', closing: 'Kapitelabschluss', continuity: 'Kontinuitätsinformationen', illustration: 'Illustrationsmotiv' };
 const number = new Intl.NumberFormat('de');
-const stateLabels: Record<string, string> = { planning: 'Story-Planung', impact: 'Planauswirkungen prüfen',
+const stateLabels: Record<string, string> = { planning: 'Geschichte wird geplant', planning_chapters: 'Geschichte wird geplant', planning_review: 'Planung wird geprüft', planning_repair: 'Planung wird verbessert', impact: 'Planauswirkungen prüfen',
   planning_audit: 'Planung wird geprüft', planning_revise: 'Planung wird überarbeitet', planning_discuss: 'Antwort wird vorbereitet',
   planning_import: 'Planung wird übernommen', planning_done: 'Story-Planung',
   plan_ready: 'Story-Planung liegt vor', writing: 'Kapitel wird geschrieben', auditing: 'Human Writing prüft das Kapitel',
@@ -77,8 +77,8 @@ const stateLabels: Record<string, string> = { planning: 'Story-Planung', impact:
   illustrating: 'Illustration vorbereiten', image_prompt: 'Bildszene wird ausgewählt', image_queue: 'Bildauftrag wird angelegt',
   image_wait: 'Bildauftrag wartet', image_archive: 'Bilddatei wird geprüft', finalizing: 'Kapitel wird abgeschlossen',
   awaiting_chapter: 'Kapitel zur Freigabe', advance: 'Kapitel abgeschlossen', cover: 'Titelbild',
-  manuscript: 'Manuskript wird geprüft', export_generation: 'Exportdateien werden erstellt',
-  final_validation: 'Manuskript und Dateien werden validiert', art_variant: 'Bildvariante erzeugen', art_review: 'Illustrationen zur Sichtprüfung', done: 'Geschichte fertig' };
+  manuscript: 'Manuskript wird geprüft', export_generation: 'Manuskript wird exportiert',
+  final_validation: 'Manuskript und Dateien werden validiert', art_variant: 'Bildvariante erzeugen', art_review: 'Illustrationen zur Sichtprüfung', done: 'Produktion abgeschlossen' };
 
 const failureLabels: Record<string, string> = {
   writing: 'Schreiben fehlgeschlagen', auditing: 'Textprüfung fehlgeschlagen', reviewed: 'Automatische Überarbeitung fehlgeschlagen',
@@ -280,7 +280,11 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
   if (phase === 'image_wait' && job.image_state === 'submitting') label = 'Bildauftrag wird an den Bilddienst übergeben';
   if (job.status === 'incomplete') label = 'Produktion unvollständig';
   if (job.status === 'failed') label = failureLabels[phase] ?? label + ' fehlgeschlagen';
-  if (job.number && job.total && job.number <= job.total) label = `Kapitel ${job.number} von ${job.total} · ${label}`;
+  if (job.number && job.total && job.number <= job.total) {
+    label = phase === 'writing' ? `Kapitel ${job.number} von ${job.total} wird geschrieben`
+      : ['reviewed', 'rewrite_audit'].includes(phase) ? `Kapitel ${job.number} wird verbessert`
+      : `Kapitel ${job.number} von ${job.total} · ${label}`;
+  }
   if (job.status === 'paused' && job.pause_reason !== 'chapter') label = 'Pausiert · ' + label;
   if (job.status === 'cancelled') label = 'Produktion abgebrochen';
   const controls = job.status === 'paused' && job.pause_reason === 'art' ?
@@ -309,7 +313,8 @@ export function productionCard(job: ProductionJob | undefined, chapters: Map<str
     ${job.proposal_stale ? '<p>Die Planung hat sich während der Prüfung geändert. Prüfe die aktuelle Version erneut.</p>' : ''}
     ${job.last_completed && job.step !== 'advance' ? `<p>Kapitel ${job.last_completed} abgeschlossen.</p>` : ''}
     ${job.corrections ? `<p>${job.corrections} Textfehler automatisch korrigiert.</p>` : ''}
-    ${job.pause_reason === 'blocker' && !job.recheck_available ? '<p>Ein bestätigter Konflikt braucht eine Entscheidung.</p>' : ''}
+    ${job.pause_reason === 'blocker' && !job.recheck_available && !job.language_retry_available ? '<p>Ein bestätigter Konflikt braucht eine Entscheidung.</p>' : ''}
+    ${job.language_retry_available ? '<p>Ein bestätigter Sprachfehler lässt sich automatisch korrigieren. Die Produktion wird danach fortgesetzt.</p>' : ''}
     ${job.recheck_available ? '<p>Das gespeicherte Kapitel kann mit der aktualisierten Qualitätsprüfung fortgesetzt werden.</p>' : ''}
     ${(skillMarkup(job.skills) || job.findings?.length || Array.isArray(job.detail)) ? '<details data-job-detail="current-quality"><summary>Prüfdetails</summary>'
       + skillMarkup(job.skills) + (job.findings?.length ? issueMarkup(job.findings) :

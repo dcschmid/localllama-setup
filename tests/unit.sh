@@ -9,7 +9,7 @@ no()   { printf 'FAIL %s\n' "$1"; fail=$((fail+1)); }
 
 # 1. manifest shape
 rows=$(awk -F'\t' 'NR>1 && NF==12 && $5~/^[0-9a-f]{64}$/ && $4~/^[0-9]+$/' packages/models.tsv | wc -l)
-[[ $rows == 3 ]] && ok "models.tsv: 3 valid rows" || no "models.tsv rows=$rows"
+[[ $rows == 2 ]] && ok "models.tsv: 2 valid rows" || no "models.tsv rows=$rows"
 
 # 2. dry-run works on a scratch HOME with stub binaries
 home=$(mktemp -d); trap 'rm -rf "$home"' EXIT
@@ -22,6 +22,11 @@ printf '#!/bin/sh\nexec node "$@"\n' > "$home/bin/uv"
 PATH="$home/bin:$PATH" HOME="$home" LLAMA_SETUP_CACHE="$home/cache" \
     bash setup.sh --dry-run --download-models --download-cuda > "$home/out.log" 2>&1 && rc=0 || rc=$?
 [[ $rc == 0 ]] && ok "setup.sh --dry-run on empty HOME" || { cat "$home/out.log"; no "dry-run rc=$rc"; }
+if [[ ! -e $home/.local && ! -e $home/.config && ! -e $home/.pi && ! -e $home/models && ! -e $home/cache ]]; then
+    ok "setup dry-run writes no installation directories"
+else
+    no "setup dry-run modified HOME"
+fi
 
 # 3. unknown command fails
 bash setup.sh bogus >/dev/null 2>&1 && no "unknown command accepted" || ok "unknown command rejected"
@@ -38,6 +43,13 @@ jq -e '.compaction.reserveTokens == 39322' "$home/pi.json" >/dev/null && ok "pi 
 # 5b. extension manifest shape + prompt templates for every active command
 jq -e '(.packages|length>=4) and all(.packages[]; .name and .version and .status)' config/pi-manifest.json >/dev/null \
     && ok "pi-manifest.json shape" || no "pi-manifest.json shape"
+jq -e --slurpfile manifest config/pi-manifest.json '
+    $manifest[0] as $m |
+    .packages[""].dependencies ==
+      ([$m.packages[] | select(.status=="active") | {key:.name,value:.version}]
+       + [{key:$m.pi.name,value:$m.pi.version}] | from_entries)
+    ' packages/pi/package-lock.json >/dev/null \
+    && ok "Pi npm lock agrees with the active manifest" || no "Pi npm lock drift"
 jq -r '.promptTemplates[]' config/pi.json.in | while read -r t; do
     [[ -f config/prompts/$t.md ]] || exit 1
 done && ok "prompt templates complete" || no "prompt templates missing"

@@ -18,3 +18,13 @@ unless `--remove-models`. Doc refreshes back up once into
 
 Session data (Pi sessions, WebUI chats via Import/Export) belongs to normal
 user backups - the setup never deletes them.
+
+## Pi harness rollback
+
+Use `./setup.sh backup --pi-only` to save Pi configuration files and the
+managed launcher links. Setup also creates a pre-switch backup for an
+existing installation. Run `./setup.sh restore --pi-only /path/to/backup.tar.gz`
+to restore an earlier release link. The corresponding release directory
+must still be present. Run `./setup.sh uninstall --pi-only` to return to
+the launcher saved before the managed install. This leaves project sessions
+and checkpoints in the local Pi state directory.

@@ -1034,7 +1034,7 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
 
 production_worker = production.ProductionWorker(db, _lock, production_model, production_skill,
     queue_image, verify_production_image, store_message, running_work, visual_compose=compose_visual,
-    exports=production_exports, image_bytes=production_image_bytes)
+    exports=production_exports, image_bytes=production_image_bytes, save_document=save_document)
 
 
 def article_model(lang, role, prompt, tokens, schema=None):
@@ -2853,14 +2853,17 @@ class Handler(BaseHTTPRequestHandler):
     def _resolve_chat_first(self, body, conn, session, mode, lang, fingerprint):
         text, sid, ident = body["text"], session["id"], body["request_id"]
         command = chats.command(text)
-        if not command:
+        if not command or command in ("automatic", "together") and chats.story_request(text):
             # An explicit release of the existing plan, in free wording, outranks the planning review.
             owned = [item for item in chats.context_list(conn, sid) if item["kind"] in visual.KINDS]
             chosen = body.get("context_id") or session["project_id"]
             if not any(item["id"] == chosen for item in owned):
                 chosen = owned[0]["id"] if len(owned) == 1 else None
             known = production.latest_plan(conn, chosen) if chosen else None
-            command = chats.production_command(text, known["state"] if known else "unknown" if len(owned) > 1 else None)
+            if not known and chats.story_request(text):
+                command = None
+            elif not command:
+                command = chats.production_command(text, known["state"] if known else "unknown" if len(owned) > 1 else None)
         if command:
             contexts = [item for item in chats.context_list(conn, sid) if item["kind"] in visual.KINDS]
             pid = body.get("context_id") or session["project_id"]
@@ -2883,7 +2886,9 @@ class Handler(BaseHTTPRequestHandler):
             if command == "approve":
                 store_message(conn, sid, "user", text)
                 if record["state"] != "approved":
-                    production.mutate(conn, pid, "approve-plan", {"version": record["version"]}, save_document, store_message)
+                    approved, _ = production.mutate(conn, pid, "approve-plan", {"version": record["version"]}, save_document, store_message)
+                    if approved.get("id"):
+                        return {"handled": True, "production_id": approved["id"], "project_id": pid}, mode, text, pid
                     store_message(conn, sid, "assistant", "Die Story-Planung ist freigegeben. Du kannst jetzt die vollständige Produktion starten.")
                 else:
                     store_message(conn, sid, "assistant", f"Die Story-Planung (Version {record['version']}) ist bereits freigegeben. "
@@ -2934,7 +2939,7 @@ class Handler(BaseHTTPRequestHandler):
             if action in ("chat", "planning-discuss", "auto") and (visual.VARIANT.search(text) or
                     selected_style and re.search(r"\b(?:szene|scene|render|bild|image)\b", text, re.I)):
                 action = "image"
-        fresh = selected is None and bool(chats.NEW_STORY.search(text)) and action in ("outline", "chapter", "story")
+        fresh = selected is None and bool(chats.NEW_STORY.search(text) or has_plan and chats.story_request(text)) and action in ("outline", "chapter", "story")
 
         if selected is not None:
             pid = chats.activate(conn, sid, selected)
@@ -3001,7 +3006,7 @@ class Handler(BaseHTTPRequestHandler):
                 prior_notes = [row["content"] for row in conn.execute("""SELECT content FROM messages
                     WHERE session_id=? AND role='user' ORDER BY created DESC LIMIT 5""", (sid,))]
                 brief = (text + ("\n\nEarlier author messages:\n" + "\n".join(reversed(prior_notes)) if prior_notes and not fresh else ""))[:8000]
-                if (chats.production_brief(text) or chats.PLAN_TARGET.search(text) or chats.outline_count(text) > 1) and (fresh or not has_plan):
+                if (chats.story_request(text) or chats.production_brief(text) or chats.PLAN_TARGET.search(text) or chats.outline_count(text) > 1) and (fresh or not has_plan):
                     visual_options = {key: value for key, value in body.get("image_options", {}).items()
                                       if key in ("model", "preset")}
                     aspect = re.search(r"\b(\d{1,2}:\d{1,2})\b", text)
@@ -3011,6 +3016,7 @@ class Handler(BaseHTTPRequestHandler):
                     result, _ = production.mutate(conn, pid, "propose", {
                         "session_id": sid, "brief": brief, "count": chats.outline_count(text) or 8,
                         "language": language, "request_id": ident, "image": visual_options,
+                        "production_mode": chats.story_request(text), "title": chats.title(text, session["title"]),
                         **chats.length_range(text),
                     }, save_document, store_message)
                     conn.execute("UPDATE jobs SET payload=json_set(payload,'$.chat_input',?) WHERE id=?", (fingerprint, ident))
