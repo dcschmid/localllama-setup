@@ -1,6 +1,7 @@
 """Versioned story plans and resumable production using the Studio job store."""
 
 from collections import Counter
+import contextlib
 import hashlib
 import json
 import logging
@@ -10,6 +11,7 @@ import time
 import uuid
 from urllib.error import HTTPError, URLError
 
+import creative_studio_monitor as monitor
 import creative_studio_organizer as organizer
 import creative_studio_knowledge as knowledge
 from creative_studio_chat import SIMULATED_OUTPUT, story_language
@@ -331,7 +333,7 @@ def artifact_manifest(row, payload, result):
             "checkpoint": checkpoint, "exports": result.get("exports", {}).get("files", {})}
 
 
-def public_job(row, *, artifacts=None):
+def public_job(row, *, artifacts=None, snapshot=None, bodies=None, now=None, limits=None):
     payload, result = json.loads(row["payload"]), json.loads(row["result"] or "{}")
     keys = ("step", "number", "error", "detail", "pause_reason", "plan_version", "chapter_results", "cover", "whole_review",
             "answer", "planning_findings", "compared_chapters", "proposal_stale", "retry", "art_review_pending")
@@ -386,9 +388,19 @@ def public_job(row, *, artifacts=None):
         report["manifest"] = {**manifest, "status": status}
         if status == "completed":
             report["downloads"] = {fmt: f"/api/production/jobs/{row['id']}/files/manuscript.{fmt}" for fmt in ("md", "mdx", "zip")}
+    flags = {"language_retry": bool(report.get("language_retry_available")), "recheck": bool(report.get("recheck_available"))}
+    view = monitor.view(row, payload, result, phase=report["phase"], status=status, state_flags=flags, snapshot=snapshot,
+                        bodies=bodies, now=now if now is not None else time.time(), limits=limits)
     return {**report, "id": row["id"], "status": status, "kind": payload["kind"],
             "total": len(payload["plan"]["chapters"]) if "plan" in payload else payload.get("count"),
-            "project_id": payload["project_id"]}
+            "project_id": payload["project_id"], "monitor": view}
+
+
+def job_bodies(conn, row):
+    """The saved text of the chapter a story job works on, for word counts computed from stored text."""
+    ident = (json.loads(row["result"] or "{}").get("current") or {}).get("document_id")
+    doc = conn.execute("SELECT id,version,body FROM live_documents WHERE id=?", (ident,)).fetchone() if ident else None
+    return {doc["id"]: doc} if doc else {}
 
 
 def workflow_stage(record, reviewing, job):
@@ -899,8 +911,45 @@ def confirmed_blockers(items):
     return [f for f in items if f.get("severity") == "blocking" and f.get("status") == "confirmed"]
 
 
+EXPANSION_REJECTIONS = {
+    "anchor": "its anchor was not one of the listed ANCHORS or was not unique in the chapter",
+    "empty": "it contained no scene", "placeholder": "it contained a placeholder or simulated output",
+    "aside": "it contained commentary about the production instead of story text",
+    "repetition": "it repeated wording that already stands in the chapter",
+    "range": "it moved the chapter outside the allowed word range"}
+
+
+def expansion_rejection(addition, anchor, anchors, text):
+    """Why a proposed scene cannot be inserted, or None. The reason is stored with the attempt."""
+    if anchor not in anchors or text.count(anchor) != 1:
+        return "anchor"
+    if not addition:
+        return "empty"
+    if SIMULATED_OUTPUT.search(addition):
+        return "placeholder"
+    if story.PRODUCTION_ASIDE.search(addition):
+        return "aside"
+    if story.repeats(addition, text):
+        return "repetition"
+    return None
+
+
+def expansion_feedback(current, text):
+    """Name why the latest additions to exactly this text were rejected, so the next attempt avoids it."""
+    reasons = []
+    for patch in current.get("patches", []):
+        reason = patch.get("reason")
+        if patch.get("method") == "scene_expansion" and reason in EXPANSION_REJECTIONS and patch.get("input_hash") == digest(text):
+            if reason not in reasons:
+                reasons.append(reason)
+    if not reasons:
+        return ""
+    return "\nEARLIER ADDITIONS WERE REJECTED (avoid this): " + "; ".join(EXPANSION_REJECTIONS[r] for r in reasons[-3:]) + "."
+
+
 class ProductionWorker:
-    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope, *, visual_compose=None, exports=None, image_bytes=None, save_document=None):
+    def __init__(self, db, lock, call, fiction, image_queue, image_verify, store_message, validate_scope, *, visual_compose=None, exports=None, image_bytes=None, save_document=None, activity=None):
+        self.activity = activity
         self.db, self.lock, self.call, self.fiction = db, lock, call, fiction
         self.image_queue, self.image_verify = image_queue, image_verify
         self.store_message, self.validate_scope = store_message, validate_scope
@@ -935,12 +984,19 @@ class ProductionWorker:
                 event.update(document_id=result.get("current", {}).get("document_id"),
                              image_job_id=slot.get("image_job"),
                              attempts=max(event.get("attempts", 1), result.get("retry", {}).get("attempt", 0) + 1))
+                measured = (result.get("current") or {}).get("review", {}).get("words")
+                if measured is not None:
+                    event["words"] = measured
+                if (result.get("current") or {}).get("corrections"):
+                    event["corrections"] = result["current"]["corrections"]
                 if state in ("completed", "paused", "failed"):
                     event.update(finished_at=at, error=result.get("error"), detail=result.get("detail"))
                 result["artifact_manifest"] = artifact_manifest({"id": row["id"], "state": state}, payload, result)
             if state == "completed":
                 knowledge.propose_from_job(conn, payload, result)
             conn.execute("UPDATE jobs SET state=?,result=?,updated=? WHERE id=?", (state, dump(result), at, row["id"]))
+        if self.activity:
+            self.activity.checkpoint(row["id"])
 
     def ask(self, lang, role, prompt, props, limit=1800):
         answer, proof = story.structured(self.call, lang, role, prompt, props, limit)
@@ -1613,11 +1669,12 @@ class ProductionWorker:
             "Use the story language, point of view and tense. Preserve the chapter ending and established facts. "
             "Use the available space for the character's choices and reactions. Omit headings, commentary and filler.\n"
             + "CHAPTER PLAN\n" + doc["story_plan"] + "\nCANON\n" + story.snippet(canon, 3300)
-            + "\nANCHORS\n" + dump(anchors) + "\nEXISTING CHAPTER\n" + story.snippet(text, 9000) + corrections,
+            + "\nANCHORS\n" + dump(anchors) + "\nEXISTING CHAPTER\n" + story.snippet(text, 9000) + corrections
+            + expansion_feedback(current, text),
             properties, min(5600, max(600, target * 4 + 300 + 350 * bool(targets))))
         addition, anchor = answer["addition"].strip(), answer["anchor"]
         current["passes"] = passes + 1
-        patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": original_hash,
+        patch = {"method": "scene_expansion", "base_version": doc["version"], "base_hash": original_hash, "at": time.time(),
                  "input_hash": digest(text), "words_before": words, "addition_words": story.count_words(addition), "evidence": proof}
         current.setdefault("patches", []).append(patch)
         language_edits = answer.get("edits", [])
@@ -1632,8 +1689,8 @@ class ProductionWorker:
                 text = corrected
             except PlanError as exc:
                 patch["language_edit_error"] = str(exc)
-        if (anchor in anchors and text.count(anchor) == 1 and addition and not SIMULATED_OUTPUT.search(addition)
-                and not story.PRODUCTION_ASIDE.search(addition) and not story.repeats(addition, text)):
+        reason = expansion_rejection(addition, anchor, anchors, text)
+        if reason is None:
             end = text.index(anchor) + len(anchor)
             candidate = text[:end] + "\n\n" + addition + text[end:]
             words_after = story.count_words(candidate)
@@ -1650,7 +1707,8 @@ class ProductionWorker:
                     current.pop("short_expansion_count", None)
                     result["step"] = "auditing"
                 return self.commit(row, result)
-        patch["error"] = "story_length_failed"
+            reason = "range"
+        patch.update(error="story_length_failed", reason=reason)
         return self.commit(row, result)
 
     def improve(self, row, plan, doc, current, result, canon):
@@ -2142,8 +2200,9 @@ class ProductionWorker:
         result.pop("next_at", None)
         result.pop("waiting", None)
         phase = work_phase(result)
+        tracked = self.activity.step(row["id"], result.get("number"), phase) if self.activity else contextlib.nullcontext()
         try:
-            with self.validate_scope(project_id=payload["project_id"], session_id=payload.get("session_id")):
+            with tracked, self.validate_scope(project_id=payload["project_id"], session_id=payload.get("session_id")):
                 {"plan": self.plan, "planning": self.planning, "story": self.produce}[payload["kind"]](row, payload, result)
         except WaitForResource:
             result.update(next_at=time.time() + 5, waiting="gpu")

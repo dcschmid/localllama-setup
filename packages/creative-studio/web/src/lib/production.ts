@@ -1,6 +1,8 @@
 import { receiptMarkup, type VisualReceipt } from './visual';
 import { esc, json, post } from './core';
 import { button, dialogForm, markdown, productionErrors, showDialog } from './studio-ui';
+import { actionMarkup, activityText, chapterSummary, failureText, headMarkup, lengthSentence, liveMarkup, progressMarkup, stepsMarkup,
+  timelineMarkup, type Link, type Monitor } from './production-monitor';
 
 type Section = Record<string, string>;
 type Image = { visual_profile?: VisualReceipt; id: string; alt: string };
@@ -21,7 +23,7 @@ export type ProductionJob = {
   language_retry_available?: boolean; answer?: string; planning_findings?: Finding[]; compared_chapters?: number[]; plan_version?: number; proposal_stale?: boolean;
   skills?: Record<string, string>; audit_lane?: string; art_review_pending?: boolean;
   model?: { alias: string; variant?: string | null; quantization?: string | null }; retries?: { automatic: number; manual: number };
-  pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
+  monitor?: Monitor; pause_reason?: string; draft_document_id?: string; corrections?: number; last_completed?: number; recheck_available?: boolean; cover?: Image; waiting?: string; error?: string; findings?: Finding[]; detail?: unknown; chapter_results?: Chapter[];
 };
 export type ProductionInfo = { plan: ProductionPlan | null; version: number | null; approved: boolean; historical?: boolean; reviewing?: boolean; stage?: string;
   history: Array<{ version: number; state: string }>;
@@ -150,6 +152,12 @@ export function technicalDetails(job: ProductionJob) {
   for (const [key, label] of [['http_status', 'HTTP-Status'], ['sqlite_error', 'Datenbankfehler'], ['exception', 'Ausnahme']]) {
     if (detail[key]) rows.push([label, String(detail[key])]);
   }
+  const monitor = job.monitor;
+  if (monitor) {
+    rows.push(['Gespeicherter Status', job.status], ['Schritt-ID', `${monitor.current_chapter ?? '-'}:${monitor.phase}`],
+      ['Live-Prüfung', `${monitor.health.level} · ${monitor.health.reason}`]);
+    if (monitor.length) rows.push(['Wortzahl', `${monitor.length.words} (Bereich ${monitor.length.minimum}–${monitor.length.maximum}), Versuche ${monitor.length.attempts}`]);
+  }
   rows.push(['Job-ID', job.id], ['Modell', model || 'nicht erfasst'], ['Skills', skills || 'nicht erfasst'],
     ['Wiederholungen', job.retries ? `automatisch ${job.retries.automatic} · manuell ${job.retries.manual}` : 'nicht erfasst']);
   return '<dl class="job-facts">' + rows.filter(([, value]) => value).map(([key, value]) =>
@@ -267,9 +275,79 @@ export function editPlanDialog(info: ProductionInfo, submit: (values: object) =>
     });
 }
 
+const liveLink: Link = { state: 'live', failures: 0, offset: 0 };
+
+function downloadAnchors(links: ProductionJob['downloads']) {
+  const names = { md: 'Markdown', mdx: 'MDX', zip: 'ZIP' };
+  return Object.entries(links ?? {}).map(([fmt, url]) =>
+    /^\/api\/production\/jobs\/[a-f0-9]{32}\/files\/manuscript\.(md|mdx|zip)$/.test(url)
+      ? `<a class="button" href="${esc(url)}" download>${names[fmt as 'md'] ?? esc(fmt.toUpperCase())} herunterladen</a>` : '').join('');
+}
+
+function storyCard(job: ProductionJob, monitor: Monitor, chapters: Map<string, { body: string; version: number }>,
+  media: (id: string, alt: string, actions?: boolean) => string, link: Link) {
+  const items = job.chapter_results ?? [];
+  const failure = monitor.state === 'failed' ? failureText(job, monitor, productionErrors, failureLabels) : undefined;
+  const skillMarkup = (loaded?: Record<string, string>) => loaded && Object.keys(loaded).length ?
+    '<p>' + esc(Object.entries(loaded).map(([name, version]) => name + ' ' + version).join(' · ')) + '</p>' : '';
+  const facts = monitor.length;
+  const working = ['correcting', 'retrying', 'verifying', 'running', 'model_wait'].includes(monitor.state);
+  const lengthLine = facts && facts.state !== 'ok' && working
+    ? `<p class="prod-length" data-prod-length>${esc(lengthSentence(facts))}${monitor.state === 'correcting' && facts.state === 'short' ? ' Das Studio versucht, die Szene sinnvoll zu erweitern.' : ''}</p>` : '';
+  const controls = actionMarkup(monitor, { draft: job.draft_document_id, project_id: job.project_id, id: job.id, hasChapters: items.length > 0,
+    art_review_pending: job.art_review_pending, downloads: downloadAnchors(job.downloads), images: items.some(c => c.image) || !!job.cover,
+    language_retry_available: job.language_retry_available, recheck_available: job.recheck_available, pause_reason: job.pause_reason });
+  const chapterList = monitor.chapters ?? [];
+  const rows = chapterList.map(view => {
+    const done = items.find(c => c.number === view.number);
+    const doc = done ? chapters.get(done.id) : undefined;
+    const open = chapterList.length === 1 || (view.status === 'active' && ['failed', 'needs_decision'].includes(monitor.state));
+    const length = facts && facts.number === view.number && facts.state !== 'ok' ? `<p class="prod-length">${esc(lengthSentence(facts))}</p>` : '';
+    return `<li><details data-production-chapter="${view.number}" data-job-detail="chapter-${view.number}"${open ? ' open' : ''}>
+      <summary>${esc(chapterSummary(view, monitor))}</summary>
+      <p class="prod-chapter-title">${esc(view.title)}</p>${stepsMarkup(view)}${length}
+      ${done ? `${done.image ? media(done.image.id, done.image.alt, false) + receiptMarkup(done.image.visual_profile) + button('variant', 'Bildvariante erstellen', undefined, 'button quiet', done.image.id) : ''}
+        ${done.corrections ? `<p>${done.corrections} Textfehler automatisch korrigiert.</p>` : ''}
+        ${done.findings?.length || skillMarkup(done.skills) ? `<details data-job-detail="chapter-${view.number}-quality"><summary>Prüfdetails</summary>
+          ${skillMarkup(done.skills)}${done.findings?.length ? issueMarkup(done.findings) : ''}</details>` : ''}
+        <div class="prose">${doc ? markdown(doc.body) : '<p>Kapitel wird geladen …</p>'}</div>
+        <div class="editor-actions">${button('open-doc', 'Kapitel öffnen', 'text', 'button', done.id)}
+        ${button('production-edit-chapter', 'Überarbeiten', undefined, 'button', done.id)}
+        ${button('production-export-chapter', 'Kapitel exportieren', undefined, 'button quiet', done.id)}</div>`
+      : view.status === 'active' && job.draft_document_id ? `<div class="editor-actions">${button('open-doc', 'Gespeicherten Kapiteltext öffnen', 'text', 'button quiet', job.draft_document_id)}</div>` : ''}
+    </details></li>`;
+  }).join('');
+  const detail = job.error || job.monitor ? `<details data-job-detail="technical-error"><summary>Technische Details</summary>${technicalDetails(job)}</details>` : '';
+  return `<div class="production-view" data-production-state="${esc(monitor.state)}" data-production-link="${link.state}">
+    <div class="prod-main">
+      ${headMarkup(monitor, link, activityText(job, monitor, failure), failure)}
+      ${lengthLine}${progressMarkup(monitor)}
+      ${job.image_waiting === 'writer_gpu_release' ? '<p>Das Schreibmodell gibt den GPU-Slot frei.</p>' : ''}
+      ${job.waiting === 'gpu' ? '<p>Wartet auf einen freien GPU-Slot.</p>' : ''}
+      ${job.corrections ? `<p class="prod-note">${job.corrections} Textfehler in diesem Kapitel automatisch korrigiert.</p>` : ''}
+      ${job.language_retry_available ? '<p class="prod-note">Ein bestätigter Sprachfehler lässt sich automatisch korrigieren. Die Produktion wird danach fortgesetzt.</p>' : ''}
+      ${job.recheck_available ? '<p class="prod-note">Das gespeicherte Kapitel kann mit der aktualisierten Qualitätsprüfung fortgesetzt werden.</p>' : ''}
+      ${(skillMarkup(job.skills) || job.findings?.length) ? '<details data-job-detail="current-quality"><summary>Prüfdetails</summary>'
+        + skillMarkup(job.skills) + (job.findings?.length ? issueMarkup(job.findings) : '') + '</details>' : ''}
+      <div class="editor-actions prod-actions" role="group" aria-label="Aktionen">${controls}</div>
+      <section class="prod-chapters" aria-labelledby="prod-chapters-${esc(job.id)}"><h4 id="prod-chapters-${esc(job.id)}">Kapitel</h4><ol>${rows}</ol></section>
+      ${job.cover ? `<details data-job-detail="cover"><summary>Titelbild</summary>${media(job.cover.id, job.cover.alt, false)}${receiptMarkup(job.cover.visual_profile)}</details>` : ''}
+    </div>
+    <aside class="prod-aside" aria-label="Live-Aktivität"><h4>Live-Aktivität</h4>${liveMarkup(monitor, link)}${timelineMarkup(monitor.timeline)}${detail}</aside>
+  </div>`;
+}
+
+export function imagesDialog(job: ProductionJob, media: (id: string, alt: string, actions?: boolean) => string) {
+  const assets = [...(job.cover ? [{ title: 'Titelbild', image: job.cover }] : []),
+    ...(job.chapter_results ?? []).filter(c => c.image).map(c => ({ title: `Kapitel ${c.number}: ${c.title}`, image: c.image! }))];
+  showDialog('Bilder der Produktion', assets.length ? assets.map(({ title, image }) => `<figure><figcaption>${esc(title)}</figcaption>`
+    + media(image.id, image.alt, false) + '</figure>').join('') : '<p>Für diese Produktion sind keine geprüften Bilder gespeichert.</p>', true);
+}
+
 export function productionCard(job: ProductionJob | undefined, chapters: Map<string, { body: string; version: number }>,
-  media: (id: string, alt: string, actions?: boolean) => string) {
+  media: (id: string, alt: string, actions?: boolean) => string, link: Link = liveLink) {
   if (!job) return '<p>Produktionsstatus wird geladen …</p>';
+  if (job.kind === 'story' && job.monitor) return storyCard(job, job.monitor, chapters, media, link);
   const term = ['completed', 'cancelled', 'incomplete'].includes(job.status);
   const phase = job.phase ?? job.step;
   let label = stateLabels[phase] ?? 'Produktion';

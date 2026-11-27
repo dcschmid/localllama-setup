@@ -84,7 +84,7 @@ Im Editor stehen Linter-Funde und redaktionelle Einschätzungen getrennt im Audi
 
 ### Geschichten und Romane
 
-Für ein neues Manuskript öffne **Story-Planung**. Die Produktionsmodi erstellen geprüfte Kapitel und Illustrationen auf Basis einer freigegebenen Planung. [Story-Produktion und Manuskriptexport](STORY_PRODUCTION.md)
+Für ein neues Manuskript öffne **Story-Planung**. Die Produktionsmodi erstellen geprüfte Kapitel und Illustrationen auf Basis einer freigegebenen Planung. [Story-Produktion und Manuskriptexport](STORY_PRODUCTION.md) · [Produktionsansicht und Live-Aktivität](PRODUCTION_MONITOR.md)
 
 Beginne im Chat mit „Erstelle eine Story-Bibel und plane acht Kapitel.“ Die Kapitelübersicht und die Story-Bibel findest du dann unter **Inhalte**. Die **Story-Bibel** speichert Figuren, Beziehungen, Weltregeln, Chronologie, offene Handlungsstränge, Perspektive und Ton. Wenn du ein vorhandenes Dokument als Eröffnung auswählst, übernimmt Kapitel 1 dessen Text wortgetreu in einen eigenen Entwurf.
 

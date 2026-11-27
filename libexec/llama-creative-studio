@@ -29,6 +29,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
+import creative_studio_activity as live_activity
 import creative_studio_visual as visual
 import creative_studio_knowledge as knowledge
 from creative_studio_exports import Exports, FORMATS as EXPORT_FORMATS
@@ -116,6 +117,15 @@ MIGRATIONS = (
 )
 _lock = threading.RLock()
 _llm_lock = threading.Lock()        # llama.cpp: models-max=1
+
+
+def slot_probe(alias):
+    """What the router reports for the model's inference slots. Raises when the model cannot answer."""
+    return http_json(ROUTER + "/slots?" + urlencode({"model": alias}), timeout=4)[1]
+
+
+ACTIVITY = live_activity.Activity(probe=slot_probe)
+ACTIVITY_LIMITS = live_activity.thresholds()
 _image_lock = threading.Lock()      # queue submission and explicit cancellation
 _dbs = threading.local()
 _in_flight = {}
@@ -1017,8 +1027,14 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
         if schema:
             payload["response_format"] = {"type": "json_schema", "schema": schema}
         gpu_log("story-production", alias, "acquire", role)
+        limit = 600
         try:
-            _, answer = http_json(ROUTER + "/v1/chat/completions", "POST", payload, timeout=600)
+            with ACTIVITY.model_request(alias, role, prompt_tokens, limit) as request:
+                _, answer = http_json(ROUTER + "/v1/chat/completions", "POST", payload, timeout=limit)
+                if request is not None:
+                    reply = ((answer.get("choices") or [{}])[0].get("message") or {}).get("content")
+                    request.update(completion_tokens=(answer.get("usage") or {}).get("completion_tokens"),
+                                   chars=len(reply) if isinstance(reply, str) else None)
         finally:
             gpu_log("story-production", alias, "release", role)
     choice = (answer.get("choices") or [{}])[0]
@@ -1034,7 +1050,7 @@ def production_model(lang, role, prompt, tokens, schema=None, *, domain="story")
 
 production_worker = production.ProductionWorker(db, _lock, production_model, production_skill,
     queue_image, verify_production_image, store_message, running_work, visual_compose=compose_visual,
-    exports=production_exports, image_bytes=production_image_bytes, save_document=save_document)
+    exports=production_exports, image_bytes=production_image_bytes, save_document=save_document, activity=ACTIVITY)
 
 
 def article_model(lang, role, prompt, tokens, schema=None):
@@ -2008,7 +2024,9 @@ class Handler(BaseHTTPRequestHandler):
             row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='production'", (parts[2],)).fetchone()
             if not row or not organizer.visible_job(conn, row):
                 raise organizer.OrganizerError("story_job_missing", 404)
-            return self._json(production.public_job(row, artifacts=artifacts_available(row)))
+            return self._json(self._production_job(conn, row))
+        if len(parts) == 4 and parts[:2] == ["production", "jobs"] and parts[3] == "events":
+            return self._production_events(parts[2])
         if len(parts) in (5, 6) and parts[:2] == ["production", "jobs"] and parts[3] == "files":
             return self._production_file(parts[2], "/".join(parts[4:]))
         if len(parts) in (2, 3) and parts[0] == "production":
@@ -2625,6 +2643,53 @@ class Handler(BaseHTTPRequestHandler):
             except PlanError:
                 continue
         return None
+
+    @staticmethod
+    def _production_job(conn, row):
+        return production.public_job(row, artifacts=artifacts_available(row), snapshot=ACTIVITY.snapshot(row["id"]),
+                                     bodies=production.job_bodies(conn, row), limits=ACTIVITY_LIMITS)
+
+    def _production_events(self, identifier):
+        """Server-sent events for one production job: a full job record whenever it changes, a heartbeat otherwise.
+
+        The browser falls back to polling when the stream is not available."""
+        conn = db()
+        row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='production'", (identifier,)).fetchone()
+        if not row or not organizer.visible_job(conn, row):
+            raise organizer.OrganizerError("story_job_missing", 404)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        last, deadline = None, time.time() + 600     # the browser reconnects at the end of each window
+        try:
+            self.wfile.write(b"retry: 3000\n\n")
+            while time.time() < deadline:
+                row = db().execute("SELECT * FROM jobs WHERE id=? AND service='production'", (identifier,)).fetchone()
+                if not row:
+                    break
+                job = self._production_job(db(), row)
+                stable = json.dumps({**job, "monitor": {**job["monitor"], "server_time": 0, "activity": None,
+                                                         "health": {**job["monitor"]["health"], "quiet_for": None, "checks": None}}},
+                                    sort_keys=True, ensure_ascii=False)
+                live = {"server_time": job["monitor"]["server_time"], "status": job["status"], "health": job["monitor"]["health"],
+                        "activity": job["monitor"]["activity"]}
+                if stable != last:
+                    last = stable
+                    frame = "event: job\ndata: " + json.dumps(job, ensure_ascii=False) + "\n\n"
+                else:
+                    frame = "event: heartbeat\ndata: " + json.dumps(live, ensure_ascii=False) + "\n\n"
+                self.wfile.write(frame.encode())
+                self.wfile.flush()
+                if job["status"] in ("completed", "cancelled", "incomplete"):
+                    self.wfile.write(b"event: end\ndata: {}\n\n")
+                    self.wfile.flush()
+                    break
+                time.sleep(live_activity.HEARTBEAT_INTERVAL)
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass
 
     def _production_file(self, identifier, name):
         conn = db()
@@ -3640,7 +3705,10 @@ def serve_data():
     threading.Thread(target=image_purge_worker, daemon=True, name="image-purge").start()
     threading.Thread(target=task_worker, daemon=True, name="chat-task").start()
     threading.Thread(target=story_worker.run, daemon=True, name="story").start()
-    threading.Thread(target=production_worker.run, daemon=True, name="story-production").start()
+    production_thread = threading.Thread(target=production_worker.run, daemon=True, name="story-production")
+    production_thread.start()
+    ACTIVITY.attach(production_thread)
+    ACTIVITY.start_monitor()
     threading.Thread(target=research_worker, daemon=True, name="research").start()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"{APP} listening http://{HOST}:{PORT} data={DATA}")
@@ -3722,7 +3790,7 @@ def cmd_install() -> None:
         for module in ("creative_studio_plan.py", "creative_studio_organizer.py", "creative_studio_story.py",
                        "creative_studio_chat.py", "creative_studio_production.py", "creative_studio_skills.py",
                        "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py",
-                       "creative_studio_knowledge.py", "creative_studio_exports.py"):
+                       "creative_studio_knowledge.py", "creative_studio_exports.py", "creative_studio_activity.py", "creative_studio_monitor.py"):
             shutil.copyfile(src / "libexec" / module, backend / module)
         print(f"installed (repeatable): data {DATA}, state {STATE}")
 
@@ -3782,6 +3850,8 @@ def cmd_uninstall(purge=False):
                  Path.home() / ".local/libexec/creative_studio_story.py",
                  Path.home() / ".local/libexec/creative_studio_chat.py",
                  Path.home() / ".local/libexec/creative_studio_production.py",
+                 Path.home() / ".local/libexec/creative_studio_activity.py",
+                 Path.home() / ".local/libexec/creative_studio_monitor.py",
                  Path.home() / ".local/libexec/creative_studio_exports.py",
                  Path.home() / ".local/libexec/creative_studio_skills.py",
                  Path.home() / ".local/libexec/creative_studio_correction.py",

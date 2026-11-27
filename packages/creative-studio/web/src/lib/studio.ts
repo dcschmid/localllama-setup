@@ -4,8 +4,9 @@ import { Organizer, chatEntry, type Entry, type ManagedView } from './organizer'
 import { chapterMenu, chapterPlanDialog, chapterTools, requestDialog, settingsDialog,
   storyInfo, storyJob, storyJobMarkup, storyMarkup, storyPost, type StoryInfo, type StoryJob, type StoryRequest } from './story';
 import { Editor } from './editor';
-import { artReviewDialog, editPlanDialog, exportManuscript, manuscript, manuscriptDialog, planDialog, productionAct, productionCard,
+import { artReviewDialog, editPlanDialog, exportManuscript, imagesDialog, manuscript, manuscriptDialog, planDialog, productionAct, productionCard,
   productionInfo, productionJob, proposeDialog, type ProductionJob } from './production';
+import { liveMarkup, refreshTimes, stateInfo, type Link, type Monitor } from './production-monitor';
 import { icon, type IconName } from './icons';
 import { projectTitle, routeIntent, suggestions, tools, type Intent, type Mode, type Tool } from './intent';
 import { $, announce, button, describe, details, dialogForm, download, formatDate, iconButton, imageUrl, main, mark, markdown, safeImageId, showDialog, sourceLink, visualErrors } from './studio-ui';
@@ -88,6 +89,15 @@ const chatTasks = new Map<string, Task>();
 const storyJobs = new Map<string, StoryJob>();
 const productionJobs = new Map<string, ProductionJob>();
 const productionDocuments = new Map<string, Document>();
+// Connection of the browser to one production job. A lost connection never means a failed job.
+const productionLinks = new Map<string, Link>();
+const productionStreams = new Map<string, { source: EventSource; last: number }>();
+const controlBusy = new Set<string>();
+const linkFor = (id: string): Link => {
+  let link = productionLinks.get(id);
+  if (!link) productionLinks.set(id, link = { state: 'polling', failures: 0, offset: 0 });
+  return link;
+};
 const taskDocuments = new Map<string, Document>();
 let pendingDispatch: { session: string; text: string; id: string } | undefined;
 let pendingChoice: { text: string; kind: 'context' | 'document'; mode: Mode } | undefined;
@@ -339,7 +349,7 @@ function taskContent(id: string) {
 
 function jobContent(kind: string, id: string) {
   if (kind === 'story-job') return storyJobMarkup(storyJobs.get(id));
-  if (kind === 'production-job') return productionCard(productionJobs.get(id), productionDocuments, imageMedia);
+  if (kind === 'production-job') return productionCard(productionJobs.get(id), productionDocuments, imageMedia, linkFor(id));
   if (kind === 'chat-task') return taskContent(id);
   if (kind === 'image') {
     const job = imageJobs.get(id);
@@ -387,7 +397,7 @@ function transcript() {
                 ? button('write-unwritten', 'Kapitel schreiben', 'text', 'button', String(meta.number)) : ''));
     return `<article class="message ${isUser ? 'user' : 'assistant'}">${isUser ? '' : mark()}<div class="message-content">
       <h2>${isUser ? 'Du' : 'Studio'}</h2>
-      ${m.content && !['image', 'research', 'chat-task'].includes(String(kind)) ? `<div class="prose">${isUser ? '<p class="user-text">' + esc(m.content) + '</p>' : markdown(m.content, !meta.model)}</div>` : ''}
+      ${m.content && !['image', 'research', 'chat-task'].includes(String(kind)) ? `<div class="prose"${kind === 'production-job' && validId(meta.job_id) ? ` data-job-label="${meta.job_id}"` : ''}>${isUser ? '<p class="user-text">' + esc(m.content) + '</p>' : markdown(m.content, !meta.model)}</div>` : ''}
       ${meta.unverified_production ? `<p>In diesem Chat stehen Platzhalter aus Modellantworten. Für diese Antworten gibt es keinen belegten Produktionsabschluss.
         ${meta.saved_chapters === 0 ? 'Die Texte stehen im Chatverlauf. Es sind keine Kapitel als Dokumente gespeichert.' : ''}</p>` : ''}
       ${attachment}</div></article>`;
@@ -994,24 +1004,158 @@ function updateJobCard(id: string, kind: string) {
   if (!card) return;
   const opened = new Map(Array.from(card.querySelectorAll<HTMLDetailsElement>('details'),
     (detail, index) => [detail.dataset.jobDetail ?? String(index), detail.open]));
-  const active = card.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.action : '';
+  const focused = card.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+  const active = focused?.dataset.action ?? '';
+  const summaryOf = focused?.tagName === 'SUMMARY' ? (focused.parentElement as HTMLElement | null)?.dataset.jobDetail : undefined;
   card.innerHTML = jobContent(kind, id);
   card.querySelectorAll<HTMLDetailsElement>('details').forEach((detail, index) => {
     const wasOpen = opened.get(detail.dataset.jobDetail ?? String(index));
     if (wasOpen !== undefined) detail.open = wasOpen;
   });
   if (active) card.querySelector<HTMLElement>(`[data-action="${active}"]`)?.focus();
+  else if (summaryOf) card.querySelector<HTMLElement>(`[data-job-detail="${summaryOf}"] > summary`)?.focus();
+  for (const key of controlBusy) {
+    const [action, value] = key.split('|');
+    card.querySelectorAll<HTMLButtonElement>(`[data-action="${action}"][data-value="${value}"]`).forEach(b => { b.disabled = true; });
+  }
+  if (kind === 'production-job') {
+    refreshTimes(card, linkFor(id));
+    // The planning message of a job that moved on into production keeps naming the finished stage.
+    const label = main.querySelector<HTMLElement>(`[data-job-label="${id}"] p`);
+    if (label && productionJobs.get(id)?.kind === 'story' && label.textContent?.trim() === 'Story-Planung') label.textContent = 'Story-Produktion';
+  }
   if (active === 'pause-research' || active === 'resume-research') {
     card.querySelector<HTMLElement>('[data-action="pause-research"], [data-action="resume-research"]')?.focus();
   }
 }
 
 function refreshJobs() {
+  const visible = new Set<string>();
   for (const card of main.querySelectorAll<HTMLElement>('[data-job]')) {
     const id = card.dataset.job!;
-    if (validId(id)) void poll(card.dataset.kind!, id);
+    if (!validId(id)) continue;
+    if (card.dataset.kind === 'production-job') {
+      visible.add(id);
+      const known = productionJobs.get(id);
+      if (!known || !ended(known.status)) watchProduction(id);
+    }
+    void poll(card.dataset.kind!, id);
+  }
+  for (const [id, stream] of productionStreams) {
+    if (!visible.has(id)) { stream.source.close(); productionStreams.delete(id); }
   }
 }
+
+// What changes the card layout. Clock-driven values (heartbeat age, token counter) refresh only the live panel.
+function stableProduction(job: ProductionJob) {
+  const monitor = job.monitor;
+  return JSON.stringify(monitor ? { ...job, monitor: { ...monitor, server_time: 0, activity: null,
+    health: { ...monitor.health, quiet_for: null, checks: null } } } : job);
+}
+
+function updateLivePanel(id: string) {
+  const card = main.querySelector<HTMLElement>(`[data-job="${id}"]`);
+  const panel = card?.querySelector<HTMLElement>('[data-live-panel]');
+  const monitor = productionJobs.get(id)?.monitor;
+  if (!card || !panel || !monitor) return;
+  const next = document.createElement('div');
+  next.innerHTML = liveMarkup(monitor, linkFor(id));
+  panel.replaceWith(next.firstElementChild!);
+  refreshTimes(card, linkFor(id));
+}
+
+let lastAnnouncement = 0;
+function announceProduction(previous: ProductionJob | undefined, job: ProductionJob) {
+  const before = previous?.monitor, now = job.monitor;
+  if (!before || !now) return;
+  const terminal = ['completed', 'failed', 'cancelled', 'incomplete', 'needs_decision'].includes(now.state);
+  if (!terminal && Date.now() - lastAnnouncement < 4000) return;   // no chatter while the step stays the same kind of work
+  let text = '';
+  if (now.state !== before.state && (terminal || now.state === 'paused' || now.state === 'retrying' || before.state === 'paused' || before.state === 'retrying')) {
+    text = `Produktion: ${stateInfo[now.state]?.label ?? now.state}.`;
+  } else if (now.current_chapter !== before.current_chapter && now.current_chapter && !terminal) {
+    text = `Kapitel ${now.current_chapter} gestartet.`;
+  } else if (now.health.level !== before.health.level && ['quiet', 'stalled', 'worker_down'].includes(now.health.level)) {
+    text = now.health.level === 'quiet' ? 'Seit längerer Zeit kein neuer Fortschritt bestätigt. Der Prozessstatus wird überprüft.'
+      : 'Produktion: Der Fortschritt ist ausgeblieben.';
+  }
+  if (text) { announce(text); lastAnnouncement = Date.now(); }
+}
+
+// Accepts a job record from the event stream or from polling.
+async function acceptProduction(id: string, job: ProductionJob) {
+  const previous = productionJobs.get(id);
+  const link = linkFor(id);
+  const reconnected = link.state === 'lost';
+  link.failures = 0;
+  if (reconnected) link.state = productionStreams.get(id) && Date.now() - productionStreams.get(id)!.last < 7000 ? 'live' : 'polling';
+  if (job.monitor) link.offset = Date.now() / 1000 - job.monitor.server_time;
+  link.lastOk = Date.now();
+  let changed = reconnected || stableProduction(job) !== (previous ? stableProduction(previous) : '');
+  await Promise.all((job.chapter_results ?? []).map(async chapter => {
+    if (productionDocuments.get(chapter.id)?.version === chapter.version) return;
+    const document = await api.document(chapter.id);
+    if (productionDocuments.get(chapter.id)?.version !== document.version) changed = true;
+    productionDocuments.set(chapter.id, document);
+  }));
+  productionJobs.set(id, job);
+  if (changed) updateJobCard(id, 'production-job');
+  else updateLivePanel(id);
+  if (reconnected) announce('Verbindung zum Studio wiederhergestellt.');
+  announceProduction(previous, job);
+  if (previous && job.status !== previous.status && job.status === 'completed') {
+    announce(job.kind === 'story' ? 'Die Geschichte ist fertig.' :
+      job.kind === 'planning' && !job.plan_version ? 'Die Antwort liegt im Chat vor.' : 'Die Story-Planung liegt vor.');
+  }
+}
+
+function markLost(id: string) {
+  const link = linkFor(id);
+  link.failures += 1;
+  if (link.state !== 'lost' && (link.failures >= 2 || !navigator.onLine) && productionJobs.has(id)) {
+    link.state = 'lost';
+    updateJobCard(id, 'production-job');
+    announce('Verbindung zum Studio unterbrochen. Der Produktionsauftrag läuft im Backend weiter.');
+  }
+}
+
+function watchProduction(id: string) {
+  if (!('EventSource' in window) || productionStreams.has(id)) return;
+  const source = new EventSource(`/api/production/jobs/${encodeURIComponent(id)}/events`);
+  const entry = { source, last: 0 };
+  productionStreams.set(id, entry);
+  const parse = (event: Event) => JSON.parse((event as MessageEvent<string>).data);
+  source.addEventListener('job', event => {
+    entry.last = Date.now();
+    const link = linkFor(id);
+    if (link.state !== 'lost') link.state = 'live';
+    void acceptProduction(id, parse(event) as ProductionJob);
+  });
+  source.addEventListener('heartbeat', event => {
+    entry.last = Date.now();
+    const job = productionJobs.get(id);
+    const live = parse(event) as { server_time: number; health: Monitor['health']; activity: Monitor['activity'] };
+    const link = linkFor(id);
+    if (link.state === 'lost') {
+      link.failures = 0;
+      link.state = 'live';
+      updateJobCard(id, 'production-job');
+      announce('Verbindung zum Studio wiederhergestellt.');
+    }
+    link.state = 'live';
+    if (!job?.monitor) return;
+    link.offset = Date.now() / 1000 - live.server_time;
+    job.monitor = { ...job.monitor, server_time: live.server_time, health: live.health, activity: live.activity };
+    updateLivePanel(id);
+  });
+  source.addEventListener('end', () => {
+    source.close();
+    productionStreams.delete(id);
+    void poll('production-job', id, true);
+  });
+}
+
+const streamFresh = (id: string) => Date.now() - (productionStreams.get(id)?.last ?? 0) < 7000;
 
 async function poll(kind: string, id: string, force = false) {
   if (polling.has(id)) return;
@@ -1021,20 +1165,17 @@ async function poll(kind: string, id: string, force = false) {
   polling.add(id);
   try {
     if (kind === 'production-job') {
-      const job = await productionJob(id);
-      let changed = JSON.stringify(job) !== JSON.stringify(previous);
-      await Promise.all((job.chapter_results ?? []).map(async chapter => {
-        if (productionDocuments.get(chapter.id)?.version === chapter.version) return;
-        const document = await api.document(chapter.id);
-        if (productionDocuments.get(chapter.id)?.version !== document.version) changed = true;
-        productionDocuments.set(chapter.id, document);
-      }));
-      productionJobs.set(id, job);
-      if (changed) updateJobCard(id, kind);
-      if (previous && job.status !== previous.status && job.status === 'completed') {
-        announce(job.kind === 'story' ? 'Die Geschichte ist fertig.' :
-          job.kind === 'planning' && !job.plan_version ? 'Die Antwort liegt im Chat vor.' : 'Die Story-Planung liegt vor.');
+      if (!force && streamFresh(id)) return;   // the event stream delivers this card; polling is the fallback
+      let job: ProductionJob;
+      try { job = await productionJob(id); } catch (error) {
+        // An unreachable backend says nothing about the job: keep the last known state and report the connection.
+        if (error instanceof ApiError && error.status !== 502 && error.status !== 503 && error.status !== 504) throw error;
+        markLost(id);
+        return;
       }
+      const link = linkFor(id);
+      if (link.state !== 'lost') link.state = streamFresh(id) ? 'live' : 'polling';
+      await acceptProduction(id, job);
     } else if (kind === 'story-job') {
       const job = await storyJob(id);
       storyJobs.set(id, job);
@@ -1587,9 +1728,30 @@ async function handleProduction(action: string, value: string) {
     await poll('production-job', value, true);
     return;
   }
+  if (job && action === 'production-details') {
+    const detail = main.querySelector<HTMLDetailsElement>(`[data-job="${value}"] [data-job-detail="technical-error"]`);
+    if (detail) { detail.open = true; detail.querySelector('summary')?.focus(); detail.scrollIntoView({ block: 'nearest' }); }
+    return;
+  }
+  if (job && action === 'production-view-images') {
+    imagesDialog(job, imageMedia);
+    return;
+  }
   if (job && ['production-pause', 'production-resume', 'production-retry', 'production-cancel'].includes(action)) {
-    await productionAct(job.project_id, action.slice('production-'.length), { job_id: value });
-    await poll('production-job', value, true);
+    // One request per job and action: a double click or a second tab click must not queue the step twice.
+    const key = action + '|' + value;
+    if (controlBusy.has(key)) return;
+    controlBusy.add(key);
+    main.querySelectorAll<HTMLButtonElement>(`[data-action="${action}"][data-value="${value}"]`).forEach(b => { b.disabled = true; });
+    try {
+      await productionAct(job.project_id, action.slice('production-'.length), { job_id: value });
+    } catch (error) {
+      // The job already left that state, for example after a second click: show what the backend now says.
+      if (!(error instanceof ApiError && error.status === 409)) throw error;
+    } finally {
+      controlBusy.delete(key);
+      await poll('production-job', value, true);
+    }
   }
 }
 
@@ -1871,5 +2033,12 @@ window.addEventListener('beforeunload', event => {
   if (editor.dirty) event.preventDefault();
 });
 setInterval(refreshJobs, 1800);
+setInterval(() => {
+  for (const card of main.querySelectorAll<HTMLElement>('[data-kind="production-job"]')) refreshTimes(card, linkFor(card.dataset.job ?? ''));
+}, 1000);
+window.addEventListener('offline', () => {
+  for (const id of productionJobs.keys()) { linkFor(id).failures = 2; markLost(id); }
+});
+window.addEventListener('online', () => refreshJobs());
 void loadRoute();
 void loadNavigation().catch(error => setStatus(describe(error, 'Ordner und Chats konnten gerade nicht geladen werden.')));

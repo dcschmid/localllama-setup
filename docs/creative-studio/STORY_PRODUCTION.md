@@ -42,6 +42,8 @@ Aktualisierte Image-Service-Builds nehmen einen `Idempotency-Key` an. Bei älter
 - `python3 tests/creative-studio-real-production.py --url http://127.0.0.1:18700 --output output/story-production-acceptance` verfolgt einen bereits angelegten echten Abnahmelauf. Die Ergebnisse und der aktuelle Status liegen in dessen Ausgabeverzeichnis.
 - `python3 benchmarks/story-production-models.py --help` zeigt die Eingaben für den Deutsch-/Englisch-Vergleich. Der Vergleich liest die vorhandenen Beispiele aus SQLite und schreibt eigene Ergebnisdateien.
 
+Die [Produktionsansicht](PRODUCTION_MONITOR.md) zeigt Zustand, Heartbeat, Fortschritt, Kapitelstatus, Wortzahlen und den Aktivitätsverlauf aus den gespeicherten Backend-Daten. `python3 tests/creative-studio-monitor.py` und `node tests/creative-studio-monitor.mjs` prüfen sie.
+
 Der [P0-Bericht](STORY_PRODUCTION_P0.md) dokumentiert die Untersuchung von Riff Racers, den lokalen Abnahmelauf und die Nachweise.
 
 Besprochene Planänderungen werden als neue, validierte Planversion mit `pending_approval` in den Vorschlagsdaten gespeichert. Die Daten enthalten die Ausgangsversion, Kapitel- und Bibeländerungen sowie Auswirkungen auf vorhandene Kapitel. Der Plan-Dialog zeigt die neue Version zur Freigabe. Der Chat kann sie mit einer Zustimmung und Startanweisung freigeben und die vollständige Produktion beginnen. Offene Auswirkungen und belegte Restkonflikte werden weiterhin im Plan-Dialog bestätigt.

@@ -1,4 +1,32 @@
 # Changelog
+## 2026.11-monitor - Produktionsansicht mit Live-Aktivität
+
+- Die Produktionskarte im Story-Chat zeigt den Zustand nur noch aus dem
+  gespeicherten Jobstatus. Ein fehlgeschlagener Job meldete zuvor „Kapitel 2
+  wird verbessert“, weil die Überschrift aus dem Schrittnamen `reviewed`
+  entstand. Jetzt: Fehlgeschlagen, mit Ursache, Wortzahlen und Checkpoint.
+- Neu: `libexec/creative_studio_monitor.py` (abgeleiteter Zustand, Kapitel-
+  Teilschritte, Zähler, Wortzahl-Befund aus dem gespeicherten Text,
+  Aktivitätsverlauf aus `result.events`) und
+  `libexec/creative_studio_activity.py` (Heartbeat des Worker-Threads,
+  Modellanfrage mit Slot-Fortschritt aus `/slots`, Health `ok/waiting/quiet/
+  stalled/worker_down` mit schrittspezifischen, konfigurierbaren Schwellen
+  über `CREATIVE_STUDIO_ACTIVITY`).
+- `GET /api/production/jobs/<id>` liefert `monitor`. Neu:
+  `GET /api/production/jobs/<id>/events` (Server-Sent Events), im Browser mit
+  Polling-Fallback und Verbindungsstatus. Ein Verbindungsverlust bricht keinen
+  Job ab.
+- Szenenerweiterung speichert die Ursache jedes verworfenen Versuchs und nennt
+  sie dem nächsten Versuch.
+- UI: `production-monitor.ts`, breite Zweispaltenansicht auf Desktop,
+  einspaltig mobil, Aktionen je Zustand, keine Retry-Knöpfe während eines
+  laufenden Schritts, gesperrte Mehrfachklicks, ruhige Live-Ansagen.
+  `docs/creative-studio/PRODUCTION_MONITOR.md`.
+- Tests: `tests/creative-studio-monitor.py` (28 Fälle, inkl. echter Job
+  „Donner über Thunderforge“ auf einer read-only-Kopie) und
+  `tests/creative-studio-monitor.mjs` (Firefox: 14 Szenarien, Layout, axe,
+  Tastatur, echter Job).
+
 ## 2026.11-knowledge - Ordnerwissen (optional, ordnergebundenes Weltwissen)
 
 - `libexec/creative_studio_knowledge.py` + Migration: Ordnergebundenes Wissen
