@@ -6,6 +6,7 @@ import time
 import unicodedata
 import uuid
 
+import creative_studio_content as content
 import creative_studio_organizer as records
 import creative_studio_story as story
 import creative_studio_visual as visual
@@ -264,6 +265,9 @@ def requested_action(text, preferred, *, has_plan=False, has_prose=None, story_c
     review = EDITORIAL.search(text)
     if not question and ARTICLE.search(text) and writing and (not review or writing.start() < review.start()):
         return "article"
+    # A commission that asks for new text owns its follow-up steps. "Prüfe den Text" then only names the quality gate.
+    if not question and preferred in ("auto", "story", "article") and content.analyze(text):
+        return "content"
     if not question and prose and review:
         return "review-story" if re.search(r"\b(?:manuskript|manuscript)\b", text, re.I) and AUDIT.search(text) else "editorial"
     if IMAGE.search(text) and not DRAFT_CHAPTER.search(text):

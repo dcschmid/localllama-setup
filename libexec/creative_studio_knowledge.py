@@ -148,9 +148,10 @@ def select(conn, folder_id, query, *, limit=SELECT_LIMIT, budget=BLOCK_CHARS):
     """Selective, budgeted injection for chats and writing jobs; never a full dump."""
     steps, entries, conflicts = merge(conn, folder_id)
     if not entries and not conflicts:
-        return {"text": "", "used": 0, "folders": []}
+        return {"text": "", "used": 0, "folders": [], "entries": []}
     names = {folder["id"]: folder["name"] for folder in steps}
-    injectable = [entry for entry in entries if entry["status"] != "idea" and entry["category"] != "idea"]
+    # The visual profile configures pictures; it is not world knowledge for a writing prompt.
+    injectable = [entry for entry in entries if entry["status"] != "idea" and entry["category"] not in ("idea", VISUAL_KEY)]
     if query:
         terms = _terms(query)
         ranked = sorted(injectable, key=lambda entry: (
@@ -161,13 +162,14 @@ def select(conn, folder_id, query, *, limit=SELECT_LIMIT, budget=BLOCK_CHARS):
         chosen += [entry for entry in overflow if entry["status"] == "confirmed"][:4]
     else:
         chosen = injectable[:limit]
-    used, chunks = 0, []
+    used, chunks, included = 0, [], []
     for entry in chosen:
         body = _clip(entry["content"], SNIPPET_CHARS) if len(entry["content"]) > SNIPPET_CHARS else entry["content"]
         chunk = f"{entry['category']} · {entry['title']}: {body}"
         if used + len(chunk) > budget:
             break
         chunks.append(chunk)
+        included.append({"title": entry["title"], "status": entry["status"]})
         used += len(chunk)
     for parent, child in conflicts:
         note = ("Konflikt (als ungeklärt melden, nicht auflösen): "
@@ -178,7 +180,7 @@ def select(conn, folder_id, query, *, limit=SELECT_LIMIT, budget=BLOCK_CHARS):
             break
         chunks.append(note)
         used += len(note)
-    return {"text": "\n".join(chunks), "used": len(chunks),
+    return {"text": "\n".join(chunks), "used": len(chunks), "entries": included,
             "folders": sorted({names[entry["folder_id"]] for entry in chosen if entry["folder_id"] in names})}
 
 
@@ -242,13 +244,13 @@ def owner_folder(conn, *, project_id=None, session_id=None):
     return None
 
 
-def context_for(conn, *, project_id=None, session_id=None, query=""):
+def context_for(conn, *, project_id=None, session_id=None, query="", limit=SELECT_LIMIT):
     """Prompt block for chat/task assembly; '' without a folder or knowledge."""
     folder = owner_folder(conn, project_id=project_id, session_id=session_id)
     if not folder:
         return ""
     try:
-        block = select(conn, folder, query)
+        block = select(conn, folder, query, limit=limit)
     except (KnowledgeError, organizer.OrganizerError):
         return ""
     if not block["text"]:

@@ -20,10 +20,12 @@ type ImageItem = { id: string; name?: string; folder_id?: string | null; trashed
 type ImageJob = { id?: string; status: string; image_id?: string; progress?: number; error?: string;
   alt?: string; visual_profile?: VisualReceipt; request?: { prompt?: string }; dimensions?: [number, number]; waiting_reason?: string };
 type Task = { status: string; project_id?: string; document_id?: string; error?: string; image?: ImageJob;
+  knowledge?: { folders: string[]; entries: Array<{ title: string; status: string }> };
   requirements: { language?: 'de' | 'en'; word_range?: [number, number]; image_size?: string };
   steps: Record<string, { status: string; name?: string; error?: string;
     diagnostics?: Array<{ validation: { words: number; language: string; issues: string[] } }>;
-    skills?: Record<string, string>; corrections?: number; publishing?: string;
+    skills?: Record<string, string>; corrections?: number; publishing?: string; remaining?: number; note?: string;
+    files?: Array<{ name: string; format: string; bytes: number }>; unsupported?: string[];
     findings?: Array<{ quote: string; verdict: string; reason: string; source_url?: string }> }> };
 type ResearchJob = { status: string; result?: { document_id?: string }; checkpoint?: {
   stage?: string; paused?: boolean; done_rounds?: number; rounds?: number;
@@ -268,7 +270,12 @@ function imageMedia(id: string, alt: string, actions = true) {
     </figure>`;
 }
 
+const knowledgeStatus: Record<string, string> = { confirmed: 'Bestätigt', reference: 'Referenz', unresolved: 'Ungeklärt' };
 const taskErrors: Record<string, string> = {
+  content_knowledge_missing: 'Im Ordner liegt kein passendes Wissen für diesen Auftrag vor. Lege Ordnerwissen an oder bestätige es zuerst.',
+  content_export_failed: 'Die Datei konnte nicht geschrieben werden.',
+  content_export_invalid: 'Die erstellte Datei stimmt nicht mit dem gespeicherten Text überein und wird nicht angeboten.',
+  content_export_missing: 'Die Datei fehlt oder wurde verändert und wird nicht angeboten.',
   writing_template_mismatch: 'Das Schreibprofil hat die erwarteten Human-Writing-Regeln nicht übernommen.',
   writing_service_unavailable: 'Das Schreibmodell oder der Human Writing Skill ist gerade nicht erreichbar.',
   writing_empty: 'Das Schreibmodell hat keinen Text geliefert.',
@@ -292,6 +299,8 @@ function taskContent(id: string) {
   const task = chatTasks.get(id);
   if (!task) return '<p>Auftrag wird geladen …</p>';
   const writing = task.steps.writing;
+  const review = task.steps.review;
+  const fileStep = task.steps.export;
   const doc = task.document_id ? taskDocuments.get(task.document_id) : undefined;
   const image = task.image;
   const savedImage = image?.status === 'completed' && safeImageId(image.image_id);
@@ -307,7 +316,8 @@ function taskContent(id: string) {
     writing?.status === 'researching' ? 'Quellen werden recherchiert' :
     writing?.status === 'planning' ? 'Artikel wird geplant' :
     writing?.status === 'fact-checking' ? 'Article Writing prüft die Belege' :
-    writing?.status === 'revising' ? 'Text wird überarbeitet' : writing?.status === 'pending' ? 'Schreiben vorgesehen' : '';
+    writing?.status === 'revising' ? 'Text wird überarbeitet' : writing?.status === 'pending' ? 'Schreiben vorgesehen' :
+    review?.status === 'validating' ? 'Human Writing prüft den Text' : review?.status === 'revising' ? 'Text wird überarbeitet' : '';
   const factStatus: Record<string, string> = { supported: 'Belegt', unsupported: 'Beleg fehlt',
     disputed: 'Widersprüchlich', unverified: 'Offen', editorial: 'Redaktionell' };
   const skillList = Object.entries(writing?.skills ?? {}).map(([name, version]) => name + ' ' + version).join(' · ');
@@ -335,6 +345,13 @@ function taskContent(id: string) {
       <p>Text gespeichert${writing?.diagnostics?.at(-1) ? ' · ' + writing.diagnostics.at(-1)!.validation.words + ' Wörter' : ''}</p>
       <div class="prose" lang="${doc.lang === 'en' ? 'en' : 'de'}">${markdown(doc.body)}</div>
       ${button('open-doc', 'Entwurf öffnen', 'text', 'button', doc.id)}</section>` : ''}
+    ${review?.status === 'completed' ? `<p>${review.corrections ? `${review.corrections} Textbefund${review.corrections === 1 ? '' : 'e'} automatisch korrigiert.` :
+      'Die Prüfung hat keinen Befund korrigiert.'}${review.remaining ? ` ${review.remaining} Hinweis${review.remaining === 1 ? '' : 'e'} bleib${review.remaining === 1 ? 't' : 'en'} offen.` : ''}</p>` : ''}
+    ${review?.status === 'failed' ? '<p>' + esc(taskFailure(review.error) || 'Die Prüfung konnte nicht abgeschlossen werden.') + '</p>' : ''}
+    ${review?.findings?.length ? `<details data-job-detail="content-review"><summary>Befunde der Prüfung</summary><ul>${review.findings.map(f =>
+      '<li>' + (f.quote ? '„' + esc(f.quote) + '“ ' : '') + esc(f.reason) + '</li>').join('')}</ul></details>` : ''}
+    ${task.knowledge?.entries?.length ? `<details data-job-detail="content-knowledge"><summary>Verwendetes Ordnerwissen</summary><ul>${task.knowledge.entries.map(e =>
+      '<li>' + esc(e.title) + ' · ' + esc(knowledgeStatus[e.status] ?? e.status) + '</li>').join('')}</ul></details>` : ''}
     ${savedImage && image?.image_id ? `<section class="task-result" aria-label="Gespeichertes Bild">
       <p>Bild erstellt${image.dimensions ? ' · ' + image.dimensions.join(' × ') : ''}</p>
       ${imageMedia(image.image_id, image.alt ?? image.request?.prompt ?? 'Generiertes Bild')}${receiptMarkup(image.visual_profile)}</section>` : ''}
@@ -344,7 +361,11 @@ function taskContent(id: string) {
       ${image?.waiting_reason === 'image_service_unreachable' ? '<p>Der Bilddienst ist gerade nicht erreichbar. Das Studio versucht es erneut.</p>' : ''}
       ${progress !== undefined ? `<label>Bildfortschritt · ${progress} %<progress value="${progress}" max="100"></progress></label>` : ''}
       ${image?.id && !ended(imageStatus) ? button('cancel-image', 'Bildauftrag abbrechen', undefined, 'button', image.id) : ''}` : ''}
-    ${task.steps.image?.status === 'skipped' ? '<p>Der Bildauftrag konnte nicht gestartet werden.</p>' : ''}`;
+    ${task.steps.image?.status === 'skipped' && review?.status !== 'skipped' ? '<p>Der Bildauftrag konnte nicht gestartet werden.</p>' : ''}
+    ${fileStep?.status === 'completed' && fileStep.files?.length ? '<p class="editor-actions">' + fileStep.files.map(f =>
+      `<a class="button" href="/api/chat/tasks/${id}/files/${encodeURIComponent(f.name)}" download>${esc(f.name)} herunterladen</a>`).join(' ') + '</p>' : ''}
+    ${fileStep?.status === 'completed' && fileStep.unsupported?.length ? '<p class="muted">Erstellt wurde Markdown. Nicht unterstützt: ' + fileStep.unsupported.map(esc).join(', ') + '.</p>' : ''}
+    ${fileStep?.status === 'failed' ? '<p>' + esc(taskFailure(fileStep.error) || 'Die Datei konnte nicht erstellt werden.') + '</p>' : ''}`;
 }
 
 function jobContent(kind: string, id: string) {

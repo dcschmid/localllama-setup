@@ -40,6 +40,7 @@ import creative_studio_skills as skills
 import creative_studio_article as article
 import creative_studio_correction as correction
 import creative_studio_chat as chats
+import creative_studio_content as content
 from creative_studio_plan import FORMATS, ID, PlanError, build_plan, check_text, word_bounds
 
 APP = "creative-studio"
@@ -1205,7 +1206,7 @@ def model_editorial_json(prompt, model, language, genre, mode, limit, *, lane="c
     return result, evidence
 
 
-def editorial_model(doc, body, source, start, end):
+def editorial_model(doc, body, source, start, end, genre=None):
     mode = body.get("mode", "rewrite")
     goal = body.get("goal", "clarity")
     instruction = body.get("instruction", "")
@@ -1219,7 +1220,7 @@ def editorial_model(doc, body, source, start, end):
     if not excerpt.strip():
         raise PlanError("editorial_request_invalid")
     language = editorial_language(excerpt, doc["lang"], requested_language)
-    genre = editorial_genre(doc, instruction)
+    genre = genre or editorial_genre(doc, instruction)
     tag = "editorial" if genre == "general" else genre
     if mode != "rewrite":
         lint = style_audit(excerpt, language, genre)
@@ -1372,15 +1373,38 @@ def editorial_choices(before, after):
     return old, new, [{"paragraph": i // 2 + 1, "before": old[i], "after": new[i]} for i in changed]
 
 
+CONTENT_ENTRIES = 6
+
+
+def content_knowledge(project_id, session_id, query):
+    """The folder knowledge a content commission may use, with the entries that were actually injected."""
+    conn = db()
+    folder = knowledge.owner_folder(conn, project_id=project_id, session_id=session_id)
+    try:
+        return (knowledge.select(conn, folder, query, limit=CONTENT_ENTRIES) if folder
+                else {"text": "", "used": 0, "folders": [], "entries": []})
+    except (knowledge.KnowledgeError, organizer.OrganizerError):
+        return {"text": "", "used": 0, "folders": [], "entries": []}
+
+
 def write_task(task_id, plan, payload, result):
     writing = plan["writing"]
     lang = writing["lang"]
-    genre = "fiction" if writing["kind"] == "story" else "editorial"
+    brief_plan = writing.get("content")
+    genre = "fiction" if writing["kind"] == "story" else "general" if brief_plan else "editorial"
+    tag = "editorial" if genre == "general" else genre
     model = "creative-writing"
     request = writing["instruction"]
     context = writing_context(result.get("project_id"))
-    folder = knowledge.context_for(db(), project_id=result.get("project_id"),
-                                   session_id=payload["session_id"], query=request)
+    # The subject picks the entries. The whole request would favour general entries that repeat the series name.
+    topic = brief_plan["subject"] if brief_plan and brief_plan["subject"] else request
+    folder = knowledge.context_for(db(), project_id=result.get("project_id"), session_id=payload["session_id"], query=topic,
+                                   limit=CONTENT_ENTRIES if brief_plan else knowledge.SELECT_LIMIT)
+    if brief_plan:
+        used = content_knowledge(result.get("project_id"), payload["session_id"], topic)
+        result["knowledge"] = {"folders": used["folders"], "entries": used["entries"]}
+        if (brief_plan["knowledge_only"] or brief_plan["use_folder_knowledge"]) and not used["text"]:
+            raise PlanError("content_knowledge_missing")
     source = task_source(payload["session_id"], payload.get("document_id")) if (
         payload.get("document_id") or writing["kind"] == "article") else ""
     if genre == "fiction" and not source and result.get("project_id"):
@@ -1395,6 +1419,25 @@ def write_task(task_id, plan, payload, result):
     kind = "fiction passage" if genre == "fiction" else "article"
     constraint = (f"Write the requested {kind} entirely in {'English' if lang == 'en' else 'German'}."
                   + requirement + " Return only the requested prose. The studio handles publishing and pictures.")
+    aim = brief_plan["target_words"] if brief_plan and length and length[0] != length[1] else None
+
+    def shape(words):
+        # A paragraph plan holds a length far better than a bare word total.
+        parts = max(1, round(words / 60))
+        return (f" Write {parts} paragraph{'s' if parts > 1 else ''} of about {round(words / parts)} words each,"
+                f" about {words} words in total. The prose must have between {length[0]} and {length[1]} words.")
+
+    if brief_plan:
+        requirement = shape(aim) if aim else requirement
+        constraint = (f"Write the requested {brief_plan['content_label']}"
+                      + (f" about {brief_plan['subject']}" if brief_plan["subject"] else "")
+                      + f" entirely in {'English' if lang == 'en' else 'German'}." + requirement
+                      + " Begin with a Markdown heading that names the subject, then write natural prose."
+                      " Use only words of that language apart from names. Return only the text. The studio handles pictures and files.")
+        if brief_plan["knowledge_only"]:
+            constraint += (" Use only facts stated in the folder knowledge below. Add no names, numbers, rules, places or events "
+                           "that it does not state; where it is silent, stay general or leave the point out. "
+                           "Report contradictions as unresolved instead of deciding them.")
     brief = (constraint + "\n\nWriting brief:\n" + request +
                 ("\n\nProject notes:\n" + context if context else "") +
                 ("\n\nOrdnerwissen (Kanon/Referenzen):\n" + folder if folder else "") +
@@ -1403,22 +1446,39 @@ def write_task(task_id, plan, payload, result):
     guidance = brief
     diagnostics = []
     answer = ""
-    for index in range(3):
-        mode = "rewrite" if index else "generate"
-        if index:
+    for index in range(4 if brief_plan else 3):
+        mode = "rewrite" if index and not brief_plan else "generate"
+        if index and brief_plan:
+            # A writer misses a length by a steady factor and copies a draft it is asked to revise.
+            # So write again from scratch and correct the aim by the measured miss.
+            measured = diagnostics[-1]["validation"]
+            if aim and "word_count_mismatch" in measured["issues"] and measured["words"]:
+                aim = min(round(length[1] * 1.3), max(round(length[0] * .85), round(aim * (length[0] + length[1]) / 2 / measured["words"])))
+            guidance = ((brief.replace(requirement, shape(aim)) if aim else brief) +
+                        f"\n\nThe previous attempt was rejected: {measured}. Write the text again from scratch.")
+        elif index:
+            measured = diagnostics[-1]["validation"]
+            miss = ""
+            if length and "word_count_mismatch" in measured["issues"]:
+                middle = (length[0] + length[1]) // 2
+                miss = (f"\nThe draft has {measured['words']} words but needs {length[0]} to {length[1]}. "
+                        + (f"Expand it to about {middle} words by adding concrete detail the material allows."
+                           if measured["words"] < length[0] else f"Shorten it to about {middle} words."))
             guidance = (brief +
-                        f"\n\nMeasured result of previous draft: {diagnostics[-1]['validation']}."
+                        f"\n\nMeasured result of previous draft: {measured}." + miss +
                         "\nRewrite the draft to meet every requirement. Return the corrected prose only.\n\n" + answer)
         task_step(task_id, result, "writing", status="revising" if index else "generating",
                   model=model, diagnostics=diagnostics)
         model_payload = {
             "model": model, "stream": False, "temperature": .45,
             "max_tokens": min(8192, max(1150, (length[1] * 3 + 200) if length else 1600)),
-            "messages": [{"role": "user", "content": f"[{lang}][{mode}][{genre}]\n" + guidance}],
+            "messages": [{"role": "user", "content": f"[{lang}][{mode}][{tag}]\n" + guidance}],
             "chat_template_kwargs": {"enable_thinking": False},
         }
         answer, evidence, finish = model_reply(model_payload, writing_rules(lang, genre, mode), lang, mode)
         validation = check_text(answer, writing, skill_text())
+        if brief_plan and brief_plan["subject"] and brief_plan["subject"].casefold() not in answer.casefold():
+            validation["issues"].append("subject_missing")
         if finish == "length":
             validation["issues"].append("output_truncated")
         diagnostics.append({**evidence, "validation": validation})
@@ -1633,8 +1693,109 @@ def previous_image(conn, session_id, task_id, project_id=None):
     return None
 
 
+def review_content(task_id, plan, result):
+    """Human Writing audit of the saved text. Confirmed findings are corrected and saved as the final version."""
+    import subprocess
+    conn = db()
+    lang, brief = plan["writing"]["lang"], plan["writing"]["content"]
+    did = result["document_id"]
+    row = organizer.require(conn, "document", did)
+    current = row["body"]
+    review = {"status": "validating", "corrections": 0, "findings": [], "remaining": 0}
+    task_step(task_id, result, "review", **review)
+    try:
+        audit = style_audit(current, lang, "general")
+    except (PlanError, OSError, ValueError, subprocess.SubprocessError) as exc:
+        task_step(task_id, result, "review", status="failed", error=str(exc) if isinstance(exc, PlanError) else "lint_failed")
+        return
+    found = audit["findings"]
+    review.update(skill_version=audit["skill_version"], remaining=len(found), findings=[
+        {"quote": item["excerpt"], "verdict": "editorial", "reason": item["why"]} for item in found[:40]])
+    words = plan["writing"]["words"]
+    try:
+        for _ in range(2 if brief["auto_correct"] and found else 0):
+            task_step(task_id, result, "review", **{**review, "status": "revising"})
+            listed = "; ".join(f'"{item["excerpt"][:70]}" ({item["why"][:90]})' for item in found[:6])
+            instruction = (f"Correct only these confirmed style findings and keep every fact, name and number: {listed}."
+                           + (f" The text must contain {words[0]}–{words[1]} words." if words and words[0] != words[1] else ""))[:1190]
+            proposal = editorial_model({"id": did, "kind": "doc", "lang": lang, "project_id": result["project_id"]},
+                                       {"mode": "rewrite", "goal": "finding", "lang": lang, "instruction": instruction},
+                                       current, 0, len(current), genre="general")
+            if (proposal["after_findings"] >= len(found) or proposal["text"] == current
+                    or brief["subject"] and brief["subject"].casefold() not in proposal["text"].casefold()):
+                review["note"] = "correction_no_gain"
+                break
+            current = proposal["text"]
+            found = style_audit(current, lang, "general")["findings"]
+    except production.WaitForResource:
+        review["note"] = "production_gpu_busy"
+    except (PlanError, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        review["note"] = str(exc) if isinstance(exc, PlanError) else "writing_service_unavailable"
+    fixed = review["remaining"] - len(found)
+    if current != row["body"]:
+        with _lock, conn:
+            row = organizer.require(conn, "document", did)
+            organizer.update_document(conn, row, row["title"], current, f"Human Writing: {fixed} Befunde korrigiert", "generated")
+    task_step(task_id, result, "review", **{**review, "status": "completed", "corrections": fixed, "remaining": len(found)})
+
+
+def export_content(task_id, plan, result):
+    """Write the requested file from the saved final text and offer it only after it was read back."""
+    conn = db()
+    row = organizer.require(conn, "document", result["document_id"])
+    try:
+        receipt = content.export(DATA / "content", task_id, row["title"], row["body"], plan["export"]["formats"])
+    except (PlanError, OSError) as exc:
+        task_step(task_id, result, "export", status="failed", error=str(exc) if isinstance(exc, PlanError) else "content_export_failed")
+        return
+    result["export"] = receipt
+    unsupported = plan["writing"]["content"]["export_unsupported"]
+    task_step(task_id, result, "export", status="completed", validated=True, unsupported=unsupported,
+              files=[{key: item[key] for key in ("name", "format", "bytes")} for item in receipt["files"]])
+
+
+def content_image(conn, plan, payload, result, request):
+    """The picture request of a content commission and the style receipt, if a studio style applies.
+
+    A named studio style or the folder's visual profile goes through the style templates and recipes that story
+    illustrations use. Anything else becomes a short scene prompt, because long prose is typeset by a picture model."""
+    brief = plan["writing"]["content"]
+    pid = result["project_id"]
+    folder = knowledge.owner_folder(conn, project_id=pid, session_id=payload["session_id"])
+    try:
+        saved = knowledge.profile(conn, folder) if folder else None
+        folder_name = organizer.require(conn, "folder", folder)["name"] if folder else ""
+    except (knowledge.KnowledgeError, organizer.OrganizerError):
+        saved, folder_name = None, ""
+    body = task_source(payload["session_id"], result["document_id"]) if result.get("document_id") else ""
+    prose = re.sub(r"(?m)^#{1,6}\s.*$", "", body).strip()
+    subject = ", ".join(item for item in (brief["subject"], brief["context_name"]) if item) or brief["content_label"]
+    riff = bool(visual.RIFF.search(" ".join((brief["context_name"], folder_name))))
+    named = visual.choice(brief["image_profile"] or "", riff=riff)
+    if (named or saved) and not request.get("model"):
+        profile = knowledge.profile_default(conn, visual.default_profile(pid, brief["context_name"] or folder_name),
+                                            project_id=pid, session_id=payload["session_id"])
+        if named and named != profile["template"]:
+            profile = {**profile, **{key: value for key, value in visual.template(named).items()
+                                      if key not in ("bible", "ratio", "consistency", "consistency_rules")}}
+        ratio = brief["image_aspect_ratio"] or visual.ratio_for(request.get("size"))
+        composed, receipt = compose_visual(pid, {**profile, "consistency": False, **({"ratio": ratio} if ratio else {})},
+                                           subject, prose, None, seed=request.get("seed"))
+        return composed, receipt
+    style = brief["image_profile"]
+    sentences = re.split(r"(?<=[.!?])\s+", " ".join(prose.split()))
+    scene = ""
+    for sentence in sentences:
+        if scene and len(scene) + len(sentence) > 280:
+            break
+        scene = (scene + " " + sentence).strip()
+    prompt = (f"{subject}. " + (f"Style: {style}. " if style else "") + (f"Scene: {scene[:280]} " if scene else "")
+              + "Illustration only: no text, no lettering, no captions, no watermark.")
+    return {**request, "prompt": prompt}, None
+
+
 def done_task(conn, task_id, result):
-    delivered = [step["status"] for key, step in result["steps"].items() if key in ("document", "image")]
+    delivered = [step["status"] for key, step in result["steps"].items() if key in ("document", "review", "export", "image")]
     state = ("completed" if delivered and all(s == "completed" for s in delivered)
              else "partial" if "completed" in delivered
              else "cancelled" if delivered and all(s in ("cancelled", "skipped") for s in delivered) else "failed")
@@ -1705,6 +1866,7 @@ def advance_task(row):
             title = plan["title"] or (title_match[1] if title_match else steps["project"]["name"])
             with _lock, conn:
                 did = save_document(conn, result["project_id"], title, text,
+                                    "doc" if plan["writing"]["kind"] == "content" else
                                     "chapter" if plan["writing"]["kind"] == "story" else "article",
                                     plan["writing"]["lang"], "generated", "Erster Entwurf")
                 result["document_id"] = did
@@ -1712,6 +1874,19 @@ def advance_task(row):
                 task_result(conn, task_id, result)
         else:
             task_step(task_id, result, "document", status="skipped")
+            if plan["writing"]["kind"] == "content":
+                # Without the text there is nothing to review, export or illustrate.
+                for key in ("review", "export", "image"):
+                    if key in steps:
+                        steps[key] = {"status": "skipped"}
+                result["error"] = steps["writing"].get("error")
+                with _lock, conn:
+                    task_result(conn, task_id, result, "failed")
+                return
+    if steps.get("review", {}).get("status") in ("pending", "validating", "revising") and steps["document"]["status"] == "completed":
+        review_content(task_id, plan, result)
+    if steps.get("export", {}).get("status") == "pending" and steps["document"]["status"] == "completed":
+        export_content(task_id, plan, result)
     if "image" in plan and steps["image"]["status"] == "pending":
         image = plan["image"]
         meta = {"chat_task_id": task_id, "session_id": payload["session_id"],
@@ -1738,11 +1913,20 @@ def advance_task(row):
                     meta["document_id"] = source_meta.get("document_id")
             else:
                 brief = image["brief"]
-                if "writing" in plan:
-                    excerpt = task_source(payload["session_id"], result.get("document_id")) if result.get("document_id") else ""
-                    brief = (brief + "\nIllustrate the setting of the story.\n" +
-                             (excerpt[:950] or plan["writing"]["instruction"][:950]))
-                image_request["prompt"] = brief[:2800]
+                if plan.get("writing", {}).get("content"):
+                    image_request, receipt = content_image(conn, plan, payload, result, image_request)
+                    if receipt:
+                        meta["visual_profile"] = receipt
+                    content_brief = plan["writing"]["content"]
+                    meta["alt"] = (f"{content_brief['content_label']}: " + ", ".join(
+                        item for item in (content_brief["subject"], content_brief["context_name"]) if item))[:180]
+                    result["requirements"]["image_size"] = image_request.get("size") or result["requirements"]["image_size"]
+                else:
+                    if "writing" in plan:
+                        excerpt = task_source(payload["session_id"], result.get("document_id")) if result.get("document_id") else ""
+                        brief = (brief + "\nIllustrate the setting of the story.\n" +
+                                 (excerpt[:950] or plan["writing"]["instruction"][:950]))
+                    image_request["prompt"] = brief[:2800]
             if story_context:
                 doc = organizer.require(conn, "document", meta["document_id"]) if meta["document_id"] else None
                 image_request.pop("size", None)
@@ -2071,6 +2255,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._attachment_bytes(parts[1])
         if parts == ["health"]:
             return self._json({"ok": True, "app": APP})
+        if parts[:2] == ["chat", "tasks"] and len(parts) == 5 and parts[3] == "files":
+            row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='chat_task'", (parts[2],)).fetchone()
+            if not row or not organizer.visible_job(conn, row):
+                return self._json({"error": "chat_task_not_found"}, 404)
+            try:
+                path = content.verify(DATA / "content", row["id"], jload(row["result"], {}).get("export", {}), parts[4])
+            except PlanError as exc:
+                return self._json({"error": str(exc)}, 404)
+            return self._serve_file(path, "text/markdown; charset=utf-8", parts[4])
         if parts[:2] == ["chat", "tasks"] and len(parts) == 3:
             row = conn.execute("SELECT * FROM jobs WHERE id=? AND service='chat_task'", (parts[2],)).fetchone()
             if not row or not organizer.visible_job(conn, row):
@@ -3010,7 +3203,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = chats.activate(conn, sid, selected)
             session = organizer.require(conn, "chat", sid)
         elif not fresh and not pid and len(contexts) > 1 and (action.startswith("planning-") or action in (
-                "story", "outline", "chapter", "editorial", "review-story", "image")):
+                "story", "outline", "chapter", "editorial", "review-story", "image", "content")):
             return chats.choice(contexts, "context"), mode, text, None
         elif not pid and len(contexts) == 1 and not fresh:
             pid = chats.activate(conn, sid, contexts[0]["id"])
@@ -3142,9 +3335,11 @@ class Handler(BaseHTTPRequestHandler):
             body["document_id"] = rows[0]["id"]
         if action in ("image", "research", "story", "article", "game"):
             pid = chats.ensure_context(conn, session, action, lang, chats.title(text, session["title"]), fresh=fresh)
+        if action == "content":
+            pid = chats.ensure_context(conn, session, "custom", lang, chats.title(text, session["title"]))
         if action == "image" and chats.COVER.search(text):
             return None, "image", text, pid
-        return None, action if action in ("image", "research", "story", "article", "game", "chat") else mode, text, pid
+        return None, action if action in ("image", "research", "story", "article", "game", "chat", "content") else mode, text, pid
 
     def _dispatch_chat(self, body):
         text = body.get("text")
@@ -3191,7 +3386,9 @@ class Handler(BaseHTTPRequestHandler):
                                        "project_id": pinned, "session_id": session_id},
                                       job_id=task_id, chat_input=chat_input)
         try:
-            plan = build_plan(planner_text, preferred, lang, options, lambda prose: skill_text().detect_lang(prose))
+            detect = lambda prose: skill_text().detect_lang(prose)
+            plan = (content.make_plan(planner_text, lang, options, detect) if preferred == "content"
+                    else build_plan(planner_text, preferred, lang, options, detect))
         except PlanError as exc:
             return self._json({"error": str(exc)}, 422)
         except (ImportError, OSError):
@@ -3211,7 +3408,7 @@ class Handler(BaseHTTPRequestHandler):
         session = conn.execute("SELECT project_id FROM sessions WHERE id=?", (session_id,)).fetchone()
         if not session:
             return self._json({"error": "session_not_found"}, 404)
-        document_id = body.get("document_id")
+        document_id = None if plan.get("writing", {}).get("kind") == "content" else body.get("document_id")
         if document_id is not None:
             if not isinstance(document_id, str) or not ID.fullmatch(document_id):
                 return self._json({"error": "invalid_chat_task"}, 400)
@@ -3230,6 +3427,10 @@ class Handler(BaseHTTPRequestHandler):
         steps = {"project": {"status": "pending"}}
         if "writing" in plan:
             steps.update(writing={"status": "pending"}, document={"status": "pending"})
+        if plan.get("writing", {}).get("content", {}).get("review_after_creation"):
+            steps["review"] = {"status": "pending"}
+        if "export" in plan:
+            steps["export"] = {"status": "pending"}
         if "image" in plan:
             steps["image"] = {"status": "pending"}
         result = {"steps": steps, "requirements": {
@@ -3790,7 +3991,8 @@ def cmd_install() -> None:
         for module in ("creative_studio_plan.py", "creative_studio_organizer.py", "creative_studio_story.py",
                        "creative_studio_chat.py", "creative_studio_production.py", "creative_studio_skills.py",
                        "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py",
-                       "creative_studio_knowledge.py", "creative_studio_exports.py", "creative_studio_activity.py", "creative_studio_monitor.py"):
+                       "creative_studio_knowledge.py", "creative_studio_exports.py", "creative_studio_activity.py", "creative_studio_monitor.py",
+                       "creative_studio_content.py"):
             shutil.copyfile(src / "libexec" / module, backend / module)
         print(f"installed (repeatable): data {DATA}, state {STATE}")
 
@@ -3858,6 +4060,7 @@ def cmd_uninstall(purge=False):
                  Path.home() / ".local/libexec/creative_studio_article.py",
                  Path.home() / ".local/libexec/creative_studio_knowledge.py",
                  Path.home() / ".local/libexec/creative_studio_visual.py",
+                 Path.home() / ".local/libexec/creative_studio_content.py",
                  Path.home() / ".config/systemd/user" / UNIT,
                  Path.home() / ".local/share/applications/creative-studio.desktop"):
         path.unlink(missing_ok=True)
