@@ -112,6 +112,7 @@ Fällt das Modell aus, meldet das Receipt `audit.completed: false` mit dem Grund
   der Korrekturlauf etwa 7 von 8. Der blinde Vergleich entschied 13 von 14 Fällen richtig (alle 8 echten Fehler bestätigt,
   5 von 6 korrekten Sätzen belassen; der Fehltreffer, eine Großschreibung in einem Eigennamen, wird vom Namensschutz abgefangen).
   Das sind kleine Stichproben, keine Garantie.
+- Bekannte Lücke: Ein einzelnes falsches Verbende in einem langen Satz („Sie gingen … und blieb …“) übersieht das Modell auch mit dem Korrekturlauf. Der Audit findet die Stelle dann mitunter, begründet sie aber falsch und liefert keine Ersetzung, sodass die Prüfrunden sie nicht bestätigen können. Solche Fälle bleiben als unbestätigter Hinweis im Receipt oder fehlen ganz. „wegen dem“ gilt dem Modell als umgangssprachlich vertretbar und bleibt ein Hinweis.
 - Faktische Richtigkeit prüft sie nicht. Das tut die Belegprüfung der Artikelproduktion.
 - Stilentscheidungen (Rhythmus, Satzbau-Muster) werden gemeldet, aber nicht automatisch geändert.
 
