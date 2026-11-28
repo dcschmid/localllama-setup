@@ -869,7 +869,7 @@ class Pipeline:
             "passes": passes,
             "findings": [{key: f.get(key) for key in ("id", "source", "category", "status", "automatic", "method")}
                          | {"quote": f["quote"][:160], "issue": f["issue"][:240], "verification": (f.get("verification") or "")[:240],
-                          "note": f.get("note")}
+                          "replacement": (f.get("replacement") or "")[:160], "note": f.get("note")}
                          for f in first["findings"] if f["status"] != "info" or f["source"] != "rule"][:60],
             "recheck": {"required": bool(revised), "completed": all(p.get("recheck") is not None for p in revised),
                         "remaining": remaining, "counts": self.counts(last)},

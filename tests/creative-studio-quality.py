@@ -596,6 +596,12 @@ class ProofreadTests(unittest.TestCase):
         self.assertTrue(quality.present("go", "to go home") and not quality.present("go", "everything goes well"))
         self.assertTrue(quality.present("1996,", "im Jahr 1996, dass") and not quality.present("Welt", "Weltall"))
 
+    def test_the_receipt_names_the_proposed_replacement_and_the_verdict_reason(self):
+        result = run(self.EN, "en", "blog", Editor(confirm_all=True, proofread=self.EN_FIX))
+        entries = {f["quote"]: f for f in result["receipt"]["findings"] if f["source"] == "model"}
+        self.assertEqual({q: f["replacement"] for q, f in entries.items()}, {"were": "was", "go": "goes"})
+        self.assertTrue(all(f["verification"] for f in entries.values()))
+
     def test_adjacent_changes_are_one_repair_that_cannot_be_applied_by_halves(self):
         text = "Wegen dem schönen Wetter sind die Tische besetzt. Der Garten ist groß und schattig und sehr beliebt bei allen Gästen."
         editor = Editor(confirm_all=True, proofread={"Wegen dem schönen Wetter": "Wegen des schönen Wetters"})
