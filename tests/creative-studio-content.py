@@ -19,6 +19,7 @@ import creative_studio_chat as chats
 import creative_studio_content as content
 import creative_studio_knowledge as knowledge
 from creative_studio_plan import PlanError
+from creative_studio_quality import digest as quality_digest
 
 REAL = """Erstelle einen deutschsprachigen Strecken-Steckbrief für **Thunderforge aus Riff Racers** mit ungefähr 250 Wörtern.
 
@@ -56,10 +57,32 @@ SENTENCES = [
     "Die Zuschauer auf den Rampen hören das Dröhnen schon, bevor die Karts sichtbar werden.",
     "So bleibt Thunderforge die Strecke, an der Mut und Konzentration zusammenfinden.",
 ]
-FILLER = "In der heutigen schnelllebigen Welt ist es wichtig zu beachten, dass diese Strecke ein echtes Highlight ist."
+FILLER = "In der heutigen schnelllebigen Welt ist es wichtig zu beachten, dass diese Strecke ein echtes Highlight ist. "
 HEAD = "# Thunderforge – Strecken-Steckbrief\n\n"
-DRAFT = HEAD + " ".join([FILLER, *SENTENCES])
+DRAFT = HEAD + FILLER + " ".join(SENTENCES)
 FINAL = HEAD + " ".join(SENTENCES)
+
+
+EN_FILLER = "It's important to note that every kitchen deserves a machine that makes mornings easier. "
+EN_SENTENCES = [
+    "The Brewmaster K2 is a compact espresso machine for small kitchens.",
+    "It heats up in 25 seconds and fits under a standard cabinet.",
+    "A removable 1.2 liter water tank slides out at the side, so refilling takes a few seconds.",
+    "The steam wand turns milk into a dense foam without spattering.",
+    "Two programmable buttons store the shot length you like best.",
+    "The drip tray lifts out and goes into the dishwasher.",
+    "Daily cleaning takes about a minute, and the descaling program runs on its own.",
+    "The body is made of brushed steel and weighs 4.8 kilograms.",
+    "Replacement parts stay available for ten years.",
+    "The K2 costs 249 euros and comes with a two year warranty.",
+]
+EN_HEAD = "# Brewmaster K2\n\n"
+EN_DRAFT, EN_FINAL = EN_HEAD + EN_FILLER + " ".join(EN_SENTENCES), EN_HEAD + " ".join(EN_SENTENCES)
+EN_REQUEST = ("Write a product description for the Brewmaster K2 in about 120 words. Use only the confirmed knowledge from this folder. "
+              "Check and correct the text automatically. Provide the finished text as a Markdown file.")
+STORY = ("Der Leuchtturmwärter stieg die Wendeltreppe hinauf, wie er es seit dreißig Jahren tat. Draußen schlug der Wind gegen die Scheiben, "
+         "und unten im Hafen suchten die Kutter den Weg nach Hause. Er zündete die Lampe an und sah dem Licht nach, das über das dunkle "
+         "Wasser wanderte. Dann setzte er sich an den kleinen Tisch, goss Tee ein und wartete auf den Morgen.")
 
 
 class IntentTests(unittest.TestCase):
@@ -135,6 +158,7 @@ class WorkflowTests(unittest.TestCase):
         self.conn = self.studio["db"]()
         self.addCleanup(lambda: self.studio["db"]().close())
         self.calls = []
+        self.draft, self.filler = DRAFT, FILLER
         self.studio["http_json"] = self.upstream
         handler = self.studio["Handler"].__new__(self.studio["Handler"])
         handler._json = lambda value, status=200: (status, value)
@@ -147,8 +171,13 @@ class WorkflowTests(unittest.TestCase):
         if url.endswith("/v1/chat/completions"):
             self.calls.append(body)
             if body["model"] == "creative-writing":
-                return 200, {"choices": [{"message": {"content": DRAFT}, "finish_reason": "stop"}]}
-            return 200, {"choices": [{"message": {"content": json.dumps({"text": FINAL, "reasons": []})}, "finish_reason": "stop"}]}
+                return 200, {"choices": [{"message": {"content": self.draft}, "finish_reason": "stop"}]}
+            # The central quality pipeline: the rule registry finds the filler itself, the audit model has nothing to add,
+            # and the rewrite model returns the one exact edit that removes the confirmed filler sentence.
+            properties = body["response_format"]["schema"]["properties"]
+            answer = ({"findings": []} if "findings" in properties else {"verdicts": []} if "verdicts" in properties else
+                      {"edits": [{"id": "f1", "before": self.filler, "after": ""}]})
+            return 200, {"choices": [{"message": {"content": json.dumps(answer)}, "finish_reason": "stop"}]}
         if url.endswith("/studio/api/catalog"):
             return 200, {"models": [{"id": "moss", "installed": True, "negative": True, "sizes": ["1024x576"], "verified_modes": [],
                                      "license": "mit", "formats": [{"id": "16:9", "size": "1024x576", "preview_size": "1024x576"}]}],
@@ -158,10 +187,10 @@ class WorkflowTests(unittest.TestCase):
                          "prompt": f"Low-poly. {body['subject']}. {body['scene']} {body['details']}"}
         raise AssertionError("unexpected upstream call: " + url)
 
-    def folder_chat(self, *, knowledge_entries=True, visual_profile=True):
+    def folder_chat(self, *, knowledge_entries=True, visual_profile=True, name="Riff Racers"):
         folder, sid = uuid.uuid4().hex, uuid.uuid4().hex
         with self.conn:
-            self.conn.execute("INSERT INTO folders(id,folder_id,name,updated) VALUES(?,NULL,'Riff Racers',?)", (folder, time.time()))
+            self.conn.execute("INSERT INTO folders(id,folder_id,name,updated) VALUES(?,NULL,?,?)", (folder, name, time.time()))
             self.conn.execute("INSERT INTO sessions(id,title,folder_id,created,updated) VALUES(?,'Thunderforge',?,?,?)",
                               (sid, folder, time.time(), time.time()))
             if knowledge_entries:
@@ -209,8 +238,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual((document["kind"], document["version"], document["body"]), ("doc", 2, FINAL))
         first = self.conn.execute("SELECT body FROM doc_versions WHERE document_id=? AND version=1", (document["id"],)).fetchone()
         self.assertEqual(first["body"], DRAFT)
-        self.assertEqual((steps["review"]["corrections"], steps["review"]["remaining"]), (1, 1))
-        self.assertEqual(steps["review"]["findings"][0]["quote"], "In der heutigen schnelllebigen Welt")
+        self.assertEqual((steps["review"]["corrections"], steps["review"]["remaining"]), (1, 0))
+        receipt = result["quality"]
+        self.assertEqual(receipt["audit"]["models"], ["human-audit"])    # one alias for every role: no weight reload between calls
+        self.assertEqual({item["source"] for item in receipt["findings"]}, {"rule"})    # the registry found it, the audit model found nothing
+        self.assertTrue(steps["review"]["summary"]["audit_completed"])
+        self.assertEqual(receipt["final"]["sha256_after"], quality_digest(document["body"]))
+        self.assertEqual(receipt["findings"][0]["quote"], "In der heutigen schnelllebigen Welt")
+        self.assertEqual([(f["quote"], f["verdict"]) for f in steps["review"]["findings"]], [("In der heutigen schnelllebigen Welt", "corrected")])
+        self.assertIn(receipt["final"]["sha256_after"][:12], document["version_note"])
+        self.assertEqual({call["model"] for call in self.calls}, {"creative-writing", "human-audit"})
+        modes = [call["chat_template_kwargs"]["writing_mode"] for call in self.calls if call["model"] == "human-audit"]
+        # Audit, the one correction and the recheck. Nothing to verify: the rule registry confirmed the filler itself.
+        self.assertEqual(modes, ["audit", "rewrite", "audit"])
         # Only folder knowledge, no ideas, and the model was told to stay inside it.
         prompt = self.calls[0]["messages"][-1]["content"]
         self.assertIn("Thunderforge – Streckenprofil", prompt)
@@ -247,7 +287,7 @@ class WorkflowTests(unittest.TestCase):
         services = {r[0] for r in self.conn.execute("SELECT DISTINCT service FROM jobs")}
         self.assertEqual(services, {"chat_task", "image"})
 
-    def test_a_correction_without_gain_is_not_saved(self):
+    def test_a_clean_draft_is_audited_but_never_rewritten(self):
         _, sid = self.folder_chat()
         original = self.upstream
 
@@ -260,9 +300,10 @@ class WorkflowTests(unittest.TestCase):
         self.studio["http_json"] = clean
         row = self.run_task(self.commission(sid))
         result = json.loads(row["result"])
-        # Only a rhythm note is left. The unchanged proposal is rejected, nothing is hidden and no version is added.
-        self.assertEqual((result["steps"]["review"]["corrections"], result["steps"]["review"]["remaining"]), (0, 1))
-        self.assertEqual(result["steps"]["review"]["note"], "correction_no_gain")
+        review = result["steps"]["review"]
+        self.assertEqual((review["corrections"], review["remaining"], review["summary"]["passes"]), (0, 0, 0))
+        self.assertTrue(review["summary"]["audit_completed"])
+        self.assertNotIn("rewrite", [call.get("chat_template_kwargs", {}).get("writing_mode") for call in self.calls])
         document = self.conn.execute("SELECT version,body FROM documents WHERE id=?", (result["document_id"],)).fetchone()
         self.assertEqual((document["version"], document["body"]), (1, FINAL))
 
@@ -302,6 +343,119 @@ class WorkflowTests(unittest.TestCase):
         self.assertGreater(aims[1], aims[0])
         self.assertTrue(words[0] < 225 and 225 <= words[1] <= 275, words)
         self.assertEqual({item["mode"] for item in result["steps"]["writing"]["diagnostics"]}, {"generate"})
+
+    def test_an_english_commission_in_an_unrelated_folder_uses_the_same_pipeline(self):
+        _, sid = self.folder_chat(name="Nordlicht Appliances", knowledge_entries=False, visual_profile=False)
+        folder = self.conn.execute("SELECT folder_id FROM sessions WHERE id=?", (sid,)).fetchone()[0]
+        knowledge.mutate(self.conn, folder, {"action": "add", "category": "product", "title": "Brewmaster K2", "status": "confirmed",
+                                             "content": "The Brewmaster K2 is a compact espresso machine. Heat-up time is 25 seconds."})
+        self.conn.commit()
+        self.draft, self.filler = EN_DRAFT, EN_FILLER
+        row = self.run_task(self.commission(sid, EN_REQUEST))
+        result = json.loads(row["result"])
+        self.assertEqual(row["state"], "completed", result)
+        self.assertEqual(result["requirements"]["language"], "en")
+        document = self.conn.execute("SELECT kind,version,body FROM documents WHERE id=?", (result["document_id"],)).fetchone()
+        self.assertEqual((document["kind"], document["version"], document["body"]), ("doc", 2, EN_FINAL))
+        receipt = result["quality"]
+        self.assertEqual((receipt["language"], receipt["profile"]), ("en-US", "marketing"))   # a product description
+        self.assertEqual(receipt["final"]["sha256_after"], quality_digest(EN_FINAL))
+        self.assertEqual(result["steps"]["review"]["summary"]["corrected"], 1)
+        prompt = self.calls[0]["messages"][-1]["content"]
+        self.assertIn("English", prompt)
+        self.assertIn("Heat-up time is 25 seconds", prompt)
+        self.assertNotIn("Riff", json.dumps(self.calls))
+        self.assertEqual(result["steps"]["export"]["files"][0]["name"], "brewmaster-k2.md")
+        self.assertNotIn("image", result["steps"])
+
+    def test_a_one_shot_story_runs_through_the_central_quality_pipeline_too(self):
+        sid = uuid.uuid4().hex
+        with self.conn:
+            self.conn.execute("INSERT INTO sessions(id,title,created,updated) VALUES(?,'Geschichte',?,?)", (sid, time.time(), time.time()))
+        self.draft = "# Der Wärter\n\n" + STORY
+        task = uuid.uuid4().hex
+        status, answer = self.handler._dispatch_chat({"mode": "story", "default_lang": "de", "request_id": task, "session_id": sid,
+                                                      "text": "Schreibe eine kurze Geschichte über einen Leuchtturmwärter."})
+        self.assertEqual((status, answer["handled"]), (202, True), answer)
+        row = self.run_task(task, image=False)
+        result = json.loads(row["result"])
+        self.assertEqual(row["state"], "completed", result)
+        self.assertEqual({key: step["status"] for key, step in result["steps"].items() if key in ("document", "review")},
+                         {"document": "completed", "review": "completed"})
+        self.assertEqual(result["quality"]["profile"], "story")
+        self.assertEqual(result["quality"]["audit"]["models"], ["human-audit"])
+        self.assertTrue(result["steps"]["review"]["summary"]["audit_completed"])
+        document = self.conn.execute("SELECT kind,version,body FROM documents WHERE id=?", (result["document_id"],)).fetchone()
+        self.assertEqual((document["kind"], document["version"]), ("chapter", 1))   # clean text: audited, left alone
+
+    def test_an_existing_document_is_audited_or_corrected_on_demand(self):
+        with self.conn:
+            pid = uuid.uuid4().hex
+            self.conn.execute("INSERT INTO projects(id,name,kind,lang) VALUES(?,'Notizen','custom','de')", (pid,))
+            did = self.studio["save_document"](self.conn, pid, "Steckbrief", DRAFT, "doc", "de")
+        handler = self.handler
+        status, audited = handler._quality_request(did, {"mode": "audit"})
+        self.assertEqual((status, audited["changed"], audited["version"]), (200, False, 1))
+        self.assertEqual(audited["summary"]["confirmed"], 1)
+        self.assertNotIn("rewrite", [call.get("chat_template_kwargs", {}).get("writing_mode") for call in self.calls])
+        status, fixed = handler._quality_request(did, {"mode": "fix", "version": 1})
+        self.assertEqual((status, fixed["changed"], fixed["version"]), (200, True, 2))
+        document = self.conn.execute("SELECT body,version_note,version_origin FROM documents WHERE id=?", (did,)).fetchone()
+        self.assertEqual(document["body"], FINAL)
+        self.assertIn(quality_digest(FINAL)[:12], document["version_note"])
+        self.assertEqual(fixed["receipt"]["final"]["sha256_after"], quality_digest(document["body"]))
+        before = self.conn.execute("SELECT body FROM doc_versions WHERE document_id=? AND version=1", (did,)).fetchone()
+        self.assertEqual(before["body"], DRAFT)                                     # the original stays reachable
+        status, again = handler._quality_request(did, {"mode": "fix"})
+        self.assertEqual((status, again["changed"], again["version"]), (200, False, 2))   # nothing left to correct
+        self.assertEqual(handler._quality_request(did, {"mode": "fix", "version": 1})[0], 409)
+        for bad in ({"mode": "destroy"}, {"terms": "x"}, {"terms": [""]}, {"lang": "fr"}, {"kind": "k" * 41}):
+            self.assertEqual(handler._quality_request(did, bad)[0], 422, bad)
+        self.assertEqual(handler._quality_request("0" * 32, {})[0], 404)
+
+    def test_a_review_interrupted_by_a_restart_resumes_instead_of_hanging(self):
+        # The server died while the review step was "revising". The persisted step is not "pending", yet it has to run again.
+        sid, pid, task = (uuid.uuid4().hex for _ in range(3))
+        with self.conn:
+            self.conn.execute("INSERT INTO projects(id,name,kind,lang) VALUES(?,'T','custom','de')", (pid,))
+            self.conn.execute("INSERT INTO sessions(id,project_id) VALUES(?,?)", (sid, pid))
+            did = self.studio["save_document"](self.conn, pid, "T", DRAFT, "doc", "de")
+            plan = {"title": "", "project_name": "", "writing": {"kind": "content", "lang": "de", "words": None, "instruction": "x",
+                    "content": {"subject": "", "context_name": "", "auto_correct": True, "language": "de-DE", "quality_profile": "general"}}}
+            result = {"project_id": pid, "document_id": did, "steps": {"project": {"status": "completed"}, "writing": {"status": "completed"},
+                      "document": {"status": "completed"}, "review": {"status": "revising"}}}
+            self.conn.execute("INSERT INTO jobs(id,service,state,payload,result,created,updated) VALUES(?,'chat_task','running',?,?,?,?)",
+                              (task, json.dumps({"session_id": sid, "project_id": pid, "chat_first": True, "plan": plan}),
+                               json.dumps(result), time.time(), time.time()))
+        row = self.run_task(task, image=False)
+        saved = json.loads(row["result"])
+        self.assertEqual((row["state"], saved["steps"]["review"]["status"]), ("completed", "completed"))
+        self.assertEqual(self.conn.execute("SELECT version,body FROM documents WHERE id=?", (did,)).fetchone()["body"], FINAL)
+
+    def test_the_card_lists_corrected_and_open_findings_including_late_ones(self):
+        _, sid = self.folder_chat()
+        # The audit model names one more defect, but only in the recheck, and no edit can repair it.
+        original = self.upstream
+        late = {"audits": 0}
+
+        def with_late_defect(url, method="GET", body=None, **kwargs):
+            if url.endswith("/v1/chat/completions") and body["model"] == "human-audit" and \
+                    "findings" in body["response_format"]["schema"]["properties"]:
+                late["audits"] += 1
+                if late["audits"] == 2:
+                    quote = "Fahrer mit Hard-Rock-Wurzeln lieben"
+                    answer = {"findings": [{"quote": quote, "issue": "Die Wortfolge klingt hier nicht natürlich.", "replacement": "",
+                                            "category": "naturalness", "severity": "editorial", "action": "rewrite"}]}
+                    return 200, {"choices": [{"message": {"content": json.dumps(answer)}, "finish_reason": "stop"}]}
+            return original(url, method, body, **kwargs)
+
+        self.studio["http_json"] = with_late_defect
+        row = self.run_task(self.commission(sid))
+        review = json.loads(row["result"])["steps"]["review"]
+        verdicts = {f["quote"]: f["verdict"] for f in review["findings"]}
+        self.assertEqual(verdicts["In der heutigen schnelllebigen Welt"], "corrected")
+        self.assertEqual(verdicts["Fahrer mit Hard-Rock-Wurzeln lieben"], "open")
+        self.assertEqual((review["corrections"], review["remaining"]), (1, 1))
 
     def test_missing_folder_knowledge_stops_before_any_model_call(self):
         _, sid = self.folder_chat(knowledge_entries=False)

@@ -47,7 +47,7 @@ Ein einziger `chat_task` führt ohne weitere Eingabe alle Schritte aus. Es gibt 
 | --- | --- |
 | `writing` | Ordnerwissen laden (nach Thema gerankt: die 6 relevantesten Einträge plus bestätigte Einträge, nie Ideen oder das Visual Profile), Text schreiben, Sprache, Länge und Thema messen |
 | `document` | Erster Entwurf wird als Dokument gespeichert (Version 1) |
-| `review` | Human-Writing-Audit. Gefundene Befunde werden höchstens zweimal korrigiert und nur gespeichert, wenn die Befunde messbar weniger werden. Die korrigierte Fassung ist Version 2. Verbleibende Hinweise werden angezeigt |
+| `review` | Die zentrale [Qualitätspipeline](QUALITY_PIPELINE.md): Audit, Verifikation, gezielte Korrektur (höchstens zwei Durchläufe), erneute Prüfung. Die korrigierte Fassung ist Version 2, mit dem Nachweis (Skill-Version, Befunde, Änderungen, SHA-256) im Auftrag und in der Versionsnotiz. Verbleibende Hinweise werden angezeigt |
 | `export` | Markdown-Datei wird aus der gespeicherten Endfassung geschrieben, zurückgelesen und gegen Größe und SHA-256 geprüft |
 | `image` | Bild über den lokalen Bilddienst |
 

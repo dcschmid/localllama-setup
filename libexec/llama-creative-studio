@@ -41,6 +41,7 @@ import creative_studio_article as article
 import creative_studio_correction as correction
 import creative_studio_chat as chats
 import creative_studio_content as content
+import creative_studio_quality as quality
 from creative_studio_plan import FORMATS, ID, PlanError, build_plan, check_text, word_bounds
 
 APP = "creative-studio"
@@ -1206,7 +1207,7 @@ def model_editorial_json(prompt, model, language, genre, mode, limit, *, lane="c
     return result, evidence
 
 
-def editorial_model(doc, body, source, start, end, genre=None):
+def editorial_model(doc, body, source, start, end):
     mode = body.get("mode", "rewrite")
     goal = body.get("goal", "clarity")
     instruction = body.get("instruction", "")
@@ -1220,7 +1221,7 @@ def editorial_model(doc, body, source, start, end, genre=None):
     if not excerpt.strip():
         raise PlanError("editorial_request_invalid")
     language = editorial_language(excerpt, doc["lang"], requested_language)
-    genre = genre or editorial_genre(doc, instruction)
+    genre = editorial_genre(doc, instruction)
     tag = "editorial" if genre == "general" else genre
     if mode != "rewrite":
         lint = style_audit(excerpt, language, genre)
@@ -1693,50 +1694,89 @@ def previous_image(conn, session_id, task_id, project_id=None):
     return None
 
 
-def review_content(task_id, plan, result):
-    """Human Writing audit of the saved text. Confirmed findings are corrected and saved as the final version."""
-    import subprocess
+@lru_cache(maxsize=1)
+def quality_tools():
+    return quality.load_tools(SKILLS)
+
+
+QUALITY_GENRE = {"story": "fiction", "dialogue": "fiction", "article": "editorial", "essay": "editorial"}
+
+
+def quality_ask(lang, profile):
+    """The model transport of the central quality pipeline: the Human Writing audit and rewrite modes with the loaded skill rules.
+
+    All roles use one router alias and select the mode per request through the template controls. Switching aliases would
+    reload the same weights for every call."""
+    genre = QUALITY_GENRE.get(profile.name, "general")
+    tag = "editorial" if genre == "general" else genre
+
+    def ask(role, prompt, schema, tokens):
+        mode = "rewrite" if role == "fix" else "audit"
+        answer, evidence, finish = model_reply({
+            "model": "human-audit", "stream": False, "temperature": .2, "max_tokens": tokens,
+            "messages": [{"role": "user", "content": f"[{lang}][{mode}][{tag}]\n" + prompt}],
+            "chat_template_kwargs": {"enable_thinking": False, "writing_genre": "fiction" if genre == "fiction" else "editorial",
+                                     "writing_mode": mode},
+            "response_format": {"type": "json_schema", "schema": schema}}, writing_rules(lang, genre, mode), lang, mode)
+        if finish == "length":
+            raise PlanError("quality_output_truncated")
+        try:
+            return json.loads(answer), evidence
+        except json.JSONDecodeError as exc:
+            raise PlanError("quality_model_format") from exc
+
+    return ask
+
+
+def quality_run(text, lang, *, kind, locale=None, terms=(), constraints=None, auto_correct=True, progress=None):
+    """Run the central pipeline on a text. The same entry point serves every writing workflow."""
+    profile = quality.profile_for(kind)
+    pipeline = quality.Pipeline(quality_ask(lang, profile), quality_tools(), lang, locale=locale, kind=kind, terms=terms,
+                                constraints=constraints, skill_version=skill_version(), progress=progress,
+                                max_passes=quality.MAX_PASSES if auto_correct else 0)
+    return pipeline.run(text)
+
+
+def quality_note(info, receipt):
+    """The version note of a corrected document. The hash ties the stored version to the receipt that produced it."""
+    return (f"Human Writing {info['skill_version'] or '?'}: {info['corrected']} Befunde korrigiert, {info['remaining']} offen, "
+            f"{info['passes']} Durchlauf/Durchläufe, Pipeline {quality.VERSION}, sha256 {receipt['final']['sha256_after'][:12]}")[:250]
+
+
+def review_task(task_id, plan, result):
+    """Audit, verify, fix and recheck the saved text of a writing task. The corrected text becomes the final version."""
     conn = db()
-    lang, brief = plan["writing"]["lang"], plan["writing"]["content"]
+    writing = plan["writing"]
+    brief = writing.get("content")
     did = result["document_id"]
     row = organizer.require(conn, "document", did)
-    current = row["body"]
     review = {"status": "validating", "corrections": 0, "findings": [], "remaining": 0}
     task_step(task_id, result, "review", **review)
     try:
-        audit = style_audit(current, lang, "general")
-    except (PlanError, OSError, ValueError, subprocess.SubprocessError) as exc:
-        task_step(task_id, result, "review", status="failed", error=str(exc) if isinstance(exc, PlanError) else "lint_failed")
+        outcome = quality_run(
+            row["body"], writing["lang"], kind=brief.get("quality_profile", "general") if brief else writing["kind"],
+            locale=brief["language"] if brief else None, terms=[brief["subject"], brief["context_name"]] if brief else (),
+            constraints={"lang": writing["lang"], "words": writing["words"]},
+            auto_correct=brief["auto_correct"] if brief else True,
+            progress=lambda phase: task_step(task_id, result, "review", **{**review, "status": phase}))
+    except (PlanError, OSError, ValueError, KeyError) as exc:
+        task_step(task_id, result, "review", status="failed", error=str(exc) if isinstance(exc, PlanError) else "writing_service_unavailable")
         return
-    found = audit["findings"]
-    review.update(skill_version=audit["skill_version"], remaining=len(found), findings=[
-        {"quote": item["excerpt"], "verdict": "editorial", "reason": item["why"]} for item in found[:40]])
-    words = plan["writing"]["words"]
-    try:
-        for _ in range(2 if brief["auto_correct"] and found else 0):
-            task_step(task_id, result, "review", **{**review, "status": "revising"})
-            listed = "; ".join(f'"{item["excerpt"][:70]}" ({item["why"][:90]})' for item in found[:6])
-            instruction = (f"Correct only these confirmed style findings and keep every fact, name and number: {listed}."
-                           + (f" The text must contain {words[0]}–{words[1]} words." if words and words[0] != words[1] else ""))[:1190]
-            proposal = editorial_model({"id": did, "kind": "doc", "lang": lang, "project_id": result["project_id"]},
-                                       {"mode": "rewrite", "goal": "finding", "lang": lang, "instruction": instruction},
-                                       current, 0, len(current), genre="general")
-            if (proposal["after_findings"] >= len(found) or proposal["text"] == current
-                    or brief["subject"] and brief["subject"].casefold() not in proposal["text"].casefold()):
-                review["note"] = "correction_no_gain"
-                break
-            current = proposal["text"]
-            found = style_audit(current, lang, "general")["findings"]
-    except production.WaitForResource:
-        review["note"] = "production_gpu_busy"
-    except (PlanError, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
-        review["note"] = str(exc) if isinstance(exc, PlanError) else "writing_service_unavailable"
-    fixed = review["remaining"] - len(found)
-    if current != row["body"]:
+    receipt = outcome["receipt"]
+    info = quality.summary(receipt)
+    if outcome["changed"]:
         with _lock, conn:
             row = organizer.require(conn, "document", did)
-            organizer.update_document(conn, row, row["title"], current, f"Human Writing: {fixed} Befunde korrigiert", "generated")
-    task_step(task_id, result, "review", **{**review, "status": "completed", "corrections": fixed, "remaining": len(found)})
+            organizer.update_document(conn, row, row["title"], outcome["text"], quality_note(info, receipt), "generated")
+    result["quality"] = receipt
+    # Everything the audits found, as the person needs it: corrected or still open. The first audit lists what was found
+    # at the start, the recheck lists what is open at the end, including defects that only surfaced there.
+    listed = {f["quote"]: {"quote": f["quote"], "verdict": "open" if f["quote"] in outcome["text"] else "corrected", "reason": f["issue"]}
+              for f in receipt["findings"] if f["status"] == "confirmed" or f["status"] == "unconfirmed" and f["quote"] in outcome["text"]}
+    for item in receipt["recheck"]["remaining"]:
+        listed.setdefault(item["quote"], {"quote": item["quote"], "verdict": "open", "reason": item["issue"]})
+    task_step(task_id, result, "review", status="completed", corrections=info["corrected"], remaining=info["remaining"],
+              summary=info, findings=list(listed.values())[:40])
 
 
 def export_content(task_id, plan, result):
@@ -1764,18 +1804,19 @@ def content_image(conn, plan, payload, result, request):
     folder = knowledge.owner_folder(conn, project_id=pid, session_id=payload["session_id"])
     try:
         saved = knowledge.profile(conn, folder) if folder else None
-        folder_name = organizer.require(conn, "folder", folder)["name"] if folder else ""
     except (knowledge.KnowledgeError, organizer.OrganizerError):
-        saved, folder_name = None, ""
+        saved = None
     body = task_source(payload["session_id"], result["document_id"]) if result.get("document_id") else ""
     prose = re.sub(r"(?m)^#{1,6}\s.*$", "", body).strip()
     subject = ", ".join(item for item in (brief["subject"], brief["context_name"]) if item) or brief["content_label"]
-    riff = bool(visual.RIFF.search(" ".join((brief["context_name"], folder_name))))
-    named = visual.choice(brief["image_profile"] or "", riff=riff)
+    named = visual.choice(brief["image_profile"] or "")
     if (named or saved) and not request.get("model"):
-        profile = knowledge.profile_default(conn, visual.default_profile(pid, brief["context_name"] or folder_name),
+        # A neutral base. The folder's visual profile and the style named in the request decide the look.
+        profile = knowledge.profile_default(conn, {**visual.template("anima-aesthetic"), "id": pid, "version": 0},
                                             project_id=pid, session_id=payload["session_id"])
-        if named and named != profile["template"]:
+        # A named style replaces the folder's template only when it is another style family. A folder template of the
+        # same family (for example a specialised low-poly template) is the better match for that style and stays.
+        if named and named not in (profile["template"], visual.choice(profile["name"])):
             profile = {**profile, **{key: value for key, value in visual.template(named).items()
                                       if key not in ("bible", "ratio", "consistency", "consistency_rules")}}
         ratio = brief["image_aspect_ratio"] or visual.ratio_for(request.get("size"))
@@ -1884,7 +1925,7 @@ def advance_task(row):
                     task_result(conn, task_id, result, "failed")
                 return
     if steps.get("review", {}).get("status") in ("pending", "validating", "revising") and steps["document"]["status"] == "completed":
-        review_content(task_id, plan, result)
+        review_task(task_id, plan, result)
     if steps.get("export", {}).get("status") == "pending" and steps["document"]["status"] == "completed":
         export_content(task_id, plan, result)
     if "image" in plan and steps["image"]["status"] == "pending":
@@ -2520,6 +2561,9 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "documents" and parts[2] == "editorial":
             with running_work(document_id=parts[1]):
                 return self._editorial_request(parts[1], body)
+        if len(parts) == 3 and parts[0] == "documents" and parts[2] == "quality":
+            with running_work(document_id=parts[1]):
+                return self._quality_request(parts[1], body)
         if parts == ["export"]:
             return self._export(body)
         if len(parts) == 3 and parts[0] == "production" and parts[2] == "export":
@@ -2979,6 +3023,40 @@ class Handler(BaseHTTPRequestHandler):
                                    " Zielpfad und Überschreiben entscheidet der Nutzer."})
 
     # ---- human-writing: skill files + lint + guided writing ------------------
+    def _quality_request(self, did, body):
+        """Audit or correct an existing text with the central pipeline. Only a verified revision becomes a new version."""
+        conn = db()
+        doc = conn.execute("SELECT * FROM live_documents WHERE id=?", (did,)).fetchone()
+        if not doc:
+            return self._json({"error": "document_not_found"}, 404)
+        if "version" in body and body["version"] != doc["version"]:
+            return self._json({"error": "document_changed", "version": doc["version"]}, 409)
+        mode, kind, locale = body.get("mode", "audit"), body.get("kind") or doc["kind"], body.get("locale")
+        terms = body.get("terms", [])
+        if (mode not in ("audit", "fix") or not isinstance(kind, str) or len(kind) > 40 or not doc["body"].strip()
+                or len(doc["body"]) > 200_000 or not isinstance(locale, (str, type(None)))
+                or not isinstance(terms, list) or len(terms) > 30
+                or any(not isinstance(term, str) or not 0 < len(term) <= 80 for term in terms)
+                or body.get("lang", "auto") not in ("auto", "de", "en")):
+            return self._json({"error": "quality_request_invalid"}, 422)
+        try:
+            lang = editorial_language(doc["body"], doc["lang"], body.get("lang", "auto"))
+            outcome = quality_run(doc["body"], lang, kind=kind, locale=locale, terms=terms, auto_correct=mode == "fix")
+        except PlanError as exc:
+            return self._json({"error": str(exc)}, 502 if str(exc).startswith(("writing_template", "writing_skill")) else 422)
+        except (OSError, ValueError, KeyError, StopIteration):
+            return self._json({"error": "writing_service_unavailable"}, 502)
+        receipt, info = outcome["receipt"], quality.summary(outcome["receipt"])
+        version = doc["version"]
+        with _lock, conn:
+            live = organizer.require(conn, "document", did)
+            if live["version"] != doc["version"]:
+                return self._json({"error": "document_changed", "version": live["version"]}, 409)
+            if mode == "fix" and outcome["changed"]:
+                version = organizer.update_document(conn, live, live["title"], outcome["text"], quality_note(info, receipt), "generated")
+        return self._json({"document_id": did, "mode": mode, "base_version": doc["version"], "version": version,
+                           "changed": outcome["changed"] and mode == "fix", "summary": info, "receipt": receipt}, 200)
+
     def _editorial_request(self, did, body):
         conn = db()
         doc = conn.execute("SELECT * FROM documents WHERE id=?", (did,)).fetchone()
@@ -3427,7 +3505,9 @@ class Handler(BaseHTTPRequestHandler):
         steps = {"project": {"status": "pending"}}
         if "writing" in plan:
             steps.update(writing={"status": "pending"}, document={"status": "pending"})
-        if plan.get("writing", {}).get("content", {}).get("review_after_creation"):
+        writing = plan.get("writing", {})
+        # Every generated writing artifact passes the central quality standard. Research articles run their own engine.
+        if writing.get("content", {}).get("review_after_creation") or (writing.get("kind") == "story" and not writing.get("content")):
             steps["review"] = {"status": "pending"}
         if "export" in plan:
             steps["export"] = {"status": "pending"}
@@ -3992,7 +4072,7 @@ def cmd_install() -> None:
                        "creative_studio_chat.py", "creative_studio_production.py", "creative_studio_skills.py",
                        "creative_studio_correction.py", "creative_studio_article.py", "creative_studio_visual.py",
                        "creative_studio_knowledge.py", "creative_studio_exports.py", "creative_studio_activity.py", "creative_studio_monitor.py",
-                       "creative_studio_content.py"):
+                       "creative_studio_content.py", "creative_studio_quality.py"):
             shutil.copyfile(src / "libexec" / module, backend / module)
         print(f"installed (repeatable): data {DATA}, state {STATE}")
 
@@ -4061,6 +4141,7 @@ def cmd_uninstall(purge=False):
                  Path.home() / ".local/libexec/creative_studio_knowledge.py",
                  Path.home() / ".local/libexec/creative_studio_visual.py",
                  Path.home() / ".local/libexec/creative_studio_content.py",
+                 Path.home() / ".local/libexec/creative_studio_quality.py",
                  Path.home() / ".config/systemd/user" / UNIT,
                  Path.home() / ".local/share/applications/creative-studio.desktop"):
         path.unlink(missing_ok=True)

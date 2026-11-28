@@ -23,6 +23,8 @@ NOUN = (r"(?:steckbrief\w*|profil\w*|beschreibung\w*|zusammenfassung\w*|teaser|k
         r"ankündigung\w*|pressemitteilung\w*|dossier|bericht\w*|rezension\w*|einleitung\w*|gedicht\w*|songtext\w*|dialog\w*|"
         r"slogan|headline|überschrift\w*|biografie|biographie|vorstellung\w*|anleitung\w*|text(?:e|en)?|"
         r"profiles?|summary|description|blurb|email|letter|announcement|press release|report|review|intro(?:duction)?|"
+        r"dokumentation\w*|readme|changelog\w*|release notes?|faq|tutorial\w*|handbuch|handbücher|"
+        r"documentation|manual|guide|walkthrough|spielanleitung|questtext\w*|npc-?text\w*|"
         r"poem|lyrics|speech|bio|copy|write-?up|fact sheet|one-pager)")
 DELIVERABLE = re.compile(rf"(?<![\wäöüß])(?:[\wäöüß]+-)*[\wäöüß]*{NOUN}(?![\wäöüß])", re.I)
 PICTURE_WORD = re.compile(r"bild|grafik|foto|image|cover|illustration|artwork|picture|poster", re.I)
@@ -46,13 +48,23 @@ FILE = re.compile(r"\b(?:datei|download\w*|herunterlad\w*|exportier\w*|export|be
 FORMAT_WORDS = (("md", r"markdown|\.md\b|\bmd\b"), ("mdx", r"\bmdx\b"), ("txt", r"\btxt\b|textdatei"),
                 ("pdf", r"\bpdf\b"), ("docx", r"\bdocx\b|\bword\b"))
 EXPORTS = ("md",)
+# The quality profile (see creative_studio_quality) that fits a content type.
+PROFILE_OF_TYPE = {"technical_doc": "technical", "website_copy": "marketing", "product_description": "marketing",
+                   "announcement": "marketing", "dialogue": "dialogue", "poem": "story"}
+VARIANTS = (("de-AT", r"österreichisch\w*|austrian german|de-AT"), ("de-CH", r"schweizer\w*|swiss german|de-CH"),
+            ("en-GB", r"britisch\w*|british english|en-GB"), ("en-CA", r"kanadisch\w*|canadian english|en-CA"),
+            ("en-AU", r"australisch\w*|australian english|en-AU"))
 STYLE = re.compile(r"\b(?:im|in|mit)\s+(?:dem\s+|einem\s+|the\s+|an?\s+)?(?:(?:passenden|folgenden|gewünschten)\s+)?"
                    r"([\w/ -]{3,60}?)[\s-]*(?:stil|look|style)\b", re.I)
 COUNT = re.compile(r"(\d{1,5})(?:\s*(?:–|—|-|bis|to)\s*(\d{1,5}))?\s+(?:wörter(?:n)?|words?)\b", re.I)
 NAME = r"([A-ZÄÖÜ][\wäöüß'’-]*(?:\s+(?:[A-ZÄÖÜ][\wäöüß'’-]*|\d+))*)"
 SUBJECT = re.compile(r"\b(?:für|fürs|über|zu|zum|zur|about|for|on)\s+(?:(?:den|die|das|dem|der|the|a|an)\s+)?" + NAME)
 SERIES = re.compile(r"\b(?:aus|from|in|im)\s+(?:dem\s+|der\s+|the\s+)?" + NAME)
-TYPES = (("track_profile", r"(?:strecke|track|rennstrecke|course|circuit)\w*[ -]?(?:steckbrief|profil|beschreibung|profile|description)"),
+TYPES = (("technical_doc", r"dokumentation|readme|changelog|release notes?|faq|tutorial|handbuch|documentation|manual|guide|walkthrough|anleitung"),
+         ("website_copy", r"website|webseiten|web-?text|landingpage|landing page"),
+         ("product_description", r"produkt\w*[ -]?(?:beschreibung|text)|product[ -]?(?:description|text)"),
+         ("dialogue", r"dialog\w*|quest\w*|npc|spieltext\w*"),
+         ("track_profile", r"(?:strecke|track|rennstrecke|course|circuit)\w*[ -]?(?:steckbrief|profil|beschreibung|profile|description)"),
          ("character_profile", r"(?:charakter|figur|fahrer|character|driver|person)\w*[ -]?(?:steckbrief|profil|beschreibung|profile|bio)"),
          ("profile", r"steckbrief|profil|profile|fact sheet|bio"),
          ("summary", r"zusammenfassung|summary|teaser|klappentext|blurb"),
@@ -121,7 +133,7 @@ def _parse(text):
     after = clause[noun.end():]
     subject = SUBJECT.search(after)
     series = SERIES.search(after[subject.end():] if subject else after)
-    kind = next((name for name, pattern in TYPES if re.search(pattern, label, re.I)), "text")
+    kind = next((name for name, pattern in TYPES if re.search(pattern, clause[:noun.end()], re.I)), "text")
     languages = [lang for lang, marker in LANGUAGES.items() if marker.search(plain)]
     pictures = [item for index, item in enumerate(parts) if index != created and _wants_image(item)]
     asked = [item for item in parts if FILE.search(item) or any(re.search(pattern, item, re.I) for _, pattern in FORMAT_WORDS)]
@@ -140,7 +152,9 @@ def _parse(text):
         "primary_intent": "create_content",
         "content_type": kind,
         "content_label": label,
-        "language": {"de": "de-DE", "en": "en-US"}[languages[0]] if len(languages) == 1 else None,
+        "language": next((name for name, pattern in VARIANTS if re.search(pattern, plain, re.I)),
+                         {"de": "de-DE", "en": "en-US"}[languages[0]] if len(languages) == 1 else None),
+        "quality_profile": PROFILE_OF_TYPE.get(kind, "general"),
         "target_words": _target(instruction),
         "word_range": bounds,
         "subject": subject[1].strip() if subject else "",

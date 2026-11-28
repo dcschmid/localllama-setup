@@ -21,10 +21,12 @@ type ImageJob = { id?: string; status: string; image_id?: string; progress?: num
   alt?: string; visual_profile?: VisualReceipt; request?: { prompt?: string }; dimensions?: [number, number]; waiting_reason?: string };
 type Task = { status: string; project_id?: string; document_id?: string; error?: string; image?: ImageJob;
   knowledge?: { folders: string[]; entries: Array<{ title: string; status: string }> };
+  quality?: QualityReceipt;
   requirements: { language?: 'de' | 'en'; word_range?: [number, number]; image_size?: string };
   steps: Record<string, { status: string; name?: string; error?: string;
     diagnostics?: Array<{ validation: { words: number; language: string; issues: string[] } }>;
     skills?: Record<string, string>; corrections?: number; publishing?: string; remaining?: number; note?: string;
+    summary?: { audit_completed: boolean; skill_loaded: boolean; skill_version?: string | null; rechecked: boolean | null };
     files?: Array<{ name: string; format: string; bytes: number }>; unsupported?: string[];
     findings?: Array<{ quote: string; verdict: string; reason: string; source_url?: string }> }> };
 type ResearchJob = { status: string; result?: { document_id?: string }; checkpoint?: {
@@ -270,6 +272,21 @@ function imageMedia(id: string, alt: string, actions = true) {
     </figure>`;
 }
 
+const passReason: Record<string, string> = { no_valid_edit: 'keine sichere Änderung gefunden', no_improvement: 'keine Verbesserung',
+  introduced_defect: 'hätte einen neuen Fehler erzeugt', seam_damaged: 'hätte einen Satz beschädigt', constraint_violated: 'hätte die Vorgabe verletzt',
+  markup_changed: 'hätte Struktur verändert', quote_changed: 'hätte ein Zitat verändert', number_changed: 'hätte eine Zahl verändert', term_changed: 'hätte einen Namen verändert' };
+const profileLabel: Record<string, string> = { general: 'Allgemein', story: 'Erzähltext', dialogue: 'Dialog', article: 'Sachtext', essay: 'Essay',
+  blog: 'Blog', technical: 'Technik', marketing: 'Werbetext' };
+function qualityDetails(q: QualityReceipt) {
+  const skill = q.skills.map(s => s.name + ' ' + s.version).join(' · ') || 'kein Skill nachgewiesen';
+  return `<details data-job-detail="quality-receipt"><summary>Nachweis der Qualitätsprüfung</summary>
+    <ul><li>${esc(q.language)} · ${esc(profileLabel[q.profile] ?? q.profile)} · ${esc(skill)}</li>
+    <li>${q.audit.completed ? 'Sprachprüfung abgeschlossen' : 'Sprachprüfung unvollständig'} · ${q.audit.calls} Modellaufruf${q.audit.calls === 1 ? '' : 'e'}${q.audit.models.length ? ' (' + esc(q.audit.models.join(', ')) + ')' : ''}</li>
+    <li>${q.final.confirmed_before} bestätigt · ${q.final.corrected} korrigiert · ${q.recheck.remaining.length} offen</li>
+    ${q.passes.map(p => `<li>Durchlauf ${p.pass}: ${p.accepted ? p.applied.length + ' Änderung' + (p.applied.length === 1 ? '' : 'en') + ' übernommen' : 'verworfen (' + esc(passReason[p.reason ?? ''] ?? p.reason ?? '') + ')'}${p.rejected.length ? ', ' + p.rejected.length + ' Änderung' + (p.rejected.length === 1 ? '' : 'en') + ' abgelehnt' : ''}</li>`).join('')}
+    <li>${q.recheck.required ? (q.recheck.completed ? 'Nach der Korrektur erneut geprüft' : 'Nachprüfung unvollständig') : 'Keine Korrektur nötig'} · Endfassung ${esc(q.final.sha256_after.slice(0, 12))}</li>
+    ${q.audit.limits.length ? '<li>Einschränkung: ' + q.audit.limits.map(esc).join(', ') + '</li>' : ''}</ul></details>`;
+}
 const knowledgeStatus: Record<string, string> = { confirmed: 'Bestätigt', reference: 'Referenz', unresolved: 'Ungeklärt' };
 const taskErrors: Record<string, string> = {
   content_knowledge_missing: 'Im Ordner liegt kein passendes Wissen für diesen Auftrag vor. Lege Ordnerwissen an oder bestätige es zuerst.',
@@ -345,11 +362,13 @@ function taskContent(id: string) {
       <p>Text gespeichert${writing?.diagnostics?.at(-1) ? ' · ' + writing.diagnostics.at(-1)!.validation.words + ' Wörter' : ''}</p>
       <div class="prose" lang="${doc.lang === 'en' ? 'en' : 'de'}">${markdown(doc.body)}</div>
       ${button('open-doc', 'Entwurf öffnen', 'text', 'button', doc.id)}</section>` : ''}
+    ${task.quality ? qualityDetails(task.quality) : ''}
     ${review?.status === 'completed' ? `<p>${review.corrections ? `${review.corrections} Textbefund${review.corrections === 1 ? '' : 'e'} automatisch korrigiert.` :
       'Die Prüfung hat keinen Befund korrigiert.'}${review.remaining ? ` ${review.remaining} Hinweis${review.remaining === 1 ? '' : 'e'} bleib${review.remaining === 1 ? 't' : 'en'} offen.` : ''}</p>` : ''}
     ${review?.status === 'failed' ? '<p>' + esc(taskFailure(review.error) || 'Die Prüfung konnte nicht abgeschlossen werden.') + '</p>' : ''}
     ${review?.findings?.length ? `<details data-job-detail="content-review"><summary>Befunde der Prüfung</summary><ul>${review.findings.map(f =>
-      '<li>' + (f.quote ? '„' + esc(f.quote) + '“ ' : '') + esc(f.reason) + '</li>').join('')}</ul></details>` : ''}
+      '<li>' + (['open', 'corrected'].includes(f.verdict) ? '<strong>' + (f.verdict === 'open' ? 'Offen' : 'Korrigiert') + '</strong> ' : '') +
+      (f.quote ? '„' + esc(f.quote) + '“ ' : '') + esc(f.reason) + '</li>').join('')}</ul></details>` : ''}
     ${task.knowledge?.entries?.length ? `<details data-job-detail="content-knowledge"><summary>Verwendetes Ordnerwissen</summary><ul>${task.knowledge.entries.map(e =>
       '<li>' + esc(e.title) + ' · ' + esc(knowledgeStatus[e.status] ?? e.status) + '</li>').join('')}</ul></details>` : ''}
     ${savedImage && image?.image_id ? `<section class="task-result" aria-label="Gespeichertes Bild">

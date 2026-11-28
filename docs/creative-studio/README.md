@@ -13,6 +13,8 @@ Der [Bericht zur Schreibpipeline](WRITING_PIPELINE.md) dokumentiert die aktiven 
 
 **Inhaltsaufträge** („Erstelle einen Steckbrief … prüfe und korrigiere ihn … dazu ein Bild … als Markdown-Datei“) laufen als ein Auftrag aus Text, Prüfung, Bild und Datei. [Ablauf und Absichtserkennung](CONTENT_WORKFLOW.md)
 
+Die [Human-Writing-Qualitätspipeline](QUALITY_PIPELINE.md) prüft und korrigiert deutsche und englische Texte aller Art mit einem gemeinsamen Standard und liefert einen Ausführungsnachweis.
+
 ## Im Studio arbeiten
 
 Beginne im Chat mit einem freien Auftrag oder einem der vier Vorschläge. Das Studio erkennt Schreibaufträge, Deep Research, Bildwünsche und Spielideen anhand der Formulierung. Die **Tätigkeit** am Eingabefeld ist optional. Im Standardmodus erkennt das Studio die Aufgabe. Auch mit gewählter Tätigkeit kannst du im selben Chat etwa ein Bild oder eine Recherche anfordern. **Werkzeugoptionen** öffnet Bild- und Rechercheeinstellungen. [Ablauf und technische Diagnose](INTEGRATION.md)
