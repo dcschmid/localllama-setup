@@ -25,8 +25,11 @@ class Editor:
     """A scripted model. `defects` are (quote, replacement, issue, category, action) the editor reports when it sees the quote;
     `genuine` are the quotes the verifier confirms; `fixes` map a defect quote to the (before, after) edit that repairs it."""
 
-    def __init__(self, defects=(), genuine=None, fixes=None, per_audit=6, fail=None, invented=(), evidence=None, once=False, defended=()):
+    def __init__(self, defects=(), genuine=None, fixes=None, per_audit=6, fail=None, invented=(), evidence=None, once=False, defended=(),
+                 proofread=None, confirm_all=False, noted=()):
         self.defects, self.fixes, self.per_audit, self.fail = list(defects), fixes or {}, per_audit, fail
+        self.proofread, self.confirm_all = proofread or {}, confirm_all
+        self.noted = list(noted)
         self.once, self.audited, self.defended = once, False, set(defended)
         self.invented, self.evidence = list(invented), evidence or EVIDENCE
         self.genuine = {d[0] for d in self.defects} if genuine is None else set(genuine)
@@ -36,8 +39,26 @@ class Editor:
         self.calls.append((role, prompt))
         if self.fail:
             raise self.fail
+        if role == "proofread":
+            window = prompt.split("\nPASSAGE\n", 1)[1]
+            for before, after in self.proofread.items():
+                window = window.replace(before, after)
+            return {"text": window}, self.evidence
+        if role == "choose":
+            a, b = prompt.split("\nA: ", 1)[1].split("\nB: ", 1)[0], prompt.split("\nB: ", 1)[1]
+            pairs = [(q, r) for q, r, *_ in self.defects + self.invented + self.noted if r] + list(self.proofread.items())
+            for before, after in pairs:
+                for original, proposed, new_letter, old_letter in ((a, b, "B", "A"), (b, a, "A", "B")):
+                    if before in original and original.replace(before, after, 1) == proposed:
+                        answer = (old_letter if before in self.defended else
+                                  new_letter if self.confirm_all or before in self.genuine else "both")
+                        return {"answer": answer, "reason": "Compared against the rule in this sentence."}, self.evidence
+            return {"answer": "both", "reason": "Both readings are acceptable in this sentence."}, self.evidence
         if role == "audit":
             window = prompt.split("\nPASSAGE\n", 1)[1]
+            if self.noted:
+                return {"findings": [{"quote": q, "issue": issue, "replacement": r, "category": c, "severity": "note", "action": a}
+                                     for q, r, issue, c, a in self.noted if q in window]}, self.evidence
             seen = [d for d in self.defects if d[0] in window][:self.per_audit] if not (self.once and self.audited) else []
             self.audited = True
             return {"findings": [{"quote": q, "issue": issue, "replacement": r, "category": c, "severity": "editorial", "action": a}
@@ -51,7 +72,7 @@ class Editor:
             def status(item):
                 if role == "defend" and item["quote"] in self.defended:
                     return "refuted"
-                return "confirmed" if item["quote"] in self.genuine else "unconfirmed"
+                return "confirmed" if self.confirm_all or item["quote"] in self.genuine else "unconfirmed"
             return {"verdicts": [{"index": i["index"], "reason": "Checked against the rule in the passage.",
                                   "status": status(i)} for i in items]}, self.evidence
         if role == "fix":
@@ -66,6 +87,10 @@ class Editor:
         raise AssertionError(role)
 
     def roles(self):
+        """The calls after the proofread pass, which every window gets and which is silent unless a test scripts it."""
+        return [role for role, _ in self.calls if role != "proofread"]
+
+    def all_roles(self):
         return [role for role, _ in self.calls]
 
 
@@ -315,7 +340,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(len(receipt["passes"]), 2)
         self.assertTrue(all(entry["accepted"] for entry in receipt["passes"]))
         self.assertGreaterEqual(len(receipt["recheck"]["remaining"]), 1)   # reported, not hidden
-        self.assertLessEqual(len(editor.calls), 12)
+        self.assertLessEqual(len(editor.roles()), 12)
 
     def test_a_fix_that_introduces_a_defect_is_rejected_whole_and_nothing_loops(self):
         # After the genitive repair the editor flags the new wording "Wegen des Wetters sitzt" as a defect.
@@ -327,7 +352,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual([(entry["accepted"], entry["reason"]) for entry in receipt["passes"]], [(False, "introduced_defect")])
         self.assertIn("Wegen dem Wetter", result["text"])
         self.assertFalse(result["changed"])
-        self.assertLessEqual(len(editor.calls), 8)   # audit, verify, defend, audit, verify, defend: no further round
+        self.assertLessEqual(len(editor.roles()), 8)   # audit, verify, defend, audit, verify, defend: no further round
 
     def test_a_defect_that_only_surfaces_in_the_recheck_does_not_discard_verified_repairs(self):
         # The model audit reports one defect per window; the second existed all along and appears after the first repair.
@@ -504,6 +529,13 @@ class WindowTests(unittest.TestCase):
 class OrdinaryTextTests(unittest.TestCase):
     """Ordinary text may be reworded, so names are told from German nouns. Figures and invented names still cannot move."""
 
+    def test_a_change_inside_a_word_is_not_an_inflection(self):
+        same = quality.same_word
+        self.assertTrue(same("Pendlern", "Pendler") and same("Wetter", "Wetters") and same("Kindern", "Kinder"))
+        self.assertFalse(same("Seeblick", "Seeblock") or same("Anna", "Annabel") or same("Lena", "Leon"))
+        self.assertEqual(quality.edit_problem("Seeblick", "Seeblock", opens_sentence=False), "quality_name_added")
+        self.assertIsNone(quality.edit_problem("Wegen den Pendlern", "Wegen der Pendler", opens_sentence=False))
+
     def test_the_contract_tells_inflection_and_nouns_from_changed_facts(self):
         problem = quality.edit_problem
         self.assertIsNone(problem("Wegen den vielen Pendlern bleibt es offen.", "Wegen der vielen Pendler bleibt es offen."))
@@ -536,16 +568,219 @@ class OrdinaryTextTests(unittest.TestCase):
         self.assertEqual([r["error"] for r in strict["receipt"]["passes"][0]["rejected"]], ["production_patch_invalid"])
 
 
-class DefenceTests(unittest.TestCase):
-    """The verifier and the auditor are the same local model, so a second round defends the original wording."""
+class ProofreadTests(unittest.TestCase):
+    """The correct-and-diff audit: the model returns a corrected passage and its changes become anchored findings."""
+
+    EN = ("Turns out the collision mesh were two meters too narrow. Fixing it was a one line change, but finding it took three evenings. "
+          "If everything go well, a public demo will follow in March 2025.")
+    EN_FIX = {"mesh were": "mesh was", "everything go well": "everything goes well"}
+    DE = ("Die Pension Seeblick hat zwölf Zimmer. Alle Gäste bekommt ein Frühstück. Wegen dem schönen Wetter sind die Tische besetzt.")
+
+    def test_changes_become_findings_that_the_blind_comparison_confirms_and_the_fix_applies(self):
+        editor = Editor(confirm_all=True, proofread=self.EN_FIX)
+        result = run(self.EN, "en", "blog", editor)
+        self.assertEqual(result["text"], self.EN.replace("mesh were", "mesh was").replace("everything go well", "everything goes well"))
+        self.assertEqual(editor.all_roles()[:4], ["proofread", "audit", "choose", "choose"])
+        self.assertNotIn("fix", editor.roles())      # the proofread version already holds the exact replacement
+        receipt = result["receipt"]
+        self.assertEqual({f["method"] for f in receipt["findings"] if f["source"] == "model"}, {"model_proofread+choice"})
+        self.assertEqual((receipt["final"]["confirmed_before"], receipt["final"]["corrected"], receipt["final"]["confirmed_after"]), (2, 2, 0))
+
+    def test_a_short_quote_that_is_a_prefix_of_its_own_correction_counts_as_corrected(self):
+        # "go" is still a substring of "goes"; the repair has to be recognised by whole words, and a revision with only this edit accepted.
+        text = "If everything go well, a public demo will follow in the spring after a long and careful test phase."
+        result = run(text, "en", "blog", Editor(confirm_all=True, proofread={"everything go well": "everything goes well"}))
+        self.assertEqual(result["text"], text.replace("go well", "goes well"))
+        self.assertEqual([(e["accepted"], e["reason"]) for e in result["receipt"]["passes"]], [(True, None)])
+        self.assertEqual((result["receipt"]["final"]["corrected"], result["receipt"]["final"]["confirmed_after"]), (1, 0))
+        self.assertTrue(quality.present("go", "to go home") and not quality.present("go", "everything goes well"))
+        self.assertTrue(quality.present("1996,", "im Jahr 1996, dass") and not quality.present("Welt", "Weltall"))
+
+    def test_adjacent_changes_are_one_repair_that_cannot_be_applied_by_halves(self):
+        text = "Wegen dem schönen Wetter sind die Tische besetzt. Der Garten ist groß und schattig und sehr beliebt bei allen Gästen."
+        editor = Editor(confirm_all=True, proofread={"Wegen dem schönen Wetter": "Wegen des schönen Wetters"})
+        result = run(text, "de", "general", editor)
+        self.assertEqual(result["text"], text.replace("Wegen dem schönen Wetter", "Wegen des schönen Wetters"))
+        quotes = [f["quote"] for f in result["receipt"]["findings"] if f["source"] == "model"]
+        self.assertEqual(len(quotes), 1)
+        self.assertIn("dem schönen Wetter", quotes[0])
+
+    def test_a_typo_style_change_of_a_name_is_rejected_even_without_a_declared_term(self):
+        editor = Editor(confirm_all=True, proofread={"Pension Seeblick": "Pension Seeblock"})
+        result = run(self.DE, "de", "general", editor)
+        self.assertEqual(result["text"], self.DE)
+        errors = [r["error"] for entry in result["receipt"]["passes"] for r in entry["rejected"]]
+        self.assertEqual(errors, ["quality_name_added"])
+
+    def test_a_declared_term_blocks_the_same_change_in_factual_texts_too(self):
+        editor = Editor(confirm_all=True, proofread={"Pension Seeblick": "Pension Seeblock"})
+        result = run(self.DE, "de", "article", editor, terms=["Seeblick"])
+        self.assertEqual(result["text"], self.DE)
+        self.assertIn("Seeblick", result["text"])
+
+    def test_a_proofread_that_rewrites_the_passage_is_discarded(self):
+        rewritten = {self.EN: "In March 2025 a public demo will follow. The collision mesh had been too narrow by two meters, which cost three evenings."}
+        editor = Editor(confirm_all=True, proofread=rewritten)
+        result = run(self.EN, "en", "blog", editor)
+        self.assertFalse(result["changed"])
+        self.assertIn("proofread_rewrote_too_much", result["receipt"]["audit"]["limits"])
+
+    def test_whitespace_and_trailing_newline_changes_are_no_edits(self):
+        self.assertEqual(quality.word_edits("Ein Satz.  Und noch einer.\n", "Ein Satz. Und noch einer."), [])
+        editor = Editor(confirm_all=True, proofread={"Satz.  Und": "Satz. Und"})
+        self.assertFalse(run("Ein Satz.  Und noch einer.", "de", "general", editor)["changed"])
+
+    def test_a_failing_proofread_still_runs_the_audit_and_is_reported(self):
+        class NoProofread(Editor):
+            def __call__(self, role, prompt, schema, tokens):
+                if role == "proofread":
+                    self.calls.append((role, prompt))
+                    raise OSError("down")
+                return Editor.__call__(self, role, prompt, schema, tokens)
+        c = CASES["de_general"]
+        editor = NoProofread(c["defects"], None, c["fixes"])
+        result = run(DE_SHOP, "de", "general", editor)
+        self.assertIn("audit", editor.roles())
+        self.assertFalse(result["receipt"]["audit"]["completed"])
+        self.assertTrue(any(limit.startswith("llm_proofread_unavailable") for limit in result["receipt"]["audit"]["limits"]))
+        self.assertNotIn("schnelllebigen", result["text"])      # the rule hit is repaired nevertheless
+
+    def test_a_defect_both_sources_found_is_one_finding(self):
+        text = "Turns out the collision mesh were two meters too narrow. Fixing it took three evenings of careful work."
+        defect = [("collision mesh were", "collision mesh was", "The verb has to agree with the singular subject mesh.", "grammar", "replace")]
+        result = run(text, "en", "blog", Editor(defect, confirm_all=True, proofread={"mesh were": "mesh was"}))
+        self.assertEqual(len([f for f in result["receipt"]["findings"] if f["source"] == "model"]), 1)
+        self.assertEqual(result["text"], text.replace("mesh were", "mesh was"))
+
+    def test_word_edits_give_every_quote_enough_context_to_be_unique(self):
+        before = "He go home. She go home. They stay."
+        edits = quality.word_edits(before, "He goes home. She goes home. They stay.")
+        self.assertEqual(len(edits), 2)
+        for quote, replacement in edits:
+            self.assertEqual(before.count(quote), 1)
+            self.assertNotEqual(quote, replacement)
+
+
+class ChoiceTests(unittest.TestCase):
+    """A finding with an exact replacement is judged blind: two versions of the sentence, no hint which one is new."""
 
     TEXT = ("The keeper, Anselm Roe, kept a daily log. Most entries are short: wind, visibility, oil used. "
             "Once, in November, he wrote only one line.")
-    FALSE_ALARM = [("Most entries are short", "Most entries were short", "The surrounding sentence is in the past tense, so the verb should match.",
-                    "grammar", "replace")]
+    PROPOSAL = [("Most entries are short", "Most entries were short", "The surrounding sentence is past tense, so the verb should match.",
+                 "grammar", "replace")]
+
+    def statuses(self, result):
+        return [f["status"] for f in result["receipt"]["findings"] if f["source"] == "model"]
+
+    def test_the_prompt_never_says_which_version_is_the_new_one(self):
+        editor = Editor(self.PROPOSAL)
+        run(self.TEXT, "en", "general", editor)
+        prompt = next(text for role, text in editor.calls if role == "choose")
+        for word in ("propos", "original", "defect", "correction", "replacement"):
+            self.assertNotIn(word, prompt.lower())
+        self.assertIn("proper-name capitalisation", prompt)
+        self.assertIn("A: ", prompt)
+        self.assertIn("B: ", prompt)
+
+    def test_a_confirmed_comparison_is_applied_and_needs_no_other_round(self):
+        editor = Editor(self.PROPOSAL)
+        result = run(self.TEXT, "en", "general", editor)
+        self.assertIn("Most entries were short", result["text"])
+        self.assertEqual(editor.roles()[:2], ["audit", "choose"])
+        self.assertNotIn("verify", editor.roles())
+        self.assertNotIn("defend", editor.roles())
+        self.assertEqual(result["receipt"]["findings"][0]["method"], "model_audit+choice")
+
+    def test_acceptable_both_ways_stays_unconfirmed_and_preferring_the_original_refutes(self):
+        both = run(self.TEXT, "en", "general", Editor(self.PROPOSAL, genuine=[]))
+        self.assertEqual((both["changed"], self.statuses(both)), (False, ["unconfirmed"]))
+        original = run(self.TEXT, "en", "general", Editor(self.PROPOSAL, defended=["Most entries are short"]))
+        self.assertEqual((original["changed"], self.statuses(original)), (False, ["refuted"]))
+
+    def test_the_verdict_is_mapped_correctly_in_either_letter_order(self):
+        letters, texts = set(), []
+        for number in range(12):
+            text = f"Report {number} is short. The crew of boat {number} were ready."
+            fix = [(f"boat {number} were", f"boat {number} was", "The subject 'crew' takes the singular verb here.", "grammar", "replace")]
+            editor = Editor(fix)
+            result = run(text, "en", "general", editor)
+            self.assertIn(f"boat {number} was ready", result["text"], number)
+            prompt = next(p for role, p in editor.calls if role == "choose")
+            first = prompt.split("\nA: ", 1)[1].split("\nB: ", 1)[0]
+            letters.add("new first" if f"boat {number} was" in first else "old first")
+        self.assertEqual(letters, {"new first", "old first"})   # the order really varies
+
+    def test_neither_or_an_unusable_answer_never_confirms(self):
+        class Unsure(Editor):
+            def __init__(self, answer, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.answer = answer
+
+            def __call__(self, role, prompt, schema, tokens):
+                if role == "choose":
+                    self.calls.append((role, prompt))
+                    return self.answer, self.evidence
+                return Editor.__call__(self, role, prompt, schema, tokens)
+        for answer in ({"answer": "neither", "reason": "Both versions contain a different error here."}, {"answer": "C", "reason": "x"},
+                       {"answer": "B", "reason": ""}, {}):
+            result = run(self.TEXT, "en", "general", Unsure(answer, self.PROPOSAL))
+            self.assertEqual((result["changed"], self.statuses(result)), (False, ["unconfirmed"]), answer)
+
+    def test_the_number_of_comparisons_is_bounded_and_reported(self):
+        sentences = [f"Boat number {i} were late again today." for i in range(quality.CHOICES + 5)]
+        fixes = {f"number {i} were": f"number {i} was" for i in range(quality.CHOICES + 5)}
+        editor = Editor(proofread=fixes, confirm_all=True)
+        original = quality.PROOFREAD_EDITS
+        quality.PROOFREAD_EDITS = 100
+        try:
+            pipe = quality.Pipeline(editor, TOOLS, "en", max_passes=0)
+            result = pipe.run("\n\n".join(sentences))
+        finally:
+            quality.PROOFREAD_EDITS = original
+        self.assertEqual(sum(role == "choose" for role, _ in editor.calls), quality.CHOICES)
+        self.assertIn("verification_budget", {f.get("note") for f in result["receipt"]["findings"]})
+
+
+class NoteSeverityTests(unittest.TestCase):
+    """The auditor files plain errors as optional. The blind comparison, not the auditor's severity, decides about them."""
+
+    TEXT = "Sie gingen langsam durch die Halle und blieb vor dem alten Klavier stehen. Draußen regnete es noch immer."
+    ERROR = ("und blieb vor", "und blieben vor", "Das Subjekt im Plural verlangt auch beim zweiten Verb die Pluralform.", "grammar", "replace")
+
+    def test_a_grammar_note_with_an_exact_replacement_is_judged_and_applied(self):
+        editor = Editor(noted=[self.ERROR], genuine=["und blieb vor"])
+        result = run(self.TEXT, "de", "story", editor)
+        self.assertIn("und blieben vor", result["text"])
+        self.assertIn("choose", editor.roles())
+        self.assertNotIn("verify", editor.roles())
+
+    def test_the_comparison_can_still_keep_the_original(self):
+        result = run(self.TEXT, "de", "story", Editor(noted=[self.ERROR], genuine=[]))
+        self.assertFalse(result["changed"])
+        self.assertEqual([f["status"] for f in result["receipt"]["findings"] if f["source"] == "model"], ["unconfirmed"])
+
+    def test_notes_about_wording_or_without_an_exact_replacement_stay_notes(self):
+        for note in (("langsam durch die Halle", "gemächlich durch die Halle", "Ein anderes Wort klänge hier etwas lebendiger.", "naturalness", "replace"),
+                     ("und blieb vor", "", "Das Verb passt nicht gut zum Subjekt dieses Satzes.", "grammar", "rewrite"),
+                     ("regnete es noch", "regnete es noch", "Hier steht vielleicht ein Komma zu wenig im Satz.", "punctuation", "replace"),
+                     ("Draußen regnete", "", "Die Wiederholung dieses Satzanfangs wirkt etwas eintönig.", "repetition", "delete")):
+            editor = Editor(noted=[note], confirm_all=True)
+            result = run(self.TEXT, "de", "general", editor)
+            self.assertFalse(result["changed"], note)
+            self.assertEqual(editor.roles(), ["audit"], note)
+            self.assertEqual([f["note"] for f in result["receipt"]["findings"]], ["optional_style"], note)
+
+
+class DefenceTests(unittest.TestCase):
+    """Findings without an exact replacement need two rounds: is the defect real, and can the original be defended."""
+
+    TEXT = ChoiceTests.TEXT
+    VAGUE = [("Most entries are short", "", "The surrounding sentence is in the past tense, so the verb should match.",
+              "grammar", "rewrite")]
+    FIX = {"Most entries are short": ("Most entries are short", "Most entries were short")}
 
     def test_a_defect_the_defender_can_save_is_not_applied(self):
-        editor = Editor(self.FALSE_ALARM, defended=["Most entries are short"])
+        editor = Editor(self.VAGUE, fixes=self.FIX, defended=["Most entries are short"])
         result = run(self.TEXT, "en", "general", editor)
         self.assertFalse(result["changed"])
         self.assertEqual(editor.roles(), ["audit", "verify", "defend"])
@@ -555,13 +790,13 @@ class DefenceTests(unittest.TestCase):
         self.assertNotIn("fix", editor.roles())
 
     def test_a_defect_both_rounds_confirm_is_applied(self):
-        editor = Editor(self.FALSE_ALARM)
+        editor = Editor(self.VAGUE, fixes=self.FIX)
         result = run(self.TEXT, "en", "general", editor)
         self.assertEqual(editor.roles()[:3], ["audit", "verify", "defend"])
         self.assertIn("Most entries were short", result["text"])
 
     def test_the_defender_only_sees_what_the_verifier_confirmed(self):
-        editor = Editor(self.FALSE_ALARM, genuine=[])
+        editor = Editor(self.VAGUE, genuine=[])
         run(self.TEXT, "en", "general", editor)
         self.assertEqual(editor.roles(), ["audit", "verify"])
 
@@ -572,21 +807,20 @@ class DefenceTests(unittest.TestCase):
                     self.calls.append((role, prompt))
                     return {"verdicts": []}, self.evidence
                 return Editor.__call__(self, role, prompt, schema, tokens)
-        result = run(self.TEXT, "en", "general", Silent(self.FALSE_ALARM))
+        result = run(self.TEXT, "en", "general", Silent(self.VAGUE, fixes=self.FIX))
         self.assertFalse(result["changed"])
         finding = next(f for f in result["receipt"]["findings"] if f["source"] == "model")
         self.assertEqual(finding["status"], "unconfirmed")
         self.assertIn("unanswered", finding["verification"])
 
-    def test_an_unavailable_defender_leaves_model_findings_unconfirmed_but_keeps_rule_hits(self):
+    def test_an_unavailable_verifier_leaves_model_findings_unconfirmed_but_keeps_rule_hits(self):
         class Down(Editor):
             def __call__(self, role, prompt, schema, tokens):
-                if role == "defend":
+                if role in ("choose", "verify", "defend"):
                     raise OSError("down")
                 return Editor.__call__(self, role, prompt, schema, tokens)
-        text = DE_SHOP
         c = CASES["de_general"]
-        result = run(text, "de", "general", Down(c["defects"], None, c["fixes"]))
+        result = run(DE_SHOP, "de", "general", Down(c["defects"], None, c["fixes"]))
         statuses = {f["source"]: f["status"] for f in result["receipt"]["findings"]}
         self.assertEqual(statuses, {"rule": "confirmed", "model": "unconfirmed"})
         self.assertIn("Wegen den vielen Pendlern", result["text"])
@@ -596,8 +830,7 @@ class DefenceTests(unittest.TestCase):
 
 class HonestyTests(unittest.TestCase):
     def test_the_verifier_is_told_to_leave_acceptable_variants_unconfirmed(self):
-        editor = Editor([("Cape Verde point", "Cape Verde Point", "Der Name wird großgeschrieben.", "grammar", "replace")],
-                        genuine=[])
+        editor = Editor([("Cape Verde point", "", "Der Name wird großgeschrieben, weil er ein Eigenname ist.", "grammar", "rewrite")], genuine=[])
         result = run(EN_GOOD, "en", "general", editor)
         verify = next(prompt for role, prompt in editor.calls if role == "verify")
         self.assertIn("answer unconfirmed", verify)
@@ -658,7 +891,8 @@ class ReceiptAndLocaleTests(unittest.TestCase):
                                        ("en-US", "en", "American spelling")):
             editor = Editor()
             run("A short, plain sentence for the audit.", lang, "general", editor, locale=locale)
-            self.assertIn(fragment, editor.calls[0][1], locale)
+            for role in ("proofread", "audit"):
+                self.assertIn(fragment, next(text for name, text in editor.calls if name == role), (locale, role))
         self.assertEqual(quality.locale_for("en", "de-DE"), "en-US")
         self.assertEqual(quality.locale_for("de", "fr-FR"), "de-DE")
         with self.assertRaises(PlanError):
@@ -668,12 +902,16 @@ class ReceiptAndLocaleTests(unittest.TestCase):
         german, english = Editor(), Editor()
         run("Ein kurzer Satz für die Prüfung.", "de", "general", german)
         run("A short sentence for the audit.", "en", "general", english)
-        self.assertIn("including the second verb of a predicate joined by 'und'", german.calls[0][1])
-        self.assertIn("infinitive groups", german.calls[0][1])
-        self.assertIn("German (Germany)", german.calls[0][1])
-        self.assertIn("including the second verb of a predicate joined by 'and'", english.calls[0][1])
-        self.assertIn("literal translations", english.calls[0][1])
-        self.assertIn("English (United States)", english.calls[0][1])
+        prompt = lambda editor, role: next(text for name, text in editor.calls if name == role)
+        self.assertIn("German (Germany)", prompt(german, "audit"))
+        self.assertIn("including the second verb of a predicate joined by 'und'", prompt(german, "audit"))
+        self.assertIn("infinitive groups", prompt(german, "audit"))
+        self.assertIn("English (United States)", prompt(english, "audit"))
+        self.assertIn("including the second verb of a predicate joined by 'and'", prompt(english, "audit"))
+        self.assertIn("literal translations", prompt(english, "audit"))
+        for editor, language in ((german, "German (Germany)"), (english, "English (United States)")):
+            self.assertIn(language, prompt(editor, "proofread"))
+            self.assertIn("Correct only objective errors", prompt(editor, "proofread"))
 
     def test_profiles_follow_the_kind_of_text(self):
         names = {kind: quality.profile_for(kind).name for kind in (

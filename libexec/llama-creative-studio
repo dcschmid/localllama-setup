@@ -1703,21 +1703,22 @@ QUALITY_GENRE = {"story": "fiction", "dialogue": "fiction", "article": "editoria
 
 
 def quality_ask(lang, profile):
-    """The model transport of the central quality pipeline: the Human Writing audit and rewrite modes with the loaded skill rules.
+    """The model transport of the central quality pipeline: the Human Writing rules with the loaded skill references.
 
-    All roles use one router alias and select the mode per request through the template controls. Switching aliases would
-    reload the same weights for every call."""
+    Every role uses one router alias and one writing mode, so all calls of a run share the same system prompt and the
+    router keeps it cached. A change of mode would reprocess some 4000 prompt tokens for each call. The mode is "rewrite"
+    because it contains the fidelity rules; the task itself is stated in the request and its JSON schema."""
     genre = QUALITY_GENRE.get(profile.name, "general")
     tag = "editorial" if genre == "general" else genre
 
     def ask(role, prompt, schema, tokens):
-        mode = "rewrite" if role == "fix" else "audit"
         answer, evidence, finish = model_reply({
-            "model": "human-audit", "stream": False, "temperature": .2, "max_tokens": tokens,
-            "messages": [{"role": "user", "content": f"[{lang}][{mode}][{tag}]\n" + prompt}],
+            "model": "human-audit", "stream": False, "temperature": 0 if role in ("proofread", "choose") else .2,
+            "max_tokens": tokens, "messages": [{"role": "user", "content": f"[{lang}][rewrite][{tag}]\n" + prompt}],
             "chat_template_kwargs": {"enable_thinking": False, "writing_genre": "fiction" if genre == "fiction" else "editorial",
-                                     "writing_mode": mode},
-            "response_format": {"type": "json_schema", "schema": schema}}, writing_rules(lang, genre, mode), lang, mode)
+                                     "writing_mode": "rewrite"},
+            "response_format": {"type": "json_schema", "schema": schema}},
+            writing_rules(lang, genre, "rewrite"), lang, "rewrite")
         if finish == "length":
             raise PlanError("quality_output_truncated")
         try:
@@ -1771,8 +1772,8 @@ def review_task(task_id, plan, result):
     result["quality"] = receipt
     # Everything the audits found, as the person needs it: corrected or still open. The first audit lists what was found
     # at the start, the recheck lists what is open at the end, including defects that only surfaced there.
-    listed = {f["quote"]: {"quote": f["quote"], "verdict": "open" if f["quote"] in outcome["text"] else "corrected", "reason": f["issue"]}
-              for f in receipt["findings"] if f["status"] == "confirmed" or f["status"] == "unconfirmed" and f["quote"] in outcome["text"]}
+    listed = {f["quote"]: {"quote": f["quote"], "verdict": "open" if quality.present(f["quote"], outcome["text"]) else "corrected", "reason": f["issue"]}
+              for f in receipt["findings"] if f["status"] == "confirmed" or f["status"] == "unconfirmed" and quality.present(f["quote"], outcome["text"])}
     for item in receipt["recheck"]["remaining"]:
         listed.setdefault(item["quote"], {"quote": item["quote"], "verdict": "open", "reason": item["issue"]})
     task_step(task_id, result, "review", status="completed", corrections=info["corrected"], remaining=info["remaining"],

@@ -10,6 +10,7 @@ whether the revision was checked again, and the hash of the final version.
 The pipeline never regenerates a text. It corrects confirmed defects with exact, validated span edits,
 keeps passages that already read well, and stops after at most two correction passes."""
 
+import difflib
 import re
 import sys
 import time
@@ -25,6 +26,7 @@ from creative_studio_production import WaitForResource, array, dump, enum, field
 VERSION = 1
 MAX_PASSES = 2
 BATCH = 8
+CHOICES = 24   # replacement findings judged per audit, one short call each
 FINDINGS_PER_WINDOW = 6
 EDITS_PER_PASS = 6
 RECOVERABLE = (PlanError, OSError, ValueError, KeyError, TypeError, WaitForResource)
@@ -155,6 +157,14 @@ def spans_of(text, tools):
     return found
 
 
+def present(quote, text):
+    """Whether the quote is still in the text as its own words. 'go' is not in 'goes'."""
+    if not quote:
+        return False
+    head, tail = r"(?<!\w)" if quote[0].isalnum() else "", r"(?!\w)" if quote[-1].isalnum() else ""
+    return re.search(head + re.escape(quote) + tail, text) is not None
+
+
 def covered(spans, start, stop):
     """How many characters of [start, stop) lie inside the spans, where overlapping spans count once."""
     total, reach = 0, start
@@ -205,31 +215,87 @@ def seam_regression(before, start, end, after_text):
 CAPITALISED = re.compile(r"[A-ZÄÖÜ][\wäöüß'’-]*")
 
 
-def inner_capitals(text):
-    """Capitalised words that do not open a sentence: names, acronyms and, in German, nouns."""
+def inner_capitals(text, opens_sentence=True):
+    """Capitalised words that do not open a sentence: names, acronyms and, in German, nouns. A text that starts in the
+    middle of a sentence has no opening word, so all its capitalised words count."""
     found = []
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+    for number, sentence in enumerate(re.split(r"(?<=[.!?])\s+|\n+", text)):
         words = re.findall(r"[\wäöüß'’-]+", sentence)
-        found += [word for word in words[1:] if CAPITALISED.fullmatch(word)]
+        found += [word for word in words[1:] if CAPITALISED.fullmatch(word)] if number or opens_sentence else \
+                 [word for word in words if CAPITALISED.fullmatch(word)]
     return found
 
 
 def same_word(left, right):
-    """Inflected forms of one word (Pendler/Pendlern, tank/tanks) count as the same."""
-    short = min(len(left), len(right))
-    return left == right or (short >= 4 and left[:short - 3 if short > 6 else 4] == right[:short - 3 if short > 6 else 4])
+    """Inflected forms of one word (Pendler/Pendlern, Wetter/Wetters) count as the same. A change inside the word does not
+    (Seeblick/Seeblock), even when it looks like a typo repair."""
+    if left == right:
+        return True
+    common = 0
+    while common < min(len(left), len(right)) and left[common] == right[common]:
+        common += 1
+    return common >= 4 and max(len(left), len(right)) - common <= 2
 
 
-def edit_problem(before, after):
+def edit_problem(before, after, opens_sentence=True):
     """Why an edit of ordinary text is unsafe, or None. A sentence may be reworded; facts, names and size may not move."""
     if len(after) > max(240, 2 * len(before) + 80):
         return "quality_edit_too_long"
     if Counter(NUMBER.findall(before)) != Counter(NUMBER.findall(after)):
         return "quality_number_changed"
-    old = inner_capitals(before)
-    if any(not any(same_word(word, known) for known in old) for word in inner_capitals(after)):
+    old = inner_capitals(before, opens_sentence)
+    if any(not any(same_word(word, known) for known in old) for word in inner_capitals(after, opens_sentence)):
         return "quality_name_added"
     return None
+
+
+PROOFREAD_FLOOR = .8   # a proofread passage that keeps less of the original than this was rewritten, not corrected
+PROOFREAD_EDITS = 8
+PROOFREAD_RULES = {
+    "de": "spelling, grammar (subject-verb agreement including the second verb of a predicate joined by 'und', case, article, "
+          "tense) and punctuation (commas for clauses, infinitive groups and lists)",
+    "en": "spelling, grammar (subject-verb agreement including the second verb of a predicate joined by 'and', tense, articles, "
+          "prepositions) and punctuation (comma splices, apostrophes)",
+}
+
+
+def word_edits(before, after):
+    """The contiguous word-level changes from a passage to its proofread version, each as (quote, replacement) with enough
+    neighbouring words that the quote is unique in the passage. Differences in whitespace alone are no edits."""
+    old, new = re.findall(r"\S+|\s+", before), re.findall(r"\S+|\s+", after)
+    offsets = [0]
+    for token in old:
+        offsets.append(offsets[-1] + len(token))
+    changes = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag == "equal" or "".join(old[i1:i2]).strip() == "".join(new[j1:j2]).strip():
+            continue
+        change = [offsets[i1], offsets[i2], "".join(new[j1:j2])]
+        gap = before[changes[-1][1]:change[0]] if changes else ""
+        if changes and len(gap.split()) <= 3 and not re.search(r"[.!?]", gap):
+            # "Wegen dem schönen Wetter" -> "Wegen des schönen Wetters": one repair, applied whole or not at all
+            changes[-1] = [changes[-1][0], change[1], changes[-1][2] + gap + change[2]]
+        else:
+            changes.append(change)
+    edits = []
+    for left, right, changed in changes:
+        start, end = left, right
+        for _ in range(6):
+            if end > start and before.count(before[start:end]) == 1 and before[start:end].strip():
+                break
+            if start > 0 and (_ % 2 == 0 or end >= len(before)):
+                start = max(before.rfind(" ", 0, start - 1), before.rfind("\n", 0, start - 1)) + 1
+            else:
+                nxt = re.compile(r"\s+\S+").match(before, end) if end < len(before) else None
+                end = nxt.end() if nxt else len(before)
+        quote, replacement = before[start:end], before[start:left] + changed + before[right:end]
+        while quote and replacement and quote[0].isspace() and replacement[0] == quote[0]:
+            quote, replacement = quote[1:], replacement[1:]
+        while quote and replacement and quote[-1].isspace() and replacement[-1] == quote[-1]:
+            quote, replacement = quote[:-1], replacement[:-1]
+        if quote.strip() and quote != replacement and before.count(quote) == 1:
+            edits.append((quote, replacement))
+    return edits
 
 
 def sentence_around(text, start, end):
@@ -392,17 +458,56 @@ class Pipeline:
                 continue   # code, quotations and markup only: nothing for a language audit to read
             key = digest(window)
             if key not in self.cache:
-                try:
-                    self.cache[key] = self.audit_window(window)
-                except RECOVERABLE as exc:
+                found, ok = [], True
+                for step in (self.proofread_window, self.audit_window):
+                    try:
+                        found += step(window, found)
+                    except RECOVERABLE as exc:
+                        ok = False
+                        self.limits.append(f"llm_{step.__name__.split('_')[0]}_unavailable:"
+                                           + (str(exc) if isinstance(exc, PlanError) else type(exc).__name__))
+                if not ok:
                     completed = False
-                    self.limits.append("llm_audit_unavailable:" + (str(exc) if isinstance(exc, PlanError) else type(exc).__name__))
+                if not found and not ok:
                     continue
+                self.cache[key] = found
             findings += [{**item, "start": item["start"] + start, "end": item["end"] + start}
                          if "start" in item else dict(item) for item in self.cache[key]]
         return {"findings": findings, "completed": completed, "windows": count}
 
-    def audit_window(self, window):
+    def proofread_window(self, window, existing):
+        """Let the model correct the passage and turn its changes into findings. A small model finds far more defects by
+        correcting than by listing them, and every change is anchored by construction."""
+        language = LANGUAGE_NAMES[self.locale]
+        data = self.ask("proofread",
+            f"Proofread this passage of a text written in {language}. Correct only objective errors: "
+            f"{PROOFREAD_RULES[self.lang]}. {VARIANT_RULES[self.locale]} {self.profile.guidance} Change nothing else: keep every other "
+            "word and their order, the style, Markdown, code, links, quotations, names and numbers exactly as they are. "
+            "If the passage has no error, return it unchanged. Return the complete passage in text.\nPASSAGE\n" + window,
+            story.schema({"text": story.STR}), min(2400, max(900, len(window) // 2 + 400)))
+        fixed = data.get("text")
+        if not isinstance(fixed, str) or not fixed.strip():
+            raise PlanError("quality_model_format")
+        if fixed.strip() == window.strip():
+            return []
+        words_before, words_after = window.split(), fixed.split()
+        if (difflib.SequenceMatcher(None, words_before, words_after, autojunk=False).ratio() < PROOFREAD_FLOOR
+                or abs(len(words_after) - len(words_before)) > max(3, len(words_before) // 8)):
+            self.limits.append("proofread_rewrote_too_much")
+            return []
+        items = []
+        for quote, replacement in word_edits(window, fixed)[:PROOFREAD_EDITS]:
+            punctuation_only = re.sub(r"[\W_]", "", quote) == re.sub(r"[\W_]", "", replacement)
+            span = self.tools.fiction.evidence(window, quote)
+            items.append({"source": "model", "category": "punctuation" if punctuation_only and
+                          re.sub(r"\w", "", quote) != re.sub(r"\w", "", replacement) else "grammar", "rule_category": None,
+                          "issue": f'The proofread version changes "{quote[:120]}" to "{replacement[:120]}".', "quote": quote,
+                          "action": "replace", "replacement": replacement, "correction": replacement, "method": "model_proofread",
+                          "status": "unconfirmed", "severity": "editorial", "eligible": True,
+                          "start": span["start"], "end": span["end"]})
+        return items
+
+    def audit_window(self, window, existing=()):
         language, rules = LANGUAGE_NAMES[self.locale], LANGUAGE_RULES[self.lang]
         data = self.ask("audit",
             f"Audit this passage of a text written in {language}. {rules} {VARIANT_RULES[self.locale]} {self.profile.guidance} "
@@ -425,14 +530,20 @@ class Pipeline:
                 continue
             quote, issue = str(raw.get("quote", "")), str(raw.get("issue", ""))
             span = self.tools.fiction.evidence(window, quote) if window.count(quote) == 1 else None
+            # The auditor's own severity is unreliable for plain errors: it files a wrong verb form as "note". Such a claim with
+            # an exact replacement goes to the blind comparison, which decides. Optional wording stays a note.
+            comparable = (raw.get("category") in ("grammar", "punctuation") and raw.get("action") == "replace"
+                          and str(raw.get("replacement", "")).strip() not in ("", quote.strip()))
             reason = ("quote_not_unique" if quote and window.count(quote) > 1 else "quote_not_found" if not span
                       else "issue_not_explained" if not self.tools.fiction.substantive(issue)
-                      else "optional_style" if raw.get("severity") != "editorial" else None)
+                      else "optional_style" if raw.get("severity") != "editorial" and not comparable else None)
             item = {"source": "model", "category": raw.get("category") if raw.get("category") in (
                         "grammar", "punctuation", "naturalness", "repetition") else "naturalness", "rule_category": None,
                     "issue": issue, "quote": quote, "action": raw.get("action"), "replacement": str(raw.get("replacement", "")),
                     "correction": str(raw.get("replacement", "")), "method": "model_audit",
                     "status": "unconfirmed", "severity": "note"}
+            if reason is None and any(span["start"] < other["end"] and span["end"] > other["start"] for other in existing if "start" in other):
+                continue   # the proofread pass already holds this defect
             if reason is None:
                 item.update(start=span["start"], end=span["end"], severity="editorial", eligible=True)
             else:
@@ -456,15 +567,72 @@ class Pipeline:
         return {key: (v[0]["status"], v[0]["reason"]) for key, v in found.items() if len(v) == 1 and v[0].get("status") in (
             "confirmed", "unconfirmed", "refuted") and self.tools.fiction.substantive(v[0].get("reason"))}
 
+    def choose(self, text, item):
+        """Blind comparison of the sentence as written and as proposed. The model does not learn which one is new, so it can
+        neither agree with a proposal out of habit nor defend the original out of loyalty. Returns (status, reason)."""
+        sentence = sentence_around(text, item["start"], item["end"])
+        if item["quote"] not in sentence:
+            sentence = item["quote"]
+        proposed = sentence.replace(item["quote"], item["replacement"], 1)
+        swapped = int(digest(sentence + "\0" + proposed)[:8], 16) % 2 == 1
+        first, second = (proposed, sentence) if swapped else (sentence, proposed)
+        data = self.ask("choose",
+            f"Two versions of one sentence in {LANGUAGE_NAMES[self.locale]}. Judge only correctness of spelling, grammar, "
+            f"punctuation and idiom in context. {self.profile.guidance} Answer A when only version A is correct, B when only "
+            "version B is correct, both when both are acceptable (variant spelling, proper-name capitalisation, optional comma, "
+            "tense, spoken or literary style, or wording that fits either way), neither when both are wrong. Give the concrete "
+            f"rule in reason.\nA: {first}\nB: {second}",
+            story.schema({"reason": story.STR, "answer": enum(("A", "B", "both", "neither"))}), 300)
+        answer, reason = data.get("answer"), str(data.get("reason", ""))
+        if answer not in ("A", "B", "both", "neither") or not self.tools.fiction.substantive(reason):
+            return "unconfirmed", "unanswered"
+        if answer in ("both", "neither"):
+            return "unconfirmed", reason
+        return ("confirmed" if (answer == "A") == swapped else "refuted"), reason
+
+    def judge(self, role, brief, text, items):
+        """One verdict round over anchored findings. Returns {item index: (status, reason)} for the answered ones."""
+        numbered = {str(i): item for i, item in enumerate(items)}
+        data = self.ask(role, brief + "PASSAGES\n" + around(text, items) + "\nPROPOSED DEFECTS\n" + dump([
+            {"index": key, **{field: item.get(field, "") for field in ("quote", "category", "issue", "action", "replacement")}}
+            for key, item in numbered.items()]),
+            story.schema({"verdicts": {"type": "array", "minItems": len(items), "maxItems": len(items),
+                "items": story.schema({"index": enum(list(numbered)), "status": enum(("confirmed", "unconfirmed", "refuted")),
+                                       "reason": story.STR})}}), 2100)
+        found = {}
+        for verdict in data.get("verdicts", []):
+            if isinstance(verdict, dict):
+                found.setdefault(str(verdict.get("index")), []).append(verdict)
+        return {key: (v[0]["status"], v[0]["reason"]) for key, v in found.items() if len(v) == 1 and v[0].get("status") in (
+            "confirmed", "unconfirmed", "refuted") and self.tools.fiction.substantive(v[0].get("reason"))}
+
+    def unavailable(self, exc):
+        self.limits.append("verification_unavailable:" + (str(exc) if isinstance(exc, PlanError) else type(exc).__name__))
+
     def verify(self, text, findings):
-        """Two independent rounds. The first asks whether a proposed defect is real. The second defends the original, because
-        the verifier is the same local model as the auditor and their mistakes are correlated. A defect is confirmed only when
-        both rounds confirm it. Rule hits are confirmed by their rule."""
+        """Every proposed defect is judged independently of the call that proposed it. Rule hits are confirmed by their rule.
+
+        A finding with an exact replacement is decided by a blind comparison. A finding without one (delete or rewrite) needs
+        two rounds, one asking whether the defect is real and one defending the original, because the verifier is the same
+        local model as the auditor and their mistakes are correlated."""
+        pending = [item for item in findings if item["status"] == "unconfirmed" and "start" in item]
+        direct = [item for item in pending if item.get("action") == "replace" and item.get("replacement")
+                  and item["replacement"] != item["quote"]]
+        for number, item in enumerate(direct):
+            if number >= CHOICES:
+                item["note"] = "verification_budget"
+                continue
+            try:
+                status, reason = self.choose(text, item)
+            except RECOVERABLE as exc:
+                self.unavailable(exc)
+                continue
+            item.update(status=status, verification=reason, method=item["method"] + "+choice")
         language = LANGUAGE_NAMES[self.locale]
         confirm = (f"Independently verify each proposed defect in a text written in {language}. {self.profile.guidance} "
                    "Confirm only an objective error of spelling, grammar, punctuation, an unnatural or wrong phrase, or accidental "
-                   "repetition. The replacement has to keep the meaning, every fact, name, number and the sentence context. Optional "
-                   "style, deliberate devices, dialogue and quotations are not errors. Confirm only when a competent editor would "
+                   "repetition. A fix has to keep the meaning, every fact, name, number and the sentence context. Optional style, "
+                   "deliberate devices, dialogue and quotations are not errors. Confirm only when a competent editor would "
                    "certainly correct it. Where two forms are acceptable (capitalisation of a proper name or a descriptive noun, "
                    "regional or variant spelling, an optional comma, synonyms) answer unconfirmed. Ambiguity stays unconfirmed. "
                    "Explain the concrete rule. Return every index.\n")
@@ -473,9 +641,9 @@ class Pipeline:
                   "device, a regional or variant form, an accepted idiom, or a matter of taste. Answer refuted when you can defend "
                   "it, unconfirmed when you are unsure, and confirmed only when no acceptable reading exists. Explain with the "
                   "context of the passage. Return every index.\n")
-        pending = [item for item in findings if item["status"] == "unconfirmed" and "start" in item]
-        for first in range(0, len(pending), BATCH):
-            batch = pending[first:first + BATCH]
+        open_ones = [item for item in pending if item not in direct]
+        for first in range(0, len(open_ones), BATCH):
+            batch = open_ones[first:first + BATCH]
             try:
                 verdicts = self.judge("verify", confirm, text, batch)
                 for index, item in enumerate(batch):
@@ -489,9 +657,9 @@ class Pipeline:
                     if status != "confirmed":   # an answer the defender did not give is no confirmation either
                         item.update(status=status, verification=f"{item.get('verification', '')} Defence: {reason}".strip())
             except RECOVERABLE as exc:
-                self.limits.append("verification_unavailable:" + (str(exc) if isinstance(exc, PlanError) else type(exc).__name__))
+                self.unavailable(exc)
                 for item in batch:
-                    if item["status"] == "confirmed" and item["source"] != "rule":
+                    if item["status"] == "confirmed":
                         item["status"] = "unconfirmed"
         for item in findings:
             if item["status"] == "unconfirmed" and item.get("source") == "orthography":
@@ -591,7 +759,7 @@ class Pipeline:
         for edit in plain:
             start = stage.find(edit["before"])
             end = start + len(edit["before"])
-            problem = edit_problem(edit["before"], edit["after"])
+            problem = edit_problem(edit["before"], edit["after"], start <= 0 or stage[:start].rstrip()[-1:] in "\n.!?")
             if problem is None and stage.count(edit["before"]) != 1:
                 problem = "quality_edit_not_unique"
             elif problem is None and any(start < b and end > a for a, b in spans):
@@ -634,10 +802,10 @@ class Pipeline:
             return False, "seam_damaged"
         was = [f for f in reports[before]["findings"] if f["automatic"]]
         now = [f for f in reports[after]["findings"] if f["automatic"]]
-        introduced = [f for f in now if f["quote"] and f["quote"] not in before]
+        introduced = [f for f in now if f["quote"] and not present(f["quote"], before)]
         if introduced:
             return False, "introduced_defect"
-        resolved = [f for f in was if f["quote"] and f["quote"] not in after]
+        resolved = [f for f in was if f["quote"] and not present(f["quote"], after)]
         return (True, None) if resolved else (False, "no_improvement")
 
     def run(self, text):
@@ -672,8 +840,8 @@ class Pipeline:
         wording is gone, and as remaining while its wording is still there, whether or not the recheck reported it again:
         a model audit does not repeat itself reliably."""
         confirmed = [f for f in first["findings"] if f["status"] == "confirmed" and f["quote"]]
-        corrected = [f for f in confirmed if f["quote"] not in final]
-        carried = [f for f in confirmed if f["quote"] in final]
+        corrected = [f for f in confirmed if not present(f["quote"], final)]
+        carried = [f for f in confirmed if present(f["quote"], final)]
         rechecked = [f for f in last["findings"] if f["status"] in ("confirmed", "unconfirmed")]
         open_items = {}
         for f in carried + rechecked:

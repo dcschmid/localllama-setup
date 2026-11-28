@@ -175,8 +175,11 @@ class WorkflowTests(unittest.TestCase):
             # The central quality pipeline: the rule registry finds the filler itself, the audit model has nothing to add,
             # and the rewrite model returns the one exact edit that removes the confirmed filler sentence.
             properties = body["response_format"]["schema"]["properties"]
-            answer = ({"findings": []} if "findings" in properties else {"verdicts": []} if "verdicts" in properties else
-                      {"edits": [{"id": "f1", "before": self.filler, "after": ""}]})
+            if "text" in properties:   # the proofread pass: a clean passage comes back unchanged
+                answer = {"text": body["messages"][-1]["content"].split("\nPASSAGE\n", 1)[1]}
+            else:
+                answer = ({"findings": []} if "findings" in properties else {"verdicts": []} if "verdicts" in properties else
+                          {"edits": [{"id": "f1", "before": self.filler, "after": ""}]})
             return 200, {"choices": [{"message": {"content": json.dumps(answer)}, "finish_reason": "stop"}]}
         if url.endswith("/studio/api/catalog"):
             return 200, {"models": [{"id": "moss", "installed": True, "negative": True, "sizes": ["1024x576"], "verified_modes": [],
@@ -186,6 +189,12 @@ class WorkflowTests(unittest.TestCase):
             return 200, {"model": body["model"], "size": "1024x576", "steps": 30,
                          "prompt": f"Low-poly. {body['subject']}. {body['scene']} {body['details']}"}
         raise AssertionError("unexpected upstream call: " + url)
+
+    def kinds(self):
+        """The quality-pipeline calls so far by what they asked for, read from the answer schema each call demanded."""
+        names = {"text": "proofread", "findings": "audit", "verdicts": "verdict", "edits": "fix"}
+        return [names[next(key for key in names if key in call["response_format"]["schema"]["properties"])]
+                for call in self.calls if call["model"] == "human-audit"]
 
     def folder_chat(self, *, knowledge_entries=True, visual_profile=True, name="Riff Racers"):
         folder, sid = uuid.uuid4().hex, uuid.uuid4().hex
@@ -248,9 +257,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([(f["quote"], f["verdict"]) for f in steps["review"]["findings"]], [("In der heutigen schnelllebigen Welt", "corrected")])
         self.assertIn(receipt["final"]["sha256_after"][:12], document["version_note"])
         self.assertEqual({call["model"] for call in self.calls}, {"creative-writing", "human-audit"})
-        modes = [call["chat_template_kwargs"]["writing_mode"] for call in self.calls if call["model"] == "human-audit"]
-        # Audit, the one correction and the recheck. Nothing to verify: the rule registry confirmed the filler itself.
-        self.assertEqual(modes, ["audit", "rewrite", "audit"])
+        # Proofread and audit, the one correction, then the recheck. Nothing to verify: the rule registry confirmed the filler itself.
+        self.assertEqual(self.kinds(), ["proofread", "audit", "fix", "proofread", "audit"])
+        modes = {next(iter(call["response_format"]["schema"]["properties"])): call["chat_template_kwargs"]["writing_mode"]
+                 for call in self.calls if call["model"] == "human-audit"}
+        self.assertEqual(modes, dict.fromkeys(("text", "findings", "edits"), "rewrite"))
+        # One system prompt for every role: the router can keep it cached between the calls of a run.
+        systems = {call["messages"][0]["content"] for call in self.calls if call["model"] == "human-audit"}
+        self.assertEqual(len(systems), 1)
+        tags = {call["messages"][-1]["content"].split("\n", 1)[0] for call in self.calls if call["model"] == "human-audit"}
+        self.assertEqual(tags, {"[de][rewrite][editorial]"})
         # Only folder knowledge, no ideas, and the model was told to stay inside it.
         prompt = self.calls[0]["messages"][-1]["content"]
         self.assertIn("Thunderforge – Streckenprofil", prompt)
@@ -303,7 +319,7 @@ class WorkflowTests(unittest.TestCase):
         review = result["steps"]["review"]
         self.assertEqual((review["corrections"], review["remaining"], review["summary"]["passes"]), (0, 0, 0))
         self.assertTrue(review["summary"]["audit_completed"])
-        self.assertNotIn("rewrite", [call.get("chat_template_kwargs", {}).get("writing_mode") for call in self.calls])
+        self.assertEqual(self.kinds(), ["proofread", "audit"])      # a clean draft is read twice and never sent to a fix call
         document = self.conn.execute("SELECT version,body FROM documents WHERE id=?", (result["document_id"],)).fetchone()
         self.assertEqual((document["version"], document["body"]), (1, FINAL))
 
@@ -397,7 +413,7 @@ class WorkflowTests(unittest.TestCase):
         status, audited = handler._quality_request(did, {"mode": "audit"})
         self.assertEqual((status, audited["changed"], audited["version"]), (200, False, 1))
         self.assertEqual(audited["summary"]["confirmed"], 1)
-        self.assertNotIn("rewrite", [call.get("chat_template_kwargs", {}).get("writing_mode") for call in self.calls])
+        self.assertNotIn("fix", self.kinds())      # an audit changes nothing, so it never asks for a repair
         status, fixed = handler._quality_request(did, {"mode": "fix", "version": 1})
         self.assertEqual((status, fixed["changed"], fixed["version"]), (200, True, 2))
         document = self.conn.execute("SELECT body,version_note,version_origin FROM documents WHERE id=?", (did,)).fetchone()

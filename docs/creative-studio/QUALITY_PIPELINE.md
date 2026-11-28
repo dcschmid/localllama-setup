@@ -25,19 +25,32 @@ besitzen eigene, ältere Prüfstufen für Kanon, Kontinuität und Belege. Sie nu
 
 ## Ablauf
 
-1. **Audit.** Drei Quellen, immer zusammen:
+1. **Audit.** Vier Quellen, immer zusammen, in Fenstern von wenigen Absätzen:
    - die deterministischen Regeln des Skills (`hw_rules`): Floskeln, Werbesprache, Füllwörter, Wiederholungen,
    - mechanisch beweisbare Reparaturen (`fiction_audit.local_quality`) und die deutsche Orthografie (`editorial_orthography`),
-   - ein Sprachaudit des Modells, in Fenstern, mit einer Satz-für-Satz-Checkliste je Sprache
-     (Rechtschreibung, Kongruenz, Zeit, Artikel und Kasus, Zeichensetzung, wörtliche Übersetzungen, Anglizismen).
-2. **Verify.** Jeder Modellbefund wird unabhängig geprüft. Regeltreffer gelten durch ihre Regel als bestätigt.
-   Optionale Stilhinweise, deliberate Stilmittel, Zitate und Mehrdeutigkeit bleiben unbestätigt.
-3. **Fix.** Nur bestätigte Befunde, die ein Profil automatisch korrigiert. Das Modell liefert den ganzen Satz als
-   exakte Änderung. Mechanische Reparaturen gelten ohne Modell.
+   - ein **Korrekturlauf**: Das Modell gibt die Passage mit berichtigten objektiven Fehlern zurück. Jede wortweise Änderung wird
+     ein verankerter Befund mit exakter Ersetzung. Benachbarte Änderungen bilden eine Reparatur. Eine Fassung, die mehr als
+     umgeschrieben statt korrigiert ist, wird verworfen (`proofread_rewrote_too_much`),
+   - ein **Sprachaudit** mit Satz-für-Satz-Checkliste (Rechtschreibung, Kongruenz, Zeit, Artikel und Kasus, Zeichensetzung,
+     wörtliche Übersetzungen, Anglizismen) für alles, was keine einfache Ersetzung hat. Die Selbsteinschätzung „optional“ gilt
+     nicht für Grammatik- und Zeichensetzungsmeldungen mit exakter Ersetzung: Darüber entscheidet die Verifikation.
+2. **Verify.** Regeltreffer gelten durch ihre Regel als bestätigt. Alles andere wird unabhängig geprüft:
+   - Befunde mit exakter Ersetzung durch einen **blinden Vergleich**: Das Modell sieht den Satz vorher und nachher als A und B,
+     in wechselnder Reihenfolge, und nennt A, B, „beide“ oder „keine“. Bestätigt ist nur die eindeutige Wahl der neuen Fassung.
+     Höchstens 24 Vergleiche je Prüfung, der Rest wird als `verification_budget` ausgewiesen.
+   - Befunde ohne Ersetzung in zwei Runden: eine prüft, ob der Fehler echt ist, eine verteidigt das Original. Beide müssen bestätigen.
+3. **Fix.** Nur bestätigte Befunde, die ein Profil automatisch korrigiert. Exakte Ersetzungen aus Korrekturlauf und Audit werden
+   direkt angewendet. Für die übrigen liefert das Modell den ganzen Satz als exakte Änderung. Mechanische Reparaturen gelten ohne Modell.
 4. **Recheck.** Die korrigierte Fassung wird erneut geprüft und nur übernommen, wenn sie
    Struktur, Zitate, Zahlen und Namen erhalten hat, die Längenvorgabe einhält, keine beschädigten Satznähte hat,
    mindestens einen bestätigten Befund behebt und keinen neuen erzeugt.
 5. **Finalize.** Die Endfassung wird als neue Dokumentversion gespeichert. Die Vorversion bleibt erreichbar.
+
+### Laufzeit
+
+Alle Rollen nutzen einen Router-Alias und einen Schreibmodus. So bleibt der rund 4000 Token lange Systemprompt zwischengespeichert:
+Der erste Aufruf je Sprache dauert auf der Testhardware etwa 50 s, jeder weitere 2 bis 5 s. Ein kurzer Text braucht damit
+etwa 10 s (ohne Befunde, Prompt im Cache) bis 100 s (mit Korrekturen und Nachprüfung).
 
 ## Sprachen
 
@@ -95,7 +108,10 @@ Fällt das Modell aus, meldet das Receipt `audit.completed: false` mit dem Grund
 
 - Die Pipeline findet nur, was die Regeln des Skills und das lokale Modell erkennen. Das Modell übersieht Fehler,
   und zwei Läufe über denselben Text können verschiedene Befunde liefern. Ein Lauf ohne Befund beweist keinen fehlerfreien Text.
-- Gemessene Trefferquote des Modellaudits (lokales Modell, je Text dreimal, eingebaute Fehler: Kongruenz, Kasus): Absatzfenster und Ganztext liegen gleichauf. Englischer Tool-Text 1 bis 2 von 2, deutscher Text mit „Alle Gäste bekommt“ 3 von 3, englischer Devlog 0 von 2 (Ganztext einmal 1 von 2), deutsche Geschichte 0 von 1. Etwa jeder zweite bis dritte eingebaute Fehler bleibt unentdeckt. Was gemeldet und bestätigt wird, war in diesen Läufen dagegen zutreffend, und es wurde kein Fakt verändert. Ein Lauf ohne Befund ist keine Garantie.
+- Gemessen mit dem lokalen 26B-Modell (RTX 5070, 8 GB): Eine reine Fehlerliste als JSON fand etwa 3 von 8 eingebauten Fehlern,
+  der Korrekturlauf etwa 7 von 8. Der blinde Vergleich entschied 13 von 14 Fällen richtig (alle 8 echten Fehler bestätigt,
+  5 von 6 korrekten Sätzen belassen; der Fehltreffer, eine Großschreibung in einem Eigennamen, wird vom Namensschutz abgefangen).
+  Das sind kleine Stichproben, keine Garantie.
 - Faktische Richtigkeit prüft sie nicht. Das tut die Belegprüfung der Artikelproduktion.
 - Stilentscheidungen (Rhythmus, Satzbau-Muster) werden gemeldet, aber nicht automatisch geändert.
 
